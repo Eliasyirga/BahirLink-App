@@ -1,0 +1,37 @@
+name: first_app
+description: "A new Flutter project."
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.9.2 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State & storage
+  shared_preferences: ^2.1.0
+  http: ^1.1.0
+
+  # Animations
+  animate_do: ^3.0.0
+
+  # Verification / image handling
+  image_picker: ^0.8.7+5
+  flutter_image_compress: ^2.4.0
+  path: ^1.8.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/bg.jpg
+    - assets/images/logo.webp
+    - assets/images/avatar.jpg
