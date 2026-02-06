@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'signup_page.dart';
 import '../dashboard/dashboard_page.dart';
+import '../dashboard/guest_dashboard_page.dart';
 import '../../services/auth_service.dart';
 import 'forgot_password_page.dart';
 
@@ -26,6 +27,7 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  // ----------------- LOGIN -----------------
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
     final email = emailController.text.trim();
@@ -66,6 +68,25 @@ class _LoginPageState extends State<LoginPage> {
         context,
       ).showSnackBar(SnackBar(content: Text("Login failed: $e")));
     }
+  }
+
+  // ----------------- CONTINUE AS GUEST -----------------
+  Future<void> _continueAsGuest() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool("isGuest", true);
+    await prefs.setString(
+      "guestId",
+      DateTime.now().millisecondsSinceEpoch.toString(),
+    );
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text("Continuing as Guest")));
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => GuestDashboardPage()), // no const
+    );
   }
 
   @override
@@ -146,8 +167,6 @@ class _LoginPageState extends State<LoginPage> {
                             return null;
                           },
                         ),
-
-                        // Forgot Password Link
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
@@ -169,7 +188,6 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 18),
                         SizedBox(
                           width: double.infinity,
@@ -224,6 +242,35 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 12),
+                        // ---------------- GUEST BUTTON ----------------
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: ElevatedButton.icon(
+                            onPressed: _continueAsGuest,
+                            icon: const Icon(
+                              Icons.person_outline,
+                              color: Colors.white,
+                            ),
+                            label: const Text(
+                              "Continue as Guest",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              elevation: 5,
+                              backgroundColor: Colors.blueAccent.shade700,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
                         ),
                       ],
                     ),
