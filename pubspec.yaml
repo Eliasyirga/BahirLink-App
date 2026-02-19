@@ -14,6 +14,7 @@ dependencies:
   # State & storage
   shared_preferences: ^2.1.0
   http: ^1.1.0
+  device_info_plus: ^12.3.0
 
   # Animations
   animate_do: ^3.0.0
@@ -23,15 +24,30 @@ dependencies:
   flutter_image_compress: ^2.4.0
   path: ^1.8.3
 
+  # FREE OpenStreetMap support
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.0
+
+  # GPS location
+  geolocator: ^14.0.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.10.0
 
 flutter:
   uses-material-design: true
 
+  # App assets
   assets:
     - assets/images/bg.jpg
     - assets/images/logo.webp
     - assets/images/avatar.jpg
+
+# Flutter Launcher Icons Configuration
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo.webp"
