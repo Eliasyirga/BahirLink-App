@@ -1,29 +1,44 @@
 class EmergencyReportModel {
   final String type;
   final String description;
-  final String? location;
+  final double? latitude;
+  final double? longitude;
   final String? deviceId;
-  final String? phone;
-  final String? mediaPath; // ✅ Added to support attached photo/video
+  final String? phone; // guest contactNo
+  final int? userId; // logged-in user ID
+  final String? location;
 
   EmergencyReportModel({
     required this.type,
     required this.description,
-    this.location,
+    this.latitude,
+    this.longitude,
     this.deviceId,
     this.phone,
-    this.mediaPath, // ✅ Include in constructor
-  });
+    this.userId,
+  }) : location = (latitude != null && longitude != null)
+           ? "$latitude,$longitude"
+           : null;
 
-  /// Convert to JSON
-  Map<String, dynamic> toJson() {
-    return {
-      "type": type,
+  // JSON for guest
+  Map<String, dynamic> toJson({bool useContactNo = false}) {
+    final data = <String, dynamic>{
+      "emergencyType": type,
       "description": description,
-      "location": location,
-      "deviceId": deviceId,
-      "phone": phone,
-      "mediaPath": mediaPath, // ✅ Include in JSON
+      "location": location ?? "",
+      "deviceId": deviceId ?? "",
+    };
+    if (useContactNo && phone != null) data["contactNo"] = phone;
+    return data;
+  }
+
+  // JSON for logged-in user
+  Map<String, dynamic> toJsonForUser() {
+    return {
+      "emergencyType": type,
+      "description": description,
+      "location": location ?? "",
+      "userId": userId,
     };
   }
 }

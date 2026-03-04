@@ -1,57 +1,57 @@
+import 'dart:io';
 import 'dart:typed_data';
-import 'dart:io' show File;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'map_picker_page.dart';
 import '../../model/emergency_report_model.dart';
-import '../../services/emergency_service.dart';
-import '../../services/device_service.dart';
+import '../../services/user_emergency_service.dart';
 import 'media_picker_bottom_sheet.dart';
 
-class GuestEmergencyReportPage extends StatefulWidget {
+class UserEmergencyReportPage extends StatefulWidget {
   final String emergencyType;
 
-  const GuestEmergencyReportPage({super.key, required this.emergencyType});
+  const UserEmergencyReportPage({super.key, required this.emergencyType});
 
   @override
-  State<GuestEmergencyReportPage> createState() =>
-      _GuestEmergencyReportPageState();
+  State<UserEmergencyReportPage> createState() =>
+      _UserEmergencyReportPageState();
 }
 
-class _GuestEmergencyReportPageState extends State<GuestEmergencyReportPage> {
+class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   final TextEditingController _descriptionController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
-
   double? _latitude;
   double? _longitude;
-  String? _deviceId;
 
   Uint8List? _selectedMediaBytes; // Web
   File? _selectedFile; // Mobile
   String? _selectedFileName;
 
   bool _isLoading = false;
+  int? _userId; // fetched from backend
 
   @override
   void initState() {
     super.initState();
-    _loadDeviceId();
+    _fetchUserId();
   }
 
-  Future<void> _loadDeviceId() async {
-    final id = await DeviceService.getDeviceId();
-    setState(() => _deviceId = id);
+  Future<void> _fetchUserId() async {
+    final id = await UserEmergencyService.getUserId(); // fetch only the ID
+    if (id != null) {
+      setState(() => _userId = id);
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Failed to fetch user ID")));
+    }
   }
 
   @override
   void dispose() {
     _descriptionController.dispose();
-    _phoneController.dispose();
     super.dispose();
   }
-
-  // ------------------- UI -------------------
 
   @override
   Widget build(BuildContext context) {
@@ -69,8 +69,6 @@ class _GuestEmergencyReportPageState extends State<GuestEmergencyReportPage> {
                 ),
                 children: [
                   _descriptionCard(),
-                  const SizedBox(height: 20),
-                  _phoneCard(),
                   const SizedBox(height: 20),
                   _locationCard(),
                   const SizedBox(height: 20),
@@ -127,27 +125,8 @@ class _GuestEmergencyReportPageState extends State<GuestEmergencyReportPage> {
       controller: _descriptionController,
       maxLines: 5,
       decoration: InputDecoration(
-        hintText: "Describe what is happening...",
+        hintText: "Describe the emergency...",
         hintStyle: const TextStyle(color: Color(0xff1976D2)),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding: const EdgeInsets.all(16),
-      ),
-    ),
-  );
-
-  Widget _phoneCard() => _card(
-    child: TextField(
-      controller: _phoneController,
-      keyboardType: TextInputType.phone,
-      decoration: InputDecoration(
-        hintText: "+251912345678",
-        hintStyle: const TextStyle(color: Color(0xff1976D2)),
-        prefixIcon: const Icon(Icons.phone, color: Color(0xff1976D2)),
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(
@@ -270,36 +249,34 @@ class _GuestEmergencyReportPageState extends State<GuestEmergencyReportPage> {
     child: child,
   );
 
-  // ------------------- SEND REPORT -------------------
-
   Future<void> _submitReport() async {
-    if (_descriptionController.text.isEmpty) {
+    if (_descriptionController.text.trim().isEmpty) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Enter description")));
       return;
     }
 
-    if (_phoneController.text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Enter contact number")));
+    if (_userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Fetching user ID. Please wait...")),
+      );
       return;
     }
 
     final report = EmergencyReportModel(
       type: widget.emergencyType,
-      description: _descriptionController.text,
+      description: _descriptionController.text.trim(),
       latitude: _latitude,
       longitude: _longitude,
-      deviceId: _deviceId,
-      phone: _phoneController.text,
+      userId: _userId!,
     );
 
     setState(() => _isLoading = true);
 
-    final success = await EmergencyService.sendGuestEmergency(
-      data: report.toJson(useContactNo: true),
+    final success = await UserEmergencyService.sendUserEmergency(
+      userId: _userId!,
+      report: report,
       mediaBytes: _selectedMediaBytes,
       mediaFile: _selectedFile,
       mediaName: _selectedFileName,

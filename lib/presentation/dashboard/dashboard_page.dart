@@ -3,6 +3,8 @@ import '../../core/widgets/bottom_navbar.dart';
 import 'dashboard_content.dart';
 import '../categories/categories_page.dart';
 import '../profile/profile_page.dart';
+import '../reports/reports_page.dart';
+import '../settings/settings_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -32,7 +34,11 @@ class _DashboardPageState extends State<DashboardPage> {
       case 1:
         return const CategoriesPage();
       case 2:
-        return const ProfilePage(); // Fixed: no userData passed
+        return const ProfilePage(); // User profile
+      case 3:
+        return const ReportsPage(); // New Reports tab
+      case 4:
+        return const SettingsPage(); // New Settings tab
       default:
         return const DashboardContent();
     }

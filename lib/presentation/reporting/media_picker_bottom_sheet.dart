@@ -1,15 +1,25 @@
+import 'dart:typed_data';
+import 'dart:io' show File;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 
 class MediaPickerBottomSheet extends StatelessWidget {
-  final Function(File file) onFileSelected;
+  /// Web callback
+  final void Function(Uint8List bytes, String name)? onFileSelectedWeb;
 
-  const MediaPickerBottomSheet({super.key, required this.onFileSelected});
+  /// Mobile callback
+  final void Function(File file)? onFileSelectedMobile;
+
+  const MediaPickerBottomSheet({
+    super.key,
+    this.onFileSelectedWeb,
+    this.onFileSelectedMobile,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final ImagePicker picker = ImagePicker();
+    final picker = ImagePicker();
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.45,
@@ -20,17 +30,15 @@ class MediaPickerBottomSheet extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Drag indicator
           Container(
             width: 40,
             height: 5,
             margin: const EdgeInsets.only(bottom: 20),
             decoration: BoxDecoration(
-              color: Colors.grey[300],
+              color: Colors.grey,
               borderRadius: BorderRadius.circular(10),
             ),
           ),
-
           const Text(
             "Attach Media",
             style: TextStyle(
@@ -39,13 +47,10 @@ class MediaPickerBottomSheet extends StatelessWidget {
               color: Color(0xff0D47A1),
             ),
           ),
-
           const SizedBox(height: 25),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              // Camera
               _mediaButton(
                 icon: Icons.camera_alt,
                 label: "Camera",
@@ -55,13 +60,16 @@ class MediaPickerBottomSheet extends StatelessWidget {
                     source: ImageSource.camera,
                   );
                   if (photo != null) {
-                    onFileSelected(File(photo.path));
+                    if (kIsWeb) {
+                      final bytes = await photo.readAsBytes();
+                      onFileSelectedWeb?.call(bytes, photo.name);
+                    } else {
+                      onFileSelectedMobile?.call(File(photo.path));
+                    }
                     Navigator.pop(context);
                   }
                 },
               ),
-
-              // Video
               _mediaButton(
                 icon: Icons.videocam,
                 label: "Video",
@@ -71,13 +79,16 @@ class MediaPickerBottomSheet extends StatelessWidget {
                     source: ImageSource.camera,
                   );
                   if (video != null) {
-                    onFileSelected(File(video.path));
+                    if (kIsWeb) {
+                      final bytes = await video.readAsBytes();
+                      onFileSelectedWeb?.call(bytes, video.name);
+                    } else {
+                      onFileSelectedMobile?.call(File(video.path));
+                    }
                     Navigator.pop(context);
                   }
                 },
               ),
-
-              // Gallery
               _mediaButton(
                 icon: Icons.photo_library,
                 label: "Gallery",
@@ -87,7 +98,12 @@ class MediaPickerBottomSheet extends StatelessWidget {
                     source: ImageSource.gallery,
                   );
                   if (file != null) {
-                    onFileSelected(File(file.path));
+                    if (kIsWeb) {
+                      final bytes = await file.readAsBytes();
+                      onFileSelectedWeb?.call(bytes, file.name);
+                    } else {
+                      onFileSelectedMobile?.call(File(file.path));
+                    }
                     Navigator.pop(context);
                   }
                 },

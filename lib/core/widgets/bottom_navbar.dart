@@ -14,7 +14,7 @@ class BahirBottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 70,
-      padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -32,6 +32,8 @@ class BahirBottomNavBar extends StatelessWidget {
           _navItem(Icons.home_outlined, "Home", 0),
           _navItem(Icons.dashboard_customize_outlined, "Categories", 1),
           _navItem(Icons.person_outline, "Profile", 2),
+          _navItem(Icons.bar_chart_outlined, "Reports", 3),
+          _navItem(Icons.settings_outlined, "Settings", 4),
         ],
       ),
     );
@@ -45,7 +47,7 @@ class BahirBottomNavBar extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: isSelected
             ? BoxDecoration(
                 gradient: LinearGradient(

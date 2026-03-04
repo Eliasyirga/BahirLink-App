@@ -1,28 +1,27 @@
-import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
 
 class DeviceService {
   static final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
 
   static Future<String?> getDeviceId() async {
     try {
+      if (kIsWeb) {
+        // Short Web identifier
+        return "web-${DateTime.now().millisecondsSinceEpoch}";
+      }
       if (Platform.isAndroid) {
-        AndroidDeviceInfo androidInfo = await _deviceInfo.androidInfo;
-
-        // Unique ID for Android
+        final androidInfo = await _deviceInfo.androidInfo;
         return androidInfo.id;
       }
-
       if (Platform.isIOS) {
-        IosDeviceInfo iosInfo = await _deviceInfo.iosInfo;
-
+        final iosInfo = await _deviceInfo.iosInfo;
         return iosInfo.identifierForVendor;
       }
-
-      return null;
     } catch (e) {
       print("Device ID Error: $e");
-      return null;
     }
+    return null;
   }
 }

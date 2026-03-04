@@ -1,38 +1,51 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class UserService {
-  static const String baseUrl = "http://localhost:5000";
+  /// 🔥 Auto detect base URL
+  static String get baseUrl {
+    if (kIsWeb) {
+      return "http://localhost:5000";
+    } else if (Platform.isAndroid) {
+      return "http://10.0.2.2:5000";
+    } else {
+      return "http://localhost:5000";
+    }
+  }
 
   /// Get user profile
   static Future<Map<String, dynamic>?> getProfile() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString("accessToken") ?? "";
+      final token = prefs.getString("accessToken");
 
-      if (token.isEmpty) {
+      if (token == null || token.isEmpty) {
+        print("❌ No token found");
         return null;
       }
 
-      final url = Uri.parse("$baseUrl/api/users/profile");
       final response = await http.get(
-        url,
+        Uri.parse("$baseUrl/api/users/profile"),
         headers: {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
       );
 
+      print("GET STATUS: ${response.statusCode}");
+      print("GET BODY: ${response.body}");
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return _normalizeUserData(data['user']);
-      } else if (response.statusCode == 401) {
-        return null;
+        return _normalizeUserData(data['user'] ?? data);
       }
 
       return null;
     } catch (e) {
+      print("GET ERROR: $e");
       return null;
     }
   }
@@ -43,49 +56,48 @@ class UserService {
   ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString("accessToken") ?? "";
+      final token = prefs.getString("accessToken");
 
-      if (token.isEmpty) {
+      if (token == null || token.isEmpty) {
+        print("❌ No token found");
         return null;
       }
 
-      final url = Uri.parse("$baseUrl/api/users/profile");
-      final updatesJson = jsonEncode(updates);
-
       final response = await http.put(
-        url,
+        Uri.parse("$baseUrl/api/users/profile"),
         headers: {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-        body: updatesJson,
+        body: jsonEncode(updates),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return _normalizeUserData(data['user']);
-      } else {
-        return null;
+        return _normalizeUserData(data['user'] ?? data);
       }
+
+      return null;
     } catch (e) {
+      print("UPDATE ERROR: $e");
       return null;
     }
   }
 
-  /// Logout user: remove stored access token
+  /// Logout
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove("accessToken");
   }
 
-  /// Normalize user data for UI
   static Map<String, dynamic> _normalizeUserData(Map<String, dynamic> user) {
+    final firstName = user['firstName'] ?? '';
+    final lastName = user['lastName'] ?? '';
+
     return {
-      'name':
-          user['name'] ??
-          "${user['firstName'] ?? ''} ${user['lastName'] ?? ''}".trim(),
-      'firstName': user['firstName'] ?? '',
-      'lastName': user['lastName'] ?? '',
+      'firstName': firstName,
+      'lastName': lastName,
+      'name': (firstName + " " + lastName).trim(), // ✅ full name
       'email': user['email'] ?? '',
       'phone': user['phone'] ?? '',
       'country': user['country'] ?? '',
