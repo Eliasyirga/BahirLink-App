@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import '../reporting/guest_emergency_report_page.dart';
+import 'package:http/http.dart' as http;
+
+import '../categories/category_selection_page.dart';
 
 class GuestDashboardContent extends StatefulWidget {
   const GuestDashboardContent({super.key});
@@ -10,23 +13,69 @@ class GuestDashboardContent extends StatefulWidget {
 
 class _GuestDashboardContentState extends State<GuestDashboardContent> {
   bool isLoading = true;
+  List<dynamic> emergencyTypes = [];
 
   @override
   void initState() {
     super.initState();
-    _loadGuestData();
+    _loadEmergencyTypes();
   }
 
-  Future<void> _loadGuestData() async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    setState(() => isLoading = false);
+  Future<void> _loadEmergencyTypes() async {
+    try {
+      final response = await http.get(
+        Uri.parse("http://localhost:5000/api/emergencyType"),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          emergencyTypes =
+              data["emergencyTypes"]; // [{"id": "uuid", "name": "Crime"}, ...]
+          isLoading = false;
+        });
+      } else {
+        setState(() => isLoading = false);
+      }
+    } catch (e) {
+      debugPrint("Error loading emergency types: $e");
+      setState(() => isLoading = false);
+    }
+  }
+
+  IconData _getIcon(String name) {
+    switch (name.toLowerCase()) {
+      case "fire":
+        return Icons.local_fire_department;
+      case "crime":
+        return Icons.security;
+      case "medical":
+        return Icons.medical_services;
+      case "flood":
+        return Icons.water_damage;
+      default:
+        return Icons.warning;
+    }
+  }
+
+  Color _getColor(String name) {
+    switch (name.toLowerCase()) {
+      case "fire":
+        return Colors.redAccent;
+      case "crime":
+        return Colors.deepPurple;
+      case "medical":
+        return Colors.pinkAccent;
+      case "flood":
+        return Colors.blueAccent;
+      default:
+        return Colors.orange;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (isLoading) return const Center(child: CircularProgressIndicator());
 
     return SafeArea(
       child: Column(
@@ -49,7 +98,6 @@ class _GuestDashboardContentState extends State<GuestDashboardContent> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Row: logo + notifications
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -105,12 +153,8 @@ class _GuestDashboardContentState extends State<GuestDashboardContent> {
                       ),
                     ),
                   ),
-
-                  // Grid of emergency services
                   _buildGridSection(context),
-
                   const SizedBox(height: 25),
-
                   const Center(
                     child: Text(
                       "Limited access. Sign up to access all services.",
@@ -133,40 +177,28 @@ class _GuestDashboardContentState extends State<GuestDashboardContent> {
 
   // ================= GRID SECTION =================
   Widget _buildGridSection(BuildContext context) {
-    final List<Map<String, dynamic>> services = [
-      {
-        "icon": Icons.local_fire_department,
-        "title": "Fire",
-        "color": Colors.redAccent,
-      },
-      {"icon": Icons.security, "title": "Crime", "color": Colors.deepPurple},
-      {
-        "icon": Icons.medical_services,
-        "title": "Medical",
-        "color": Colors.pinkAccent,
-      },
-      {
-        "icon": Icons.water_damage,
-        "title": "Flood",
-        "color": Colors.blueAccent,
-      },
-    ];
-
-    return GridView.count(
-      crossAxisCount: 2,
+    return GridView.builder(
+      itemCount: emergencyTypes.length,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.1,
-      children: services.map((service) {
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.1,
+      ),
+      itemBuilder: (context, index) {
+        final service = emergencyTypes[index];
+        final title = service["name"];
+        final id = service["id"]; // ✅ UUID
         return _buildBoxItem(
           context,
-          service["icon"],
-          service["title"],
-          service["color"],
+          _getIcon(title),
+          title,
+          _getColor(title),
+          id,
         );
-      }).toList(),
+      },
     );
   }
 
@@ -176,14 +208,19 @@ class _GuestDashboardContentState extends State<GuestDashboardContent> {
     IconData icon,
     String title,
     Color color,
+    String emergencyTypeId, // UUID
   ) {
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: () {
+        // Navigate to CategorySelectionPage with UUID and name
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => GuestEmergencyReportPage(emergencyType: title),
+            builder: (_) => CategorySelectionPage(
+              emergencyTypeId: emergencyTypeId, // ✅ UUID
+              emergencyTypeName: title, // Display name only
+            ),
           ),
         );
       },
