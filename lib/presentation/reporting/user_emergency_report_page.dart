@@ -1,6 +1,5 @@
-import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'map_picker_page.dart';
@@ -9,9 +8,18 @@ import '../../services/user_emergency_service.dart';
 import 'media_picker_bottom_sheet.dart';
 
 class UserEmergencyReportPage extends StatefulWidget {
-  final String emergencyType;
+  final String emergencyTypeId;
+  final String emergencyTypeName;
+  final String categoryId;
+  final String categoryName;
 
-  const UserEmergencyReportPage({super.key, required this.emergencyType});
+  const UserEmergencyReportPage({
+    super.key,
+    required this.emergencyTypeId,
+    required this.emergencyTypeName,
+    required this.categoryId,
+    required this.categoryName,
+  });
 
   @override
   State<UserEmergencyReportPage> createState() =>
@@ -20,15 +28,20 @@ class UserEmergencyReportPage extends StatefulWidget {
 
 class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _kebeleController = TextEditingController();
+  final TextEditingController _subdivisionController = TextEditingController();
+  final TextEditingController _streetController = TextEditingController();
+
   double? _latitude;
   double? _longitude;
+  DateTime? _selectedTime;
 
-  Uint8List? _selectedMediaBytes; // Web
-  File? _selectedFile; // Mobile
+  Uint8List? _selectedMediaBytes;
+  File? _selectedFile;
   String? _selectedFileName;
 
   bool _isLoading = false;
-  int? _userId; // fetched from backend
+  int? _userId;
 
   @override
   void initState() {
@@ -37,45 +50,139 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   }
 
   Future<void> _fetchUserId() async {
-    final id = await UserEmergencyService.getUserId(); // fetch only the ID
-    if (id != null) {
-      setState(() => _userId = id);
-    } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Failed to fetch user ID")));
-    }
+    final id = await UserEmergencyService.getUserId();
+    if (id != null) setState(() => _userId = id);
+  }
+
+  void _showSnack(String message, {bool isError = true}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+      ),
+    );
   }
 
   @override
   void dispose() {
     _descriptionController.dispose();
+    _kebeleController.dispose();
+    _subdivisionController.dispose();
+    _streetController.dispose();
     super.dispose();
   }
 
+  // ================= TIME PICKER =================
+  Future<void> _pickTime() async {
+    final now = DateTime.now();
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedTime = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          picked.hour,
+          picked.minute,
+        );
+      });
+    }
+  }
+
+  // ================= MEDIA PICKER =================
+  void _pickMedia() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => MediaPickerBottomSheet(
+        onFileSelectedWeb: (bytes, name) {
+          setState(() {
+            _selectedMediaBytes = bytes;
+            _selectedFileName = name;
+            _selectedFile = null;
+          });
+        },
+        onFileSelectedMobile: (file) {
+          setState(() {
+            _selectedFile = file;
+            _selectedFileName = file.path.split("/").last;
+            _selectedMediaBytes = null;
+          });
+        },
+      ),
+    );
+  }
+
+  // ================= SUBMIT REPORT =================
+  Future<void> _submitReport() async {
+    if (_descriptionController.text.isEmpty ||
+        _kebeleController.text.isEmpty ||
+        _subdivisionController.text.isEmpty) {
+      _showSnack("Please fill description, kebele, and subdivision");
+      return;
+    }
+    if (_userId == null) {
+      _showSnack("Fetching user ID. Please wait...");
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final report = EmergencyReportModel(
+      emergencyTypeId: widget.emergencyTypeId,
+      categoryId: widget.categoryId,
+      description: _descriptionController.text,
+      userId: _userId!,
+      kebele: _kebeleController.text,
+      subdivision: _subdivisionController.text,
+      street: _streetController.text,
+      latitude: _latitude,
+      longitude: _longitude,
+      time: _selectedTime ?? DateTime.now(),
+      mediaUrl: null,
+      mediaType: null,
+    );
+
+    final success = await UserEmergencyService.sendUserEmergency(
+      userId: _userId!,
+      report: report,
+      mediaBytes: _selectedMediaBytes,
+      mediaFile: _selectedFile,
+      mediaName: _selectedFileName,
+    );
+
+    setState(() => _isLoading = false);
+
+    _showSnack(
+      success ? "Report Sent Successfully" : "Failed to Send Report",
+      isError: !success,
+    );
+
+    if (success) Navigator.pop(context);
+  }
+
+  // ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xffE3F2FD),
+      backgroundColor: const Color(0xffFAFAFA),
       body: SafeArea(
         child: Column(
           children: [
-            _header(),
+            _buildHeader(),
             Expanded(
-              child: ListView(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
                   vertical: 15,
                 ),
-                children: [
-                  _descriptionCard(),
-                  const SizedBox(height: 20),
-                  _locationCard(),
-                  const SizedBox(height: 20),
-                  _mediaCard(),
-                  const SizedBox(height: 30),
-                  _submitButton(),
-                ],
+                child: _buildForm(),
               ),
             ),
           ],
@@ -84,7 +191,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     );
   }
 
-  Widget _header() => Container(
+  Widget _buildHeader() => Container(
     width: double.infinity,
     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 35),
     decoration: const BoxDecoration(
@@ -107,12 +214,11 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            "${widget.emergencyType} Report",
+            "${widget.emergencyTypeName} - ${widget.categoryName}",
             style: const TextStyle(
-              fontSize: 24,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
               color: Colors.white,
-              letterSpacing: 0.5,
             ),
           ),
         ),
@@ -120,179 +226,179 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     ),
   );
 
-  Widget _descriptionCard() => _card(
-    child: TextField(
-      controller: _descriptionController,
-      maxLines: 5,
-      decoration: InputDecoration(
-        hintText: "Describe the emergency...",
-        hintStyle: const TextStyle(color: Color(0xff1976D2)),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
-          borderSide: BorderSide.none,
+  Widget _buildForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionHeader("Emergency Info"),
+        _infoRow("Type", widget.emergencyTypeName),
+        _infoRow("Category", widget.categoryName),
+        const SizedBox(height: 20),
+        _sectionHeader("Details"),
+        _buildTextField(
+          _descriptionController,
+          "Describe the emergency...",
+          maxLines: 5,
         ),
-        contentPadding: const EdgeInsets.all(16),
-      ),
+        const SizedBox(height: 15),
+        _sectionHeader("Address"),
+        _buildTextField(_kebeleController, "Kebele"),
+        const SizedBox(height: 10),
+        _buildTextField(_subdivisionController, "Subdivision"),
+        const SizedBox(height: 10),
+        _buildTextField(_streetController, "Street"),
+        const SizedBox(height: 15),
+        _sectionHeader("Time & Location"),
+        _buildPickerRow(
+          icon: Icons.access_time,
+          label: "Select Time",
+          value: _selectedTime != null
+              ? "${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}:${_selectedTime!.second.toString().padLeft(2, '0')}"
+              : "Tap to select time",
+          onTap: _pickTime,
+        ),
+        const SizedBox(height: 10),
+        _buildPickerRow(
+          icon: Icons.location_on,
+          label: "Select Location",
+          value: _latitude != null && _longitude != null
+              ? "Lat: $_latitude, Lng: $_longitude"
+              : "Tap to select location",
+          onTap: () async {
+            final pickedLocation = await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MapPickerPage()),
+            );
+            if (pickedLocation != null) {
+              setState(() {
+                _latitude = pickedLocation.latitude;
+                _longitude = pickedLocation.longitude;
+              });
+            }
+          },
+        ),
+        const SizedBox(height: 15),
+        _sectionHeader("Media"),
+        _buildPickerRow(
+          icon: Icons.camera_alt,
+          label: "Attach Photo / Video",
+          value: _selectedFileName ?? "Tap to attach media",
+          valueColor: _selectedFileName != null
+              ? Colors.green
+              : const Color(0xff1976D2),
+          onTap: _pickMedia,
+        ),
+        const SizedBox(height: 30),
+        _buildSubmitButton(),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  Widget _sectionHeader(String title) => Text(
+    title,
+    style: const TextStyle(
+      fontSize: 16,
+      fontWeight: FontWeight.bold,
+      color: Color(0xff0D47A1),
     ),
   );
 
-  Widget _locationCard() => _card(
-    child: ListTile(
-      leading: const Icon(Icons.location_on, color: Color(0xff1976D2)),
-      title: const Text(
-        "Share Location",
-        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xff0D47A1)),
-      ),
-      subtitle: Text(
-        _latitude != null && _longitude != null
-            ? "Lat: $_latitude, Lng: $_longitude"
-            : "Select exact location",
-        style: const TextStyle(color: Color(0xff1976D2)),
-      ),
-      trailing: const Icon(
-        Icons.arrow_forward_ios,
-        size: 16,
-        color: Color(0xff1976D2),
-      ),
-      onTap: () async {
-        final pickedLocation = await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const MapPickerPage()),
-        );
-        if (pickedLocation != null) {
-          setState(() {
-            _latitude = pickedLocation.latitude;
-            _longitude = pickedLocation.longitude;
-          });
-        }
-      },
+  Widget _infoRow(String label, String value) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      children: [
+        Text(
+          "$label: ",
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Color(0xff0D47A1),
+          ),
+        ),
+        Flexible(
+          child: Text(value, style: const TextStyle(color: Color(0xff1976D2))),
+        ),
+      ],
     ),
   );
 
-  Widget _mediaCard() => _card(
-    child: ListTile(
-      leading: const Icon(Icons.camera_alt, color: Color(0xff1976D2)),
-      title: const Text(
-        "Attach Photo / Video",
-        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xff0D47A1)),
+  Widget _buildTextField(
+    TextEditingController controller,
+    String hint, {
+    int maxLines = 1,
+  }) => TextField(
+    controller: controller,
+    maxLines: maxLines,
+    decoration: InputDecoration(
+      hintText: hint,
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
       ),
-      subtitle: _selectedFileName != null
-          ? Text(
-              _selectedFileName!,
-              style: const TextStyle(color: Colors.green),
-            )
-          : const Text(
-              "Tap to attach media",
-              style: TextStyle(color: Color(0xff1976D2)),
+      contentPadding: const EdgeInsets.all(14),
+    ),
+  );
+
+  Widget _buildPickerRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? valueColor,
+    required VoidCallback onTap,
+  }) => InkWell(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xff1976D2)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Color(0xff0D47A1),
+              ),
             ),
-      trailing: const Icon(Icons.attach_file, color: Color(0xff1976D2)),
-      onTap: () {
-        showModalBottomSheet(
-          context: context,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          builder: (_) => MediaPickerBottomSheet(
-            onFileSelectedWeb: (bytes, name) {
-              setState(() {
-                _selectedMediaBytes = bytes;
-                _selectedFileName = name;
-                _selectedFile = null;
-              });
-            },
-            onFileSelectedMobile: (file) {
-              setState(() {
-                _selectedFile = file;
-                _selectedFileName = file.path.split("/").last;
-                _selectedMediaBytes = null;
-              });
-            },
+          Flexible(
+            child: Text(
+              value,
+              style: TextStyle(color: valueColor ?? const Color(0xff1976D2)),
+            ),
           ),
-        );
-      },
+          const SizedBox(width: 5),
+          const Icon(Icons.arrow_forward_ios, size: 16),
+        ],
+      ),
     ),
   );
 
-  Widget _submitButton() => SizedBox(
-    height: 55,
+  Widget _buildSubmitButton() => SizedBox(
+    height: 50,
+    width: double.infinity,
     child: ElevatedButton(
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xff0D47A1),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-        elevation: 5,
       ),
       onPressed: _isLoading ? null : _submitReport,
       child: _isLoading
           ? const CircularProgressIndicator(color: Colors.white)
           : const Text(
               "Send Emergency Report",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
-              ),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
     ),
   );
-
-  Widget _card({required Widget child}) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: const [
-        BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 5)),
-      ],
-    ),
-    child: child,
-  );
-
-  Future<void> _submitReport() async {
-    if (_descriptionController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Enter description")));
-      return;
-    }
-
-    if (_userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Fetching user ID. Please wait...")),
-      );
-      return;
-    }
-
-    final report = EmergencyReportModel(
-      type: widget.emergencyType,
-      description: _descriptionController.text.trim(),
-      latitude: _latitude,
-      longitude: _longitude,
-      userId: _userId!,
-    );
-
-    setState(() => _isLoading = true);
-
-    final success = await UserEmergencyService.sendUserEmergency(
-      userId: _userId!,
-      report: report,
-      mediaBytes: _selectedMediaBytes,
-      mediaFile: _selectedFile,
-      mediaName: _selectedFileName,
-    );
-
-    setState(() => _isLoading = false);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success ? "Report Sent Successfully" : "Failed to Send Report",
-        ),
-        backgroundColor: success ? Colors.green : Colors.red,
-      ),
-    );
-
-    if (success) Navigator.pop(context);
-  }
 }

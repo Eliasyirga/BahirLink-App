@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
@@ -33,9 +32,7 @@ class UserEmergencyService {
   static Future<int?> getUserId() async {
     final prefs = await SharedPreferences.getInstance();
     final id = prefs.getInt("userId");
-
     print("LOCAL USER ID: $id");
-
     return id;
   }
 
@@ -61,7 +58,10 @@ class UserEmergencyService {
         return false;
       }
 
-      final uri = Uri.parse("$baseUrl/users/$userId/emergencies");
+      // -------------------------------
+      // 🔗 Use backend endpoint: /api/emergencies/users/:userId
+      // -------------------------------
+      final uri = Uri.parse("$baseUrl/emergencies/users/$userId");
       final request = http.MultipartRequest('POST', uri);
       request.headers['Authorization'] = "Bearer $token";
 
@@ -82,15 +82,14 @@ class UserEmergencyService {
         MediaType contentType;
 
         if (kIsWeb) {
-          filename = mediaName!;
+          filename = mediaName!; // ✅ Fixed nullable issue
           final mimeType =
               lookupMimeType(filename) ?? 'application/octet-stream';
           final split = mimeType.split('/');
-
+          contentType = MediaType(split[0], split[1]);
           request.fields['mediaType'] = split.first == 'video'
               ? 'video'
               : 'photo';
-          contentType = MediaType(split[0], split[1]);
 
           request.files.add(
             http.MultipartFile.fromBytes(
@@ -105,11 +104,10 @@ class UserEmergencyService {
           final mimeType =
               lookupMimeType(filename) ?? 'application/octet-stream';
           final split = mimeType.split('/');
-
+          contentType = MediaType(split[0], split[1]);
           request.fields['mediaType'] = split.first == 'video'
               ? 'video'
               : 'photo';
-          contentType = MediaType(split[0], split[1]);
 
           request.files.add(
             await http.MultipartFile.fromPath(
