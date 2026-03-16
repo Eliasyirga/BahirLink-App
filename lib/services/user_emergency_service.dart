@@ -31,7 +31,17 @@ class UserEmergencyService {
   // ========================================================
   static Future<int?> getUserId() async {
     final prefs = await SharedPreferences.getInstance();
-    final id = prefs.getInt("userId");
+    final rawId = prefs.get("userId"); // could be int or String
+    int? id;
+
+    if (rawId != null) {
+      if (rawId is int) {
+        id = rawId;
+      } else if (rawId is String) {
+        id = int.tryParse(rawId); // only parse if String
+      }
+    }
+
     print("LOCAL USER ID: $id");
     return id;
   }
@@ -59,7 +69,7 @@ class UserEmergencyService {
       }
 
       // -------------------------------
-      // 🔗 Use backend endpoint: /api/emergencies/users/:userId
+      // 🔗 Backend endpoint: /emergencies/users/:userId
       // -------------------------------
       final uri = Uri.parse("$baseUrl/emergencies/users/$userId");
       final request = http.MultipartRequest('POST', uri);
@@ -82,7 +92,7 @@ class UserEmergencyService {
         MediaType contentType;
 
         if (kIsWeb) {
-          filename = mediaName!; // ✅ Fixed nullable issue
+          filename = mediaName!;
           final mimeType =
               lookupMimeType(filename) ?? 'application/octet-stream';
           final split = mimeType.split('/');

@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../services/reports_service.dart';
+import './report_detail_page.dart';
 
 class ReportsPage extends StatefulWidget {
-  const ReportsPage({super.key});
+  final String userId;
+
+  const ReportsPage({super.key, required this.userId});
 
   @override
   State<ReportsPage> createState() => _ReportsPageState();
@@ -9,20 +13,97 @@ class ReportsPage extends StatefulWidget {
 
 class _ReportsPageState extends State<ReportsPage> {
   bool showEmergency = true;
+  List<Map<String, dynamic>> emergencies = [];
+  bool loading = true;
+
+  Map<String, String> emergencyTypeMap = {};
+  Map<String, String> categoryMap = {};
+
+  @override
+  void initState() {
+    super.initState();
+    fetchInitialData();
+  }
+
+  Future<void> fetchInitialData() async {
+    // Show loading
+    if (!mounted) return;
+    setState(() => loading = true);
+
+    try {
+      // Fetch emergencies
+      final emergenciesResponse = await ReportsService.fetchUserEmergencies(
+        widget.userId,
+      );
+
+      // Fetch types
+      final typesResponse = await ReportsService.fetchEmergencyTypes();
+      final typesList = (typesResponse is List) ? typesResponse : [];
+
+      // Fetch categories
+      final categoriesResponse = await ReportsService.fetchCategories();
+      final categoriesList = (categoriesResponse is List)
+          ? categoriesResponse
+          : [];
+
+      // Build ID -> Name maps
+      emergencyTypeMap = {
+        for (var t in typesList)
+          if (t is Map && t['id'] != null && t['name'] != null)
+            t['id'].toString(): t['name'].toString(),
+      };
+
+      categoryMap = {
+        for (var c in categoriesList)
+          if (c is Map && c['id'] != null && c['name'] != null)
+            c['id'].toString(): c['name'].toString(),
+      };
+
+      // Enrich emergencies with typeName, categoryName, description
+      final enrichedEmergencies = (emergenciesResponse as List<dynamic>)
+          .map<Map<String, dynamic>>((e) {
+            final eMap = e as Map<String, dynamic>;
+            final typeId = eMap['emergencyTypeId'];
+            final categoryId = eMap['categoryId'];
+
+            return {
+              ...eMap,
+              'typeName': typeId != null
+                  ? emergencyTypeMap[typeId.toString()] ?? 'Unknown Type'
+                  : 'Unknown Type',
+              'categoryName': categoryId != null
+                  ? categoryMap[categoryId.toString()] ?? 'Unknown Category'
+                  : 'Unknown Category',
+              'description': eMap['description'] ?? 'No description provided',
+            };
+          })
+          .toList();
+
+      // Update state only if still mounted
+      if (!mounted) return;
+      setState(() {
+        emergencies = enrichedEmergencies;
+        loading = false;
+      });
+    } catch (e) {
+      debugPrint("Error fetching data: $e");
+      if (!mounted) return;
+      setState(() => loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Reports"),
-        backgroundColor: const Color(0xFF1565C0), // Primary blue
-        elevation: 2,
+        backgroundColor: const Color(0xFF1565C0),
       ),
       body: Column(
         children: [
           // Toggle buttons
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(16),
             child: Row(
               children: [
                 Expanded(
@@ -35,26 +116,11 @@ class _ReportsPageState extends State<ReportsPage> {
                       foregroundColor: showEmergency
                           ? Colors.white
                           : const Color(0xFF1565C0),
-                      elevation: showEmergency ? 4 : 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color: const Color(0xFF1565C0),
-                          width: 1,
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text(
-                      "Emergency",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: const Text("Emergency"),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () => setState(() => showEmergency = false),
@@ -65,30 +131,13 @@ class _ReportsPageState extends State<ReportsPage> {
                       foregroundColor: !showEmergency
                           ? Colors.white
                           : const Color(0xFF1565C0),
-                      elevation: !showEmergency ? 4 : 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color: const Color(0xFF1565C0),
-                          width: 1,
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text(
-                      "Services",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: const Text("Services"),
                   ),
                 ),
               ],
             ),
           ),
-
-          // Content
           Expanded(
             child: showEmergency ? _buildEmergencyList() : _buildServicesList(),
           ),
@@ -97,33 +146,39 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
-  // -------------------- Emergency List --------------------
+  /// ---------------- Emergency List ----------------
   Widget _buildEmergencyList() {
-    final emergencies = [
-      {"title": "Fire Downtown", "status": "Pending"},
-      {"title": "Flood Riverside", "status": "In Progress"},
-      {"title": "Medical Help", "status": "Complete"},
-    ];
+    if (loading) return const Center(child: CircularProgressIndicator());
+    if (emergencies.isEmpty)
+      return const Center(child: Text("No emergencies reported"));
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
       itemCount: emergencies.length,
       itemBuilder: (_, index) {
         final e = emergencies[index];
+
+        final typeName = e['typeName'] ?? 'Unknown Type';
+        final categoryName = e['categoryName'] ?? 'Unknown Category';
+        final description = e['description'] ?? 'No description provided';
+        final address =
+            "${e['kebele'] ?? ''}, ${e['subdivision'] ?? ''}, ${e['street'] ?? ''}";
+        final status = e['status']?.toString() ?? 'reported';
+
+        // Badge color
         Color badgeColor;
         Color textColor;
-
-        switch (e['status']) {
-          case "Pending":
-            badgeColor = const Color(0x331565C0); // Light blue background
-            textColor = const Color(0xFF1565C0); // Primary blue
+        switch (status) {
+          case "reported":
+            badgeColor = const Color(0x331565C0);
+            textColor = const Color(0xFF1565C0);
             break;
-          case "In Progress":
-            badgeColor = const Color(0x331A237E); // Darker blue background
+          case "in_progress":
+            badgeColor = const Color(0x331A237E);
             textColor = const Color(0xFF1A237E);
             break;
-          case "Complete":
-            badgeColor = const Color(0x332E7D32); // Greenish for complete
+          case "completed":
+            badgeColor = const Color(0x332E7D32);
             textColor = const Color(0xFF2E7D32);
             break;
           default:
@@ -133,19 +188,23 @@ class _ReportsPageState extends State<ReportsPage> {
 
         return Card(
           elevation: 3,
-          shadowColor: const Color(0x141565C0),
           margin: const EdgeInsets.symmetric(vertical: 8),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
           child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 12,
-            ),
             title: Text(
-              e['title']!,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+              typeName,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Category: $categoryName"),
+                Text("Description: $description"),
+                const SizedBox(height: 4),
+                Text("Address: $address"),
+              ],
             ),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -154,21 +213,25 @@ class _ReportsPageState extends State<ReportsPage> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                e['status']!,
-                style: TextStyle(
-                  color: textColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
+                status,
+                style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
               ),
             ),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ReportDetailsPage(emergency: e),
+                ),
+              );
+            },
           ),
         );
       },
     );
   }
 
-  // -------------------- Services List --------------------
+  /// ---------------- Services List ----------------
   Widget _buildServicesList() {
     final services = [
       "Health Center Visit",
@@ -178,30 +241,19 @@ class _ReportsPageState extends State<ReportsPage> {
     ];
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
       itemCount: services.length,
       itemBuilder: (_, index) {
         return Card(
           elevation: 3,
-          shadowColor: const Color(0x141565C0),
           margin: const EdgeInsets.symmetric(vertical: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
           child: ListTile(
             leading: const Icon(
               Icons.miscellaneous_services,
               color: Color(0xFF1565C0),
             ),
-            title: Text(
-              services[index],
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-            ),
-            trailing: const Icon(
-              Icons.arrow_forward_ios,
-              size: 16,
-              color: Color(0xFF1565C0),
-            ),
+            title: Text(services[index]),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
           ),
         );
       },

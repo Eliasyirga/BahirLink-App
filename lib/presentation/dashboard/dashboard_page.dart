@@ -7,7 +7,9 @@ import '../reports/reports_page.dart';
 import '../settings/settings_page.dart';
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
+  final String userId;
+
+  const DashboardPage({super.key, required this.userId});
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -30,15 +32,20 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildPage() {
     switch (_selectedIndex) {
       case 0:
-        return const DashboardContent(); // Post-login dashboard
+        return const DashboardContent();
+
       case 1:
         return const CategoriesPage();
+
       case 2:
-        return const ProfilePage(); // User profile
+        return const ProfilePage();
+
       case 3:
-        return const ReportsPage(); // New Reports tab
+        return ReportsPage(userId: widget.userId);
+
       case 4:
-        return const SettingsPage(); // New Settings tab
+        return const SettingsPage();
+
       default:
         return const DashboardContent();
     }

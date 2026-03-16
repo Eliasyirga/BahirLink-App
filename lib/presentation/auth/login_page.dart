@@ -30,20 +30,32 @@ class _LoginPageState extends State<LoginPage> {
   // ----------------- LOGIN -----------------
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
+
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
 
     setState(() => isLoading = true);
+
     try {
       final result = await AuthService.login(email: email, password: password);
+
       setState(() => isLoading = false);
 
       if (result["success"] == true && result["accessToken"] != null) {
         final prefs = await SharedPreferences.getInstance();
+
+        // Save tokens
         await prefs.setString("accessToken", result["accessToken"]);
+
         if (result["refreshToken"] != null) {
           await prefs.setString("refreshToken", result["refreshToken"]);
         }
+
+        // -------- FETCH USER ID --------
+        final String userId = result["user"]["id"].toString();
+
+        // Save userId locally
+        await prefs.setString("userId", userId);
 
         ScaffoldMessenger.of(
           context,
@@ -51,7 +63,7 @@ class _LoginPageState extends State<LoginPage> {
 
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const DashboardPage()),
+          MaterialPageRoute(builder: (_) => DashboardPage(userId: userId)),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -64,6 +76,7 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (e) {
       setState(() => isLoading = false);
+
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Login failed: $e")));
@@ -73,6 +86,7 @@ class _LoginPageState extends State<LoginPage> {
   // ----------------- CONTINUE AS GUEST -----------------
   Future<void> _continueAsGuest() async {
     final prefs = await SharedPreferences.getInstance();
+
     await prefs.setBool("isGuest", true);
     await prefs.setString(
       "guestId",
@@ -85,7 +99,7 @@ class _LoginPageState extends State<LoginPage> {
 
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => GuestDashboardPage()), // no const
+      MaterialPageRoute(builder: (_) => GuestDashboardPage()),
     );
   }
 
@@ -141,32 +155,40 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         const SizedBox(height: 25),
+
                         _buildTextField(
                           controller: emailController,
                           label: "Email",
                           icon: Icons.email,
                           validator: (value) {
-                            if (value == null || value.isEmpty)
+                            if (value == null || value.isEmpty) {
                               return "Enter your email";
-                            if (!RegExp(r'\S+@\S+\.\S+').hasMatch(value))
+                            }
+                            if (!RegExp(r'\S+@\S+\.\S+').hasMatch(value)) {
                               return "Invalid email";
+                            }
                             return null;
                           },
                         ),
+
                         const SizedBox(height: 18),
+
                         _buildTextField(
                           controller: passwordController,
                           label: "Password",
                           icon: Icons.lock,
                           obscure: true,
                           validator: (value) {
-                            if (value == null || value.isEmpty)
+                            if (value == null || value.isEmpty) {
                               return "Enter your password";
-                            if (value.length < 6)
+                            }
+                            if (value.length < 6) {
                               return "Password must be at least 6 characters";
+                            }
                             return null;
                           },
                         ),
+
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
@@ -188,7 +210,9 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                         ),
+
                         const SizedBox(height: 18),
+
                         SizedBox(
                           width: double.infinity,
                           height: 52,
@@ -215,7 +239,9 @@ class _LoginPageState extends State<LoginPage> {
                                   ),
                           ),
                         ),
+
                         const SizedBox(height: 16),
+
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -243,7 +269,9 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ],
                         ),
+
                         const SizedBox(height: 12),
+
                         // ---------------- GUEST BUTTON ----------------
                         SizedBox(
                           width: double.infinity,
@@ -264,7 +292,7 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             style: ElevatedButton.styleFrom(
                               elevation: 5,
-                              backgroundColor: Colors.blueAccent.shade700,
+                              backgroundColor: Colors.blueAccent,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(18),
                               ),

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'map_picker_page.dart';
@@ -49,9 +50,20 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     _fetchUserId();
   }
 
+  /// Safely fetch user ID from local storage
   Future<void> _fetchUserId() async {
     final id = await UserEmergencyService.getUserId();
-    if (id != null) setState(() => _userId = id);
+    int? parsedId;
+
+    if (id != null) {
+      parsedId = id is int ? id : int.tryParse(id.toString());
+    }
+
+    if (parsedId != null) {
+      setState(() => _userId = parsedId);
+    } else {
+      _showSnack("Failed to fetch user ID", isError: true);
+    }
   }
 
   void _showSnack(String message, {bool isError = true}) {
@@ -72,7 +84,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     super.dispose();
   }
 
-  // ================= TIME PICKER =================
+  /// Pick time for emergency report
   Future<void> _pickTime() async {
     final now = DateTime.now();
     final picked = await showTimePicker(
@@ -93,7 +105,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     }
   }
 
-  // ================= MEDIA PICKER =================
+  /// Media picker bottom sheet
   void _pickMedia() {
     showModalBottomSheet(
       context: context,
@@ -119,7 +131,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     );
   }
 
-  // ================= SUBMIT REPORT =================
+  /// Submit emergency report
   Future<void> _submitReport() async {
     if (_descriptionController.text.isEmpty ||
         _kebeleController.text.isEmpty ||
@@ -127,6 +139,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
       _showSnack("Please fill description, kebele, and subdivision");
       return;
     }
+
     if (_userId == null) {
       _showSnack("Fetching user ID. Please wait...");
       return;
@@ -167,7 +180,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     if (success) Navigator.pop(context);
   }
 
-  // ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
