@@ -18,7 +18,6 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadPreferences();
   }
 
-  // -------------------- Load saved preferences --------------------
   void _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -27,36 +26,42 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
-  // -------------------- Save dark mode --------------------
   void _toggleDarkMode(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool("darkMode", value);
     setState(() => darkMode = value);
   }
 
-  // -------------------- Save notifications --------------------
   void _toggleNotifications(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool("notificationsEnabled", value);
     setState(() => notificationsEnabled = value);
   }
 
-  // -------------------- Dynamic Colors --------------------
-  Color get backgroundColor => darkMode ? Colors.black : Colors.white;
-  Color get cardColor => darkMode ? Colors.grey[850]! : Colors.white;
-  Color get textColor => darkMode ? Colors.white : Colors.black87;
-  Color get iconColor =>
-      darkMode ? Colors.lightBlueAccent : Colors.blue.shade800;
+  Color get backgroundColor => Colors.white;
+  Color get cardColor => Colors.white;
+  Color get textColor => Colors.black87;
+  Color get iconColor => Colors.blue.shade800;
   Color get switchActiveColor => Colors.blue.shade800;
+  Color get appBarColor => Colors.blue.shade800;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        title: const Text("Settings"),
-        backgroundColor: darkMode ? Colors.black : Colors.blue.shade800,
-        elevation: 3,
+        backgroundColor: appBarColor,
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          "Settings",
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+        ),
+        centerTitle: true,
+        elevation: 0,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -93,38 +98,33 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 12),
-          _buildCardTile(
-            icon: Icons.person,
-            title: "Profile",
-            onTap: () {
-              // TODO: Navigate to profile page
-            },
-          ),
-          _buildCardTile(
-            icon: Icons.logout,
-            title: "Logout",
-            onTap: () {
-              // TODO: Implement logout
-            },
-          ),
+          _buildCardTile(icon: Icons.person, title: "Profile", onTap: () {}),
+          _buildCardTile(icon: Icons.logout, title: "Logout", onTap: () {}),
         ],
       ),
     );
   }
 
-  // -------------------- Switch Card --------------------
   Widget _buildSwitchCard({
     required IconData icon,
     required String title,
     required bool value,
     required Function(bool) onChanged,
   }) {
-    return Card(
-      color: cardColor,
-      elevation: 3,
-      shadowColor: Colors.black26,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: iconColor.withOpacity(0.15)),
+        boxShadow: [
+          BoxShadow(
+            color: iconColor.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
       child: SwitchListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         secondary: Icon(icon, color: iconColor),
@@ -143,18 +143,25 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  // -------------------- Regular Card --------------------
   Widget _buildCardTile({
     required IconData icon,
     required String title,
     required VoidCallback onTap,
   }) {
-    return Card(
-      color: cardColor,
-      elevation: 3,
-      shadowColor: Colors.black26,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: iconColor.withOpacity(0.15)),
+        boxShadow: [
+          BoxShadow(
+            color: iconColor.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
       child: ListTile(
         leading: Icon(icon, color: iconColor),
         title: Text(

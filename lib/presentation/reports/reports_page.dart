@@ -12,12 +12,11 @@ class ReportsPage extends StatefulWidget {
 }
 
 class _ReportsPageState extends State<ReportsPage> {
-  bool showEmergency = true;
   List<Map<String, dynamic>> emergencies = [];
   bool loading = true;
 
-  Map<String, String> emergencyTypeMap = {};
   Map<String, String> categoryMap = {};
+  Map<String, String> typeMap = {};
 
   @override
   void initState() {
@@ -25,238 +24,171 @@ class _ReportsPageState extends State<ReportsPage> {
     fetchInitialData();
   }
 
-  Future<void> fetchInitialData() async {
-    // Show loading
-    if (!mounted) return;
-    setState(() => loading = true);
+  String? extractId(dynamic field) {
+    if (field == null) return null;
+    if (field is String) return field;
+    if (field is Map) return field['id']?.toString();
+    return null;
+  }
 
+  Future<void> fetchInitialData() async {
+    setState(() => loading = true);
     try {
-      // Fetch emergencies
       final emergenciesResponse = await ReportsService.fetchUserEmergencies(
         widget.userId,
       );
-
-      // Fetch types
-      final typesResponse = await ReportsService.fetchEmergencyTypes();
-      final typesList = (typesResponse is List) ? typesResponse : [];
-
-      // Fetch categories
-      final categoriesResponse = await ReportsService.fetchCategories();
-      final categoriesList = (categoriesResponse is List)
-          ? categoriesResponse
-          : [];
-
-      // Build ID -> Name maps
-      emergencyTypeMap = {
-        for (var t in typesList)
-          if (t is Map && t['id'] != null && t['name'] != null)
-            t['id'].toString(): t['name'].toString(),
-      };
+      final categories = await ReportsService.fetchCategories();
 
       categoryMap = {
-        for (var c in categoriesList)
-          if (c is Map && c['id'] != null && c['name'] != null)
-            c['id'].toString(): c['name'].toString(),
+        for (var c in categories) c['id'].toString(): c['name'].toString(),
+      };
+      typeMap = {
+        for (var c in categories)
+          c['id'].toString():
+              c['emergencyType']?['name']?.toString() ?? "Unknown",
       };
 
-      // Enrich emergencies with typeName, categoryName, description
-      final enrichedEmergencies = (emergenciesResponse as List<dynamic>)
-          .map<Map<String, dynamic>>((e) {
-            final eMap = e as Map<String, dynamic>;
-            final typeId = eMap['emergencyTypeId'];
-            final categoryId = eMap['categoryId'];
+      final enriched = emergenciesResponse.map((e) {
+        final categoryId =
+            extractId(e['categoryId']) ?? extractId(e['category']);
+        return {
+          ...e,
+          'categoryName': categoryId != null
+              ? categoryMap[categoryId]
+              : "Unknown",
+          'typeName': categoryId != null ? typeMap[categoryId] : "Unknown",
+          'description': e['description'] ?? "No description",
+        };
+      }).toList();
 
-            return {
-              ...eMap,
-              'typeName': typeId != null
-                  ? emergencyTypeMap[typeId.toString()] ?? 'Unknown Type'
-                  : 'Unknown Type',
-              'categoryName': categoryId != null
-                  ? categoryMap[categoryId.toString()] ?? 'Unknown Category'
-                  : 'Unknown Category',
-              'description': eMap['description'] ?? 'No description provided',
-            };
-          })
-          .toList();
-
-      // Update state only if still mounted
-      if (!mounted) return;
       setState(() {
-        emergencies = enrichedEmergencies;
+        emergencies = enriched;
         loading = false;
       });
     } catch (e) {
-      debugPrint("Error fetching data: $e");
-      if (!mounted) return;
+      debugPrint("ERROR fetching emergencies: $e");
       setState(() => loading = false);
     }
   }
 
+  Color get primaryBlue => const Color(0xFF1565C0);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        title: const Text("Reports"),
-        backgroundColor: const Color(0xFF1565C0),
+        elevation: 2,
+        backgroundColor: primaryBlue,
+        title: const Text(
+          "My Reports",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            color: Colors.white,
+          ),
+        ),
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
-      body: Column(
-        children: [
-          // Toggle buttons
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => setState(() => showEmergency = true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: showEmergency
-                          ? const Color(0xFF1565C0)
-                          : Colors.white,
-                      foregroundColor: showEmergency
-                          ? Colors.white
-                          : const Color(0xFF1565C0),
+      body: loading
+          ? Center(child: CircularProgressIndicator(color: primaryBlue))
+          : emergencies.isEmpty
+          ? const Center(
+              child: Text("No reports found", style: TextStyle(fontSize: 16)),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: emergencies.length,
+              itemBuilder: (_, index) {
+                final e = emergencies[index];
+                return GestureDetector(
+                  onTap: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ReportDetailsPage(
+                          emergency: e,
+                          userId: widget.userId,
+                        ),
+                      ),
+                    );
+                    if (result == true) fetchInitialData();
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 18),
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: primaryBlue.withOpacity(0.15)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primaryBlue.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
                     ),
-                    child: const Text("Emergency"),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => setState(() => showEmergency = false),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: !showEmergency
-                          ? const Color(0xFF1565C0)
-                          : Colors.white,
-                      foregroundColor: !showEmergency
-                          ? Colors.white
-                          : const Color(0xFF1565C0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Type Badge + Arrow
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: primaryBlue.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                e['typeName'],
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: primaryBlue,
+                                ),
+                              ),
+                            ),
+                            const Icon(
+                              Icons.arrow_forward_ios,
+                              size: 16,
+                              color: Colors.black54,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          e['categoryName'],
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          e['description'],
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.black54,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                    child: const Text("Services"),
                   ),
-                ),
-              ],
+                );
+              },
             ),
-          ),
-          Expanded(
-            child: showEmergency ? _buildEmergencyList() : _buildServicesList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// ---------------- Emergency List ----------------
-  Widget _buildEmergencyList() {
-    if (loading) return const Center(child: CircularProgressIndicator());
-    if (emergencies.isEmpty)
-      return const Center(child: Text("No emergencies reported"));
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: emergencies.length,
-      itemBuilder: (_, index) {
-        final e = emergencies[index];
-
-        final typeName = e['typeName'] ?? 'Unknown Type';
-        final categoryName = e['categoryName'] ?? 'Unknown Category';
-        final description = e['description'] ?? 'No description provided';
-        final address =
-            "${e['kebele'] ?? ''}, ${e['subdivision'] ?? ''}, ${e['street'] ?? ''}";
-        final status = e['status']?.toString() ?? 'reported';
-
-        // Badge color
-        Color badgeColor;
-        Color textColor;
-        switch (status) {
-          case "reported":
-            badgeColor = const Color(0x331565C0);
-            textColor = const Color(0xFF1565C0);
-            break;
-          case "in_progress":
-            badgeColor = const Color(0x331A237E);
-            textColor = const Color(0xFF1A237E);
-            break;
-          case "completed":
-            badgeColor = const Color(0x332E7D32);
-            textColor = const Color(0xFF2E7D32);
-            break;
-          default:
-            badgeColor = const Color(0x33000000);
-            textColor = Colors.black87;
-        }
-
-        return Card(
-          elevation: 3,
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: ListTile(
-            title: Text(
-              typeName,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("Category: $categoryName"),
-                Text("Description: $description"),
-                const SizedBox(height: 4),
-                Text("Address: $address"),
-              ],
-            ),
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: badgeColor,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                status,
-                style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
-              ),
-            ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ReportDetailsPage(emergency: e),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  /// ---------------- Services List ----------------
-  Widget _buildServicesList() {
-    final services = [
-      "Health Center Visit",
-      "Municipal Complaint",
-      "Electricity Issue",
-      "Water Supply Issue",
-    ];
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: services.length,
-      itemBuilder: (_, index) {
-        return Card(
-          elevation: 3,
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          child: ListTile(
-            leading: const Icon(
-              Icons.miscellaneous_services,
-              color: Color(0xFF1565C0),
-            ),
-            title: Text(services[index]),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-          ),
-        );
-      },
     );
   }
 }
