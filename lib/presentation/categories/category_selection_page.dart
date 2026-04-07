@@ -3,8 +3,8 @@ import '../../services/category_service.dart';
 import '../reporting/guest_emergency_report_page.dart';
 
 class CategorySelectionPage extends StatefulWidget {
-  final String emergencyTypeId; // ✅ UUID from GuestDashboard
-  final String emergencyTypeName; // Display name only
+  final String emergencyTypeId;
+  final String emergencyTypeName;
 
   const CategorySelectionPage({
     super.key,
@@ -19,6 +19,8 @@ class CategorySelectionPage extends StatefulWidget {
 class _CategorySelectionPageState extends State<CategorySelectionPage> {
   bool isLoading = true;
   List<Map<String, dynamic>> categories = [];
+  List<Map<String, dynamic>> filteredCategories = [];
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -29,143 +31,247 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
   Future<void> _fetchCategories() async {
     try {
       final data = await CategoryService.getCategories(widget.emergencyTypeId);
-      setState(() {
-        categories = List<Map<String, dynamic>>.from(data);
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          categories = List<Map<String, dynamic>>.from(data);
+          filteredCategories = categories;
+          isLoading = false;
+        });
+      }
     } catch (e) {
       debugPrint("Error fetching categories: $e");
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
+  }
+
+  void _filterCategories(String query) {
+    setState(() {
+      filteredCategories = categories
+          .where(
+            (cat) => cat['name'].toString().toLowerCase().contains(
+              query.toLowerCase(),
+            ),
+          )
+          .toList();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xff1976D2),
+      backgroundColor: const Color(0xFFF8FAFC), // Ultra-light blue tint
+      body: Column(
+        children: [
+          _buildHeader(),
+          Expanded(
+            child: isLoading ? _buildLoadingState() : _buildCategoryList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 50, 20, 25),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.chevron_left, color: Colors.white),
+                ),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.emergencyTypeName,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: categories.length,
-                      itemBuilder: (context, index) {
-                        final category = categories[index];
-                        final id = category['id'] ?? '';
-                        final name = category['name'] ?? '';
-                        return _buildCategoryTile(id, name);
-                      },
                     ),
+                    Text(
+                      "Select sub-category to report",
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Modern Search Bar
+          Container(
+            height: 50,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.white.withOpacity(0.2)),
+            ),
+            child: TextField(
+              controller: _searchController,
+              onChanged: _filterCategories,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: "Search categories...",
+                hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                prefixIcon: const Icon(Icons.search, color: Colors.white70),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryList() {
+    if (filteredCategories.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off, size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            const Text(
+              "No categories found",
+              style: TextStyle(color: Colors.grey),
             ),
           ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+      itemCount: filteredCategories.length,
+      physics: const BouncingScrollPhysics(),
+      itemBuilder: (context, index) {
+        final category = filteredCategories[index];
+        return _buildCategoryCard(category['id'], category['name']);
+      },
+    );
+  }
+
+  Widget _buildCategoryCard(String id, String name) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => GuestEmergencyReportPage(
+                  emergencyTypeId: widget.emergencyTypeId,
+                  categoryId: id,
+                  emergencyTypeName: widget.emergencyTypeName,
+                  categoryName: name,
+                ),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.grey.shade100),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                // Left Accent Blue Bar
+                Container(
+                  width: 4,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        "Tap to select this category",
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_forward_ios,
+                  size: 14,
+                  color: Color(0xFF94A3B8),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildHeader() => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
-    decoration: const BoxDecoration(
-      color: Color(0xff1976D2),
-      borderRadius: BorderRadius.only(
-        bottomLeft: Radius.circular(24),
-        bottomRight: Radius.circular(24),
-      ),
-    ),
-    child: Row(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+  Widget _buildLoadingState() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: 6,
+      itemBuilder: (c, i) => Container(
+        height: 80,
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Categories for ${widget.emergencyTypeName}",
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                "Select a category to continue",
-                style: TextStyle(fontSize: 14, color: Colors.white70),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _buildCategoryTile(String categoryId, String categoryName) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => GuestEmergencyReportPage(
-                emergencyTypeId: widget.emergencyTypeId, // ✅ UUID
-                categoryId: categoryId, // ✅ UUID
-                emergencyTypeName: widget.emergencyTypeName, // Display name
-                categoryName: categoryName, // Display name
-              ),
-            ),
-          );
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.warning_amber_rounded,
-                color: Color(0xff1976D2),
-                size: 26,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  categoryName,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-              const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-            ],
-          ),
-        ),
+        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       ),
     );
   }

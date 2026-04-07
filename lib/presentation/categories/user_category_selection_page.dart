@@ -27,80 +27,105 @@ class _UserCategorySelectionPageState extends State<UserCategorySelectionPage> {
     fetchCategories();
   }
 
-  // ================= FETCH CATEGORIES =================
+  List<Map<String, dynamic>> _sortCategories(List<Map<String, dynamic>> list) {
+    List<Map<String, dynamic>> sorted = List.from(list);
+    sorted.sort((a, b) {
+      String nameA = a["name"].toString().toLowerCase();
+      String nameB = b["name"].toString().toLowerCase();
+      bool isAOther = nameA == "others" || nameA == "other";
+      bool isBOther = nameB == "others" || nameB == "other";
+      if (isAOther && !isBOther) return 1;
+      if (!isAOther && isBOther) return -1;
+      return nameA.compareTo(nameB);
+    });
+    return sorted;
+  }
 
   Future<void> fetchCategories() async {
     try {
       final response = await CategoryService.getCategories(
         widget.emergencyTypeId,
       );
-
       setState(() {
-        categories = List<Map<String, dynamic>>.from(response);
+        categories = _sortCategories(List<Map<String, dynamic>>.from(response));
         isLoading = false;
       });
     } catch (e) {
       debugPrint("Category fetch error: $e");
-
-      setState(() {
-        isLoading = false;
-      });
+      setState(() => isLoading = false);
     }
   }
-
-  // ================= BUILD =================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xffFAFAFA),
-      body: SafeArea(
-        child: Column(
-          children: [
-            buildHeader(),
-            Expanded(
-              child: isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xff1976D2),
-                      ),
-                    )
-                  : buildCategoryList(),
-            ),
-          ],
-        ),
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: Column(
+        children: [
+          _buildHeader(),
+          Expanded(
+            child: isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF2563EB),
+                      strokeWidth: 2,
+                    ),
+                  )
+                : _buildGrid(),
+          ),
+        ],
       ),
     );
   }
 
-  // ================= HEADER =================
-
-  Widget buildHeader() {
+  Widget _buildHeader() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+      // Reduced padding for a smaller header
+      padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
       decoration: const BoxDecoration(
-        color: Color(0xff1976D2),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1D4ED8), Color(0xFF3B82F6)], // Vibrant Blue
+        ),
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(24),
-          bottomRight: Radius.circular(24),
+          bottomLeft: Radius.circular(30),
+          bottomRight: Radius.circular(30),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              "Categories for ${widget.emergencyTypeName}",
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                shape: BoxShape.circle,
               ),
+              child: const Icon(
+                Icons.arrow_back_ios_new,
+                color: Colors.white,
+                size: 12,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            widget.emergencyTypeName,
+            style: const TextStyle(
+              fontSize: 22, // Smaller font
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          Text(
+            "Select a specific category",
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 12,
             ),
           ),
         ],
@@ -108,77 +133,94 @@ class _UserCategorySelectionPageState extends State<UserCategorySelectionPage> {
     );
   }
 
-  // ================= CATEGORY LIST =================
+  Widget _buildGrid() {
+    if (categories.isEmpty) {
+      return const Center(child: Text("No categories available"));
+    }
 
-  Widget buildCategoryList() {
-    return ListView.builder(
+    return GridView.builder(
       padding: const EdgeInsets.all(16),
+      physics: const BouncingScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 1.2, // Makes the boxes shorter
+      ),
       itemCount: categories.length,
       itemBuilder: (context, index) {
-        final category = categories[index];
-
-        final String categoryName = category["name"] ?? "";
-        final String categoryId = category["id"];
-
-        return buildCategoryTile(categoryName, categoryId);
+        final cat = categories[index];
+        return _buildCategoryCard(cat["name"], cat["id"]);
       },
     );
   }
 
-  // ================= CATEGORY TILE =================
+  Widget _buildCategoryCard(String name, String id) {
+    bool isOther =
+        name.toLowerCase() == "others" || name.toLowerCase() == "other";
 
-  Widget buildCategoryTile(String name, String id) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => UserEmergencyReportPage(
-                emergencyTypeId: widget.emergencyTypeId,
-                emergencyTypeName: widget.emergencyTypeName,
-                categoryId: id,
-                categoryName: name,
-              ),
-            ),
-          );
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey.shade200),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16), // Smaller radius
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF3B82F6).withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.warning_amber_rounded,
-                color: Color(0xff1976D2),
-                size: 26,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UserEmergencyReportPage(
+                  emergencyTypeId: widget.emergencyTypeId,
+                  emergencyTypeName: widget.emergencyTypeName,
+                  categoryId: id,
+                  categoryName: name,
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-            ],
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12), // Reduced padding
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: isOther
+                        ? const Color(0xFFF1F5F9)
+                        : const Color(0xFFEFF6FF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isOther ? Icons.more_horiz : Icons.category_outlined,
+                    color: isOther ? Colors.blueGrey : const Color(0xFF3B82F6),
+                    size: 18, // Smaller icon
+                  ),
+                ),
+                Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13, // Smaller text
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B),
+                    height: 1.1,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

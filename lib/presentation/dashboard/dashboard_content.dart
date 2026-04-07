@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-
 import 'package:first_app/services/user_service.dart';
 import 'package:first_app/presentation/categories/user_category_selection_page.dart';
 
@@ -13,9 +12,8 @@ class DashboardContent extends StatefulWidget {
 }
 
 class _DashboardContentState extends State<DashboardContent> {
-  String fullName = "";
+  String fullName = "User";
   bool isLoading = true;
-
   List<dynamic> emergencyTypes = [];
 
   @override
@@ -26,129 +24,110 @@ class _DashboardContentState extends State<DashboardContent> {
 
   Future<void> _initialize() async {
     await Future.wait([_fetchUser(), _fetchEmergencyTypes()]);
-
-    setState(() {
-      isLoading = false;
-    });
+    if (mounted) setState(() => isLoading = false);
   }
-
-  // ================= FETCH USER =================
 
   Future<void> _fetchUser() async {
     try {
-      final user = await UserService.getProfile();
-
-      if (user != null) {
-        fullName = user["name"] ?? "";
+      final response = await UserService.getProfile();
+      if (response != null) {
+        final userData = response.containsKey('user')
+            ? response['user']
+            : response;
+        setState(() {
+          fullName = userData["firstName"] ?? "User";
+        });
       }
     } catch (e) {
       debugPrint("User fetch error: $e");
     }
   }
 
-  // ================= FETCH EMERGENCY TYPES =================
-
   Future<void> _fetchEmergencyTypes() async {
     try {
       final response = await http.get(
         Uri.parse("http://localhost:5000/api/emergencyType"),
       );
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-
-        setState(() {
-          emergencyTypes = data["emergencyTypes"];
-        });
+        setState(() => emergencyTypes = data["emergencyTypes"]);
       }
     } catch (e) {
       debugPrint("Emergency type error: $e");
     }
   }
 
-  // ================= ICON MAPPER =================
+  // ================= HELPERS =================
 
   IconData _getIcon(String name) {
     switch (name.toLowerCase()) {
       case "fire":
-        return Icons.local_fire_department;
-
+        return Icons.local_fire_department_rounded;
       case "crime":
-        return Icons.security;
-
+        return Icons.shield_rounded;
       case "medical":
-        return Icons.medical_services;
-
+        return Icons.medical_services_rounded;
       case "flood":
-        return Icons.water_damage;
-
+        return Icons.tsunami_rounded;
       default:
-        return Icons.warning;
+        return Icons.warning_rounded;
     }
   }
-
-  // ================= COLOR MAPPER =================
 
   Color _getColor(String name) {
     switch (name.toLowerCase()) {
       case "fire":
-        return Colors.redAccent;
-
+        return const Color(0xFFF87171);
       case "crime":
-        return Colors.deepPurple;
-
+        return const Color(0xFF818CF8);
       case "medical":
-        return Colors.pinkAccent;
-
+        return const Color(0xFFF472B6);
       case "flood":
-        return Colors.blueAccent;
-
+        return const Color(0xFF38BDF8);
       default:
-        return Colors.orange;
+        return Colors.orangeAccent;
     }
   }
-
-  // ================= BUILD =================
 
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: Color(0xFF1E40AF),
+        ),
+      );
     }
 
-    return SafeArea(
-      child: Column(
+    return Scaffold(
+      backgroundColor: const Color(0xFFF1F5F9),
+      body: Column(
         children: [
           _buildHeader(),
-
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Report Emergencies",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  _buildEmergencyGrid(),
-
-                  const SizedBox(height: 25),
-
-                  const Text(
-                    "Access Services",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  _buildServiceGrid(),
-                ],
-              ),
+            child: ListView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              children: [
+                _buildSectionLabel(
+                  "High Alert Tracking",
+                  "Real-time system updates",
+                ),
+                const SizedBox(height: 16),
+                _buildAlertCarousel(),
+                const SizedBox(height: 32),
+                _buildSectionLabel("Emergency Report", "Quick action required"),
+                const SizedBox(height: 16),
+                _buildEmergencyGrid(),
+                const SizedBox(height: 32),
+                _buildSectionLabel(
+                  "Public Utilities",
+                  "Daily municipal services",
+                ),
+                const SizedBox(height: 16),
+                _buildStaticGrid(),
+              ],
             ),
           ),
         ],
@@ -156,208 +135,343 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  // ================= HEADER =================
+  Widget _buildSectionLabel(String title, String subtitle) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF1E293B),
+            letterSpacing: 1.1,
+          ),
+        ),
+        Text(
+          subtitle,
+          style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade400),
+        ),
+      ],
+    );
+  }
 
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
-
-      decoration: BoxDecoration(
+      padding: const EdgeInsets.fromLTRB(24, 60, 24, 35),
+      decoration: const BoxDecoration(
+        // Updated to a more vibrant, multi-tone blue gradient
         gradient: LinearGradient(
-          colors: [Colors.blue.shade800, Colors.blue.shade400],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF1E3A8A), // Deep Navy Blue
+            Color(0xFF2563EB), // Royal Blue
+            Color(0xFF3B82F6), // Bright Azure
+          ],
         ),
-
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(30),
-          bottomRight: Radius.circular(30),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(40),
+          bottomRight: Radius.circular(40),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x4D1E40AF), // Soft blue shadow
+            blurRadius: 20,
+            offset: Offset(0, 10),
+          ),
+        ],
       ),
-
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Image.asset("assets/images/logo.webp", height: 40),
-
+              // Logo Container with Glass Effect
               Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.notifications_none,
-                    color: Colors.blue,
+                height: 50,
+                width: 50,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.2),
+                    width: 1,
                   ),
-                  onPressed: () {},
                 ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    "assets/images/logo.webp",
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) => const Icon(
+                      Icons.shield_rounded,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 15),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Welcome back,",
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 12,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  Text(
+                    fullName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-
-          const SizedBox(height: 20),
-
-          Text(
-            "Welcome, $fullName!",
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-
-          const SizedBox(height: 5),
-
-          const Text(
-            "Choose a service to get started",
-            style: TextStyle(fontSize: 15, color: Colors.white70),
-          ),
+          // Notification badge with more contrast
+          _buildNotificationBadge(),
         ],
       ),
     );
   }
 
-  // ================= EMERGENCY GRID =================
+  // Adjusted notification badge to match the brighter theme
+  Widget _buildNotificationBadge() {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
+      ),
+      child: const Icon(
+        Icons.notifications_active_outlined,
+        color: Colors.white,
+        size: 24,
+      ),
+    );
+  }
+
+  Widget _buildAlertCarousel() {
+    return SizedBox(
+      height: 150,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        children: [
+          _buildAdCard(
+            "MISSING PERSON",
+            "Jane Smith, Central Ave",
+            "REWARD \$10k",
+            [const Color(0xFFF59E0B), Colors.orange.shade700],
+            Icons.person_search_rounded,
+          ),
+          const SizedBox(width: 12),
+          _buildAdCard("WANTED", "ID #8829 - Dangerous", "PRIORITY", [
+            const Color(0xFFEF4444),
+            Colors.red.shade900,
+          ], Icons.gavel_rounded),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdCard(
+    String title,
+    String sub,
+    String badge,
+    List<Color> colors,
+    IconData icon,
+  ) {
+    return Container(
+      width: 250,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: colors),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -10,
+            bottom: -10,
+            child: Icon(icon, size: 90, color: Colors.white.withOpacity(0.1)),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    badge,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  sub,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildEmergencyGrid() {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-
       itemCount: emergencyTypes.length,
-
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 1.1,
+        crossAxisCount: 3,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 0.82, // Fixed height-to-width ratio
       ),
-
       itemBuilder: (context, index) {
         final type = emergencyTypes[index];
-
-        final name = type["name"];
-        final id = type["id"];
-
-        return _buildEmergencyCard(name, id);
-      },
-    );
-  }
-
-  // ================= EMERGENCY CARD =================
-
-  Widget _buildEmergencyCard(String title, String id) {
-    final icon = _getIcon(title);
-    final color = _getColor(title);
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => UserCategorySelectionPage(
-              emergencyTypeId: id,
-              emergencyTypeName: title,
+        final color = _getColor(type["name"]);
+        return InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => UserCategorySelectionPage(
+                emergencyTypeId: type["id"],
+                emergencyTypeName: type["name"],
+              ),
+            ),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(_getIcon(type["name"]), color: color, size: 20),
+                ),
+                const SizedBox(height: 6),
+                Flexible(
+                  child: Text(
+                    type["name"],
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                ),
+                Text(
+                  "Report",
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         );
       },
-
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black12.withOpacity(0.08),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircleAvatar(
-              radius: 22,
-              backgroundColor: color.withOpacity(0.1),
-              child: Icon(icon, color: color),
-            ),
-
-            const SizedBox(height: 8),
-
-            Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
-  // ================= SERVICE GRID =================
-
-  Widget _buildServiceGrid() {
-    return GridView.count(
-      crossAxisCount: 2,
+  Widget _buildStaticGrid() {
+    final s = [
+      {'t': 'Health', 'i': Icons.health_and_safety_rounded, 'c': Colors.teal},
+      {'t': 'Power', 'i': Icons.electric_bolt_rounded, 'c': Colors.amber},
+      {'t': 'Water', 'i': Icons.water_drop_rounded, 'c': Colors.blue},
+      {'t': 'Inquiry', 'i': Icons.help_center_rounded, 'c': Colors.blueGrey},
+    ];
+    return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.1,
-
-      children: [
-        _buildServiceCard(Icons.local_hospital, "Health Centers", Colors.green),
-        _buildServiceCard(Icons.apartment, "Municipal", Colors.teal),
-        _buildServiceCard(Icons.lightbulb, "Electric Utilities", Colors.orange),
-        _buildServiceCard(Icons.water_drop, "Water Resources", Colors.blue),
-      ],
-    );
-  }
-
-  // ================= SERVICE CARD =================
-
-  Widget _buildServiceCard(IconData icon, String title, Color color) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
+      itemCount: s.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        childAspectRatio: 0.8,
       ),
-
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-
+      itemBuilder: (c, i) => Column(
         children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: color.withOpacity(0.1),
-            child: Icon(icon, color: color),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4),
+              ],
+            ),
+            child: Icon(
+              s[i]['i'] as IconData,
+              color: s[i]['c'] as Color,
+              size: 18,
+            ),
           ),
-
-          const SizedBox(height: 8),
-
+          const SizedBox(height: 4),
           Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            s[i]['t'] as String,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF64748B),
+            ),
           ),
         ],
       ),

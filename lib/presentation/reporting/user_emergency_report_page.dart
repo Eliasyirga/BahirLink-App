@@ -44,21 +44,23 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   bool _isLoading = false;
   int? _userId;
 
+  // Modern Blue Color Palette
+  final Color primaryBlue = const Color(0xff0D47A1);
+  final Color accentBlue = const Color(0xff1976D2);
+  final Color lightBlueBg = const Color(0xffF0F7FF);
+
   @override
   void initState() {
     super.initState();
     _fetchUserId();
   }
 
-  /// Safely fetch user ID from local storage
   Future<void> _fetchUserId() async {
     final id = await UserEmergencyService.getUserId();
     int? parsedId;
-
     if (id != null) {
       parsedId = id is int ? id : int.tryParse(id.toString());
     }
-
     if (parsedId != null) {
       setState(() => _userId = parsedId);
     } else {
@@ -69,8 +71,10 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   void _showSnack(String message, {bool isError = true}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        content: Text(message, style: const TextStyle(color: Colors.white)),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: isError ? Colors.redAccent : Colors.green,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -84,7 +88,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     super.dispose();
   }
 
-  /// Pick time for emergency report
   Future<void> _pickTime() async {
     final now = DateTime.now();
     final picked = await showTimePicker(
@@ -105,12 +108,11 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     }
   }
 
-  /// Media picker bottom sheet
   void _pickMedia() {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
       builder: (_) => MediaPickerBottomSheet(
         onFileSelectedWeb: (bytes, name) {
@@ -131,7 +133,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     );
   }
 
-  /// Submit emergency report
   Future<void> _submitReport() async {
     if (_descriptionController.text.isEmpty ||
         _kebeleController.text.isEmpty ||
@@ -139,7 +140,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
       _showSnack("Please fill description, kebele, and subdivision");
       return;
     }
-
     if (_userId == null) {
       _showSnack("Fetching user ID. Please wait...");
       return;
@@ -183,55 +183,80 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xffFAFAFA),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 15,
+      backgroundColor: Colors.white,
+      body: Column(
+        children: [
+          _buildHeader(),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: lightBlueBg.withOpacity(0.5),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(30),
+                  topRight: Radius.circular(30),
                 ),
+              ),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.all(24),
                 child: _buildForm(),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildHeader() => Container(
     width: double.infinity,
-    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 35),
-    decoration: const BoxDecoration(
+    padding: const EdgeInsets.only(top: 60, bottom: 30, left: 20, right: 20),
+    decoration: BoxDecoration(
       gradient: LinearGradient(
-        colors: [Color(0xff0D47A1), Color(0xff1976D2)],
+        colors: [primaryBlue, accentBlue],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-      ),
-      borderRadius: BorderRadius.only(
-        bottomLeft: Radius.circular(35),
-        bottomRight: Radius.circular(35),
       ),
     ),
     child: Row(
       children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-          onPressed: () => Navigator.pop(context),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            "${widget.emergencyTypeName} - ${widget.categoryName}",
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+        GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
             ),
+            child: const Icon(
+              Icons.arrow_back_ios_new,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+        ),
+        const SizedBox(width: 20),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.emergencyTypeName,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                widget.categoryName,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white.withOpacity(0.8),
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -242,40 +267,50 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionHeader("Emergency Info"),
-        _infoRow("Type", widget.emergencyTypeName),
-        _infoRow("Category", widget.categoryName),
-        const SizedBox(height: 20),
-        _sectionHeader("Details"),
+        _sectionHeader("Description"),
+        const SizedBox(height: 10),
         _buildTextField(
           _descriptionController,
-          "Describe the emergency...",
-          maxLines: 5,
+          "Explain what is happening...",
+          maxLines: 4,
+          icon: Icons.edit_note,
         ),
-        const SizedBox(height: 15),
-        _sectionHeader("Address"),
-        _buildTextField(_kebeleController, "Kebele"),
+        const SizedBox(height: 24),
+        _sectionHeader("Location Details"),
         const SizedBox(height: 10),
-        _buildTextField(_subdivisionController, "Subdivision"),
+        _buildTextField(
+          _kebeleController,
+          "Kebele",
+          icon: Icons.maps_home_work,
+        ),
+        const SizedBox(height: 12),
+        _buildTextField(
+          _subdivisionController,
+          "Subdivision",
+          icon: Icons.business,
+        ),
+        const SizedBox(height: 12),
+        _buildTextField(
+          _streetController,
+          "Street (Optional)",
+          icon: Icons.add_road,
+        ),
+        const SizedBox(height: 24),
+        _sectionHeader("Time & GPS"),
         const SizedBox(height: 10),
-        _buildTextField(_streetController, "Street"),
-        const SizedBox(height: 15),
-        _sectionHeader("Time & Location"),
         _buildPickerRow(
-          icon: Icons.access_time,
-          label: "Select Time",
+          icon: Icons.access_time_filled,
+          label: "Report Time",
           value: _selectedTime != null
-              ? "${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}:${_selectedTime!.second.toString().padLeft(2, '0')}"
-              : "Tap to select time",
+              ? "${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}"
+              : "Select Time",
           onTap: _pickTime,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         _buildPickerRow(
-          icon: Icons.location_on,
-          label: "Select Location",
-          value: _latitude != null && _longitude != null
-              ? "Lat: $_latitude, Lng: $_longitude"
-              : "Tap to select location",
+          icon: Icons.my_location,
+          label: "Pin Location",
+          value: _latitude != null ? "Location Pinned" : "Tap to open map",
           onTap: () async {
             final pickedLocation = await Navigator.push(
               context,
@@ -289,48 +324,30 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
             }
           },
         ),
-        const SizedBox(height: 15),
-        _sectionHeader("Media"),
+        const SizedBox(height: 24),
+        _sectionHeader("Evidence"),
+        const SizedBox(height: 10),
         _buildPickerRow(
-          icon: Icons.camera_alt,
-          label: "Attach Photo / Video",
-          value: _selectedFileName ?? "Tap to attach media",
-          valueColor: _selectedFileName != null
-              ? Colors.green
-              : const Color(0xff1976D2),
+          icon: Icons.cloud_upload,
+          label: "Media Attachment",
+          value: _selectedFileName ?? "Upload Photo/Video",
+          valueColor: _selectedFileName != null ? Colors.green : accentBlue,
           onTap: _pickMedia,
         ),
-        const SizedBox(height: 30),
+        const SizedBox(height: 40),
         _buildSubmitButton(),
-        const SizedBox(height: 20),
+        const SizedBox(height: 40),
       ],
     );
   }
 
   Widget _sectionHeader(String title) => Text(
-    title,
-    style: const TextStyle(
-      fontSize: 16,
-      fontWeight: FontWeight.bold,
-      color: Color(0xff0D47A1),
-    ),
-  );
-
-  Widget _infoRow(String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      children: [
-        Text(
-          "$label: ",
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Color(0xff0D47A1),
-          ),
-        ),
-        Flexible(
-          child: Text(value, style: const TextStyle(color: Color(0xff1976D2))),
-        ),
-      ],
+    title.toUpperCase(),
+    style: TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w800,
+      color: primaryBlue.withOpacity(0.6),
+      letterSpacing: 1.5,
     ),
   );
 
@@ -338,18 +355,38 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     TextEditingController controller,
     String hint, {
     int maxLines = 1,
-  }) => TextField(
-    controller: controller,
-    maxLines: maxLines,
-    decoration: InputDecoration(
-      hintText: hint,
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide.none,
+    required IconData icon,
+  }) => Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(15),
+      boxShadow: [
+        BoxShadow(
+          color: primaryBlue.withOpacity(0.05),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: TextField(
+      controller: controller,
+      maxLines: maxLines,
+      style: TextStyle(color: primaryBlue),
+      decoration: InputDecoration(
+        prefixIcon: Icon(icon, color: accentBlue, size: 20),
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.blueGrey.withOpacity(0.5)),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
       ),
-      contentPadding: const EdgeInsets.all(14),
     ),
   );
 
@@ -361,55 +398,75 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     required VoidCallback onTap,
   }) => InkWell(
     onTap: onTap,
+    borderRadius: BorderRadius.circular(15),
     child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3)),
-        ],
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: primaryBlue.withOpacity(0.1)),
       ),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xff1976D2)),
-          const SizedBox(width: 12),
+          Icon(icon, color: accentBlue),
+          const SizedBox(width: 15),
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Color(0xff0D47A1),
-              ),
+              style: TextStyle(fontWeight: FontWeight.w600, color: primaryBlue),
             ),
           ),
-          Flexible(
-            child: Text(
-              value,
-              style: TextStyle(color: valueColor ?? const Color(0xff1976D2)),
+          Text(
+            value,
+            style: TextStyle(
+              color: valueColor ?? accentBlue,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(width: 5),
-          const Icon(Icons.arrow_forward_ios, size: 16),
+          const SizedBox(width: 8),
+          Icon(Icons.chevron_right, color: primaryBlue.withOpacity(0.3)),
         ],
       ),
     ),
   );
 
-  Widget _buildSubmitButton() => SizedBox(
-    height: 50,
+  Widget _buildSubmitButton() => Container(
     width: double.infinity,
+    height: 60,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(15),
+      boxShadow: [
+        BoxShadow(
+          color: primaryBlue.withOpacity(0.3),
+          blurRadius: 12,
+          offset: const Offset(0, 6),
+        ),
+      ],
+    ),
     child: ElevatedButton(
       style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xff0D47A1),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+        backgroundColor: primaryBlue,
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        elevation: 0,
       ),
       onPressed: _isLoading ? null : _submitReport,
       child: _isLoading
-          ? const CircularProgressIndicator(color: Colors.white)
+          ? const SizedBox(
+              height: 24,
+              width: 24,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2,
+              ),
+            )
           : const Text(
-              "Send Emergency Report",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              "SUBMIT REPORT",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
             ),
     ),
   );
