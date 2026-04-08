@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:first_app/services/user_service.dart';
+import 'package:first_app/services/service_type_service.dart'; // Ensure this exists
 import 'package:first_app/presentation/categories/user_category_selection_page.dart';
 
 class DashboardContent extends StatefulWidget {
@@ -15,6 +16,7 @@ class _DashboardContentState extends State<DashboardContent> {
   String fullName = "User";
   bool isLoading = true;
   List<dynamic> emergencyTypes = [];
+  List<dynamic> serviceTypes = []; // New dynamic list for utilities
 
   @override
   void initState() {
@@ -23,7 +25,12 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   Future<void> _initialize() async {
-    await Future.wait([_fetchUser(), _fetchEmergencyTypes()]);
+    // Parallel fetching for faster startup
+    await Future.wait([
+      _fetchUser(),
+      _fetchEmergencyTypes(),
+      _fetchServiceTypes(),
+    ]);
     if (mounted) setState(() => isLoading = false);
   }
 
@@ -50,10 +57,20 @@ class _DashboardContentState extends State<DashboardContent> {
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        setState(() => emergencyTypes = data["emergencyTypes"]);
+        setState(() => emergencyTypes = data["emergencyTypes"] ?? []);
       }
     } catch (e) {
       debugPrint("Emergency type error: $e");
+    }
+  }
+
+  Future<void> _fetchServiceTypes() async {
+    try {
+      // Using the service we created earlier
+      final data = await ServiceTypeService.getAllServiceTypes();
+      setState(() => serviceTypes = data);
+    } catch (e) {
+      debugPrint("Service type error: $e");
     }
   }
 
@@ -69,8 +86,15 @@ class _DashboardContentState extends State<DashboardContent> {
         return Icons.medical_services_rounded;
       case "flood":
         return Icons.tsunami_rounded;
+      case "health":
+        return Icons.health_and_safety_rounded;
+      case "power":
+      case "electricity":
+        return Icons.electric_bolt_rounded;
+      case "water":
+        return Icons.water_drop_rounded;
       default:
-        return Icons.warning_rounded;
+        return Icons.grid_view_rounded;
     }
   }
 
@@ -85,7 +109,7 @@ class _DashboardContentState extends State<DashboardContent> {
       case "flood":
         return const Color(0xFF38BDF8);
       default:
-        return Colors.orangeAccent;
+        return const Color(0xFF64748B);
     }
   }
 
@@ -126,7 +150,7 @@ class _DashboardContentState extends State<DashboardContent> {
                   "Daily municipal services",
                 ),
                 const SizedBox(height: 16),
-                _buildStaticGrid(),
+                _buildDynamicServiceGrid(), // Updated method
               ],
             ),
           ),
@@ -135,41 +159,17 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  Widget _buildSectionLabel(String title, String subtitle) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title.toUpperCase(),
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w900,
-            color: Color(0xFF1E293B),
-            letterSpacing: 1.1,
-          ),
-        ),
-        Text(
-          subtitle,
-          style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade400),
-        ),
-      ],
-    );
-  }
+  // ... [Header, SectionLabel, AlertCarousel, and AdCard methods remain the same] ...
 
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(24, 60, 24, 35),
       decoration: const BoxDecoration(
-        // Updated to a more vibrant, multi-tone blue gradient
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF1E3A8A), // Deep Navy Blue
-            Color(0xFF2563EB), // Royal Blue
-            Color(0xFF3B82F6), // Bright Azure
-          ],
+          colors: [Color(0xFF1E3A8A), Color(0xFF2563EB), Color(0xFF3B82F6)],
         ),
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(40),
@@ -177,7 +177,7 @@ class _DashboardContentState extends State<DashboardContent> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Color(0x4D1E40AF), // Soft blue shadow
+            color: Color(0x4D1E40AF),
             blurRadius: 20,
             offset: Offset(0, 10),
           ),
@@ -188,28 +188,21 @@ class _DashboardContentState extends State<DashboardContent> {
         children: [
           Row(
             children: [
-              // Logo Container with Glass Effect
               Container(
                 height: 50,
                 width: 50,
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.2),
-                    width: 1,
-                  ),
+                  border: Border.all(color: Colors.white.withOpacity(0.2)),
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: Image.asset(
                     "assets/images/logo.webp",
                     fit: BoxFit.cover,
-                    errorBuilder: (c, e, s) => const Icon(
-                      Icons.shield_rounded,
-                      color: Colors.white,
-                      size: 28,
-                    ),
+                    errorBuilder: (c, e, s) =>
+                        const Icon(Icons.shield_rounded, color: Colors.white),
                   ),
                 ),
               ),
@@ -222,7 +215,6 @@ class _DashboardContentState extends State<DashboardContent> {
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.7),
                       fontSize: 12,
-                      letterSpacing: 0.5,
                     ),
                   ),
                   Text(
@@ -231,21 +223,18 @@ class _DashboardContentState extends State<DashboardContent> {
                       color: Colors.white,
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
                     ),
                   ),
                 ],
               ),
             ],
           ),
-          // Notification badge with more contrast
           _buildNotificationBadge(),
         ],
       ),
     );
   }
 
-  // Adjusted notification badge to match the brighter theme
   Widget _buildNotificationBadge() {
     return Container(
       padding: const EdgeInsets.all(10),
@@ -353,6 +342,27 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
+  Widget _buildSectionLabel(String title, String subtitle) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF1E293B),
+            letterSpacing: 1.1,
+          ),
+        ),
+        Text(
+          subtitle,
+          style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade400),
+        ),
+      ],
+    );
+  }
+
   Widget _buildEmergencyGrid() {
     return GridView.builder(
       shrinkWrap: true,
@@ -362,7 +372,7 @@ class _DashboardContentState extends State<DashboardContent> {
         crossAxisCount: 3,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        childAspectRatio: 0.82, // Fixed height-to-width ratio
+        childAspectRatio: 0.82,
       ),
       itemBuilder: (context, index) {
         final type = emergencyTypes[index];
@@ -432,49 +442,64 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  Widget _buildStaticGrid() {
-    final s = [
-      {'t': 'Health', 'i': Icons.health_and_safety_rounded, 'c': Colors.teal},
-      {'t': 'Power', 'i': Icons.electric_bolt_rounded, 'c': Colors.amber},
-      {'t': 'Water', 'i': Icons.water_drop_rounded, 'c': Colors.blue},
-      {'t': 'Inquiry', 'i': Icons.help_center_rounded, 'c': Colors.blueGrey},
-    ];
+  Widget _buildDynamicServiceGrid() {
+    if (serviceTypes.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: Text(
+            "Connecting to local services...",
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ),
+      );
+    }
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: s.length,
+      itemCount: serviceTypes.length,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 4,
+        mainAxisSpacing: 15,
         childAspectRatio: 0.8,
       ),
-      itemBuilder: (c, i) => Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4),
-              ],
+      itemBuilder: (context, index) {
+        final service = serviceTypes[index];
+        final serviceName = service["name"] ?? "Utility";
+
+        return Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 4,
+                  ),
+                ],
+              ),
+              child: Icon(
+                _getIcon(serviceName),
+                color: const Color(0xFF2563EB),
+                size: 20,
+              ),
             ),
-            child: Icon(
-              s[i]['i'] as IconData,
-              color: s[i]['c'] as Color,
-              size: 18,
+            const SizedBox(height: 6),
+            Text(
+              serviceName,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF64748B),
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            s[i]['t'] as String,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF64748B),
-            ),
-          ),
-        ],
-      ),
+          ],
+        );
+      },
     );
   }
 }

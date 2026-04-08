@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:first_app/services/auth_service.dart';
 import 'login_page.dart';
@@ -15,21 +14,21 @@ class VerifyEmailPage extends StatefulWidget {
 }
 
 class _VerifyEmailPageState extends State<VerifyEmailPage> {
-  final TextEditingController codeController = TextEditingController();
-  bool isLoading = false;
-  int secondsRemaining = 600; // 10 minutes
-  Timer? timer;
+  final TextEditingController _codeController = TextEditingController();
+  bool _isLoading = false;
+  int _secondsRemaining = 600;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    startTimer();
+    _startTimer();
   }
 
-  void startTimer() {
-    timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (secondsRemaining > 0) {
-        setState(() => secondsRemaining--);
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_secondsRemaining > 0) {
+        if (mounted) setState(() => _secondsRemaining--);
       } else {
         t.cancel();
       }
@@ -38,241 +37,209 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
 
   @override
   void dispose() {
-    codeController.dispose();
-    timer?.cancel();
+    _codeController.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
-  String get timerText {
-    final minutes = (secondsRemaining ~/ 60).toString().padLeft(2, '0');
-    final seconds = (secondsRemaining % 60).toString().padLeft(2, '0');
+  String get _timerText {
+    final minutes = (_secondsRemaining ~/ 60).toString().padLeft(2, '0');
+    final seconds = (_secondsRemaining % 60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
   }
 
-  Future<void> verifyCode() async {
-    final code = codeController.text.trim();
-
+  Future<void> _verifyCode() async {
+    final code = _codeController.text.trim();
     if (code.length != 4) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Enter a 4-digit code')));
+      _showSnackBar('Enter a 4-digit code', Colors.orange);
       return;
     }
 
-    final int? codeNumber = int.tryParse(code);
-    if (codeNumber == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Invalid code format')));
-      return;
+    setState(() => _isLoading = true);
+
+    try {
+      final res = await AuthService.verifyEmailCode(
+        email: widget.email,
+        code: code,
+      );
+
+      if (!mounted) return;
+
+      if (res["success"] == true) {
+        _showSnackBar('Email verified successfully!', Colors.green);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+        );
+      } else {
+        _showSnackBar(res["error"] ?? "Verification failed", Colors.redAccent);
+      }
+    } catch (e) {
+      _showSnackBar("An unexpected error occurred.", Colors.redAccent);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
 
-    setState(() => isLoading = true);
-
-    final res = await AuthService.verifyEmailCode(
-      email: widget.email,
-      code: codeNumber.toString(),
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
-
-    setState(() => isLoading = false);
-
-    if (res["success"] == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email verified successfully!')),
-      );
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(res["error"] ?? "Verification failed")),
-      );
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final content = Stack(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(22),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Container(
-              padding: const EdgeInsets.all(26),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.18),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.3),
-                  width: 1.2,
+    // The main verification card
+    Widget cardContent = Container(
+      padding: const EdgeInsets.all(26),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.mark_email_read_outlined,
+            size: 60,
+            color: Color(0xFF3B82F6),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            "Verify Your Email",
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "We sent a 4-digit code to\n${widget.email}",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+          ),
+          const SizedBox(height: 25),
+
+          // Reusing the themed text field style
+          _buildCodeField(),
+
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.timer_outlined,
+                size: 18,
+                color: Colors.redAccent,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                "Expires in: $_timerText",
+                style: const TextStyle(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.bold,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.15),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 10),
-                  const Text(
-                    "Verify Your Email",
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 1.1,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    "Enter the 4-digit verification code sent to your email",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16, color: Colors.white70),
-                  ),
-                  const SizedBox(height: 20),
-                  TextFormField(
-                    controller: codeController,
-                    keyboardType: TextInputType.number,
-                    maxLength: 4,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: "Verification Code",
-                      labelStyle: const TextStyle(color: Colors.white70),
-                      prefixIcon: const Icon(Icons.lock, color: Colors.white),
-                      filled: true,
-                      fillColor: Colors.white.withOpacity(0.15),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-                        borderSide: BorderSide(
-                          color: Colors.white.withOpacity(0.4),
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-                        borderSide: BorderSide(
-                          color: Colors.white.withOpacity(0.3),
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-                        borderSide: const BorderSide(
-                          color: Colors.white,
-                          width: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      "Expires in: $timerText",
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: isLoading ? null : verifyCode,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        padding: EdgeInsets.zero,
-                      ),
-                      child: Ink(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF0F52BA), Color(0xFF3A89FF)],
-                          ),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Container(
-                          alignment: Alignment.center,
-                          child: isLoading
-                              ? const CircularProgressIndicator(
-                                  color: Colors.white,
-                                )
-                              : const Text(
-                                  "Verify Email",
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            ],
           ),
-        ),
-        // X icon button
-        Positioned(
-          top: 10,
-          right: 10,
-          child: GestureDetector(
-            onTap: () {
-              if (widget.isPopup) {
-                Navigator.pop(context);
-              } else {
-                Navigator.maybePop(context);
-              }
-            },
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.3),
-                shape: BoxShape.circle,
-              ),
-              padding: const EdgeInsets.all(6),
-              child: const Icon(Icons.close, color: Colors.white),
-            ),
-          ),
-        ),
-      ],
+          const SizedBox(height: 25),
+          _buildPrimaryButton(),
+        ],
+      ),
     );
 
     if (widget.isPopup) {
       return Center(
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20),
-          child: content,
+        child: SingleChildScrollView(
+          child: Material(
+            color: Colors.transparent,
+            child: Stack(
+              children: [
+                cardContent,
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       );
     }
 
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0F52BA), Color(0xFF3A89FF), Color(0xFF6EC6FF)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: Center(
+        child: Padding(padding: const EdgeInsets.all(24.0), child: cardContent),
+      ),
+    );
+  }
+
+  Widget _buildCodeField() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: TextField(
+        controller: _codeController,
+        keyboardType: TextInputType.number,
+        maxLength: 4,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 10,
         ),
-        child: Center(child: SingleChildScrollView(child: content)),
+        decoration: const InputDecoration(
+          hintText: "0000",
+          counterText: "",
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(vertical: 16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrimaryButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _verifyCode,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF2563EB),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 0,
+        ),
+        child: _isLoading
+            ? const CircularProgressIndicator(color: Colors.white)
+            : const Text(
+                "VERIFY NOW",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
       ),
     );
   }

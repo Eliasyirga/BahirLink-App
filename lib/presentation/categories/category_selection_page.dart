@@ -28,12 +28,27 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
     _fetchCategories();
   }
 
+  // Sorting logic to keep "Other" at the bottom
+  List<Map<String, dynamic>> _sortCategories(List<Map<String, dynamic>> list) {
+    List<Map<String, dynamic>> sorted = List.from(list);
+    sorted.sort((a, b) {
+      String nameA = a["name"].toString().toLowerCase();
+      String nameB = b["name"].toString().toLowerCase();
+      bool isAOther = nameA.contains("other");
+      bool isBOther = nameB.contains("other");
+      if (isAOther && !isBOther) return 1;
+      if (!isAOther && isBOther) return -1;
+      return nameA.compareTo(nameB);
+    });
+    return sorted;
+  }
+
   Future<void> _fetchCategories() async {
     try {
       final data = await CategoryService.getCategories(widget.emergencyTypeId);
       if (mounted) {
         setState(() {
-          categories = List<Map<String, dynamic>>.from(data);
+          categories = _sortCategories(List<Map<String, dynamic>>.from(data));
           filteredCategories = categories;
           isLoading = false;
         });
@@ -59,12 +74,19 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC), // Ultra-light blue tint
+      backgroundColor: const Color(0xFFF8FAFC),
       body: Column(
         children: [
           _buildHeader(),
           Expanded(
-            child: isLoading ? _buildLoadingState() : _buildCategoryList(),
+            child: isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF2563EB),
+                      strokeWidth: 2,
+                    ),
+                  )
+                : _buildGrid(),
           ),
         ],
       ),
@@ -79,72 +101,71 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
+          colors: [Color(0xFF1D4ED8), Color(0xFF3B82F6)],
         ),
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(32),
-          bottomRight: Radius.circular(32),
+          bottomLeft: Radius.circular(30),
+          bottomRight: Radius.circular(30),
         ),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.chevron_left, color: Colors.white),
-                ),
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.emergencyTypeName,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Text(
-                      "Select sub-category to report",
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
+              child: const Icon(
+                Icons.arrow_back_ios_new,
+                color: Colors.white,
+                size: 14,
               ),
-            ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            widget.emergencyTypeName,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Select a sub-category to report",
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 12,
+            ),
           ),
           const SizedBox(height: 20),
-          // Modern Search Bar
+          // Integrated Search Bar
           Container(
-            height: 50,
+            height: 45,
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.white.withOpacity(0.2)),
             ),
             child: TextField(
               controller: _searchController,
               onChanged: _filterCategories,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: InputDecoration(
-                hintText: "Search categories...",
+                hintText: "Search items...",
                 hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-                prefixIcon: const Icon(Icons.search, color: Colors.white70),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  color: Colors.white70,
+                  size: 18,
+                ),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
               ),
             ),
           ),
@@ -153,16 +174,16 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
     );
   }
 
-  Widget _buildCategoryList() {
+  Widget _buildGrid() {
     if (filteredCategories.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off, size: 64, color: Colors.grey[300]),
-            const SizedBox(height: 16),
+            Icon(Icons.search_off, size: 48, color: Colors.grey[300]),
+            const SizedBox(height: 12),
             const Text(
-              "No categories found",
+              "No matches found",
               style: TextStyle(color: Colors.grey),
             ),
           ],
@@ -170,23 +191,42 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-      itemCount: filteredCategories.length,
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
       physics: const BouncingScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 1.25,
+      ),
+      itemCount: filteredCategories.length,
       itemBuilder: (context, index) {
-        final category = filteredCategories[index];
-        return _buildCategoryCard(category['id'], category['name']);
+        final cat = filteredCategories[index];
+        return _buildCategoryCard(cat["name"], cat["id"]);
       },
     );
   }
 
-  Widget _buildCategoryCard(String id, String name) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+  Widget _buildCategoryCard(String name, String id) {
+    bool isOther = name.toLowerCase().contains("other");
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF3B82F6).withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
+          borderRadius: BorderRadius.circular(16),
           onTap: () {
             Navigator.push(
               context,
@@ -200,78 +240,41 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
               ),
             );
           },
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.grey.shade100),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Left Accent Blue Bar
                 Container(
-                  width: 4,
-                  height: 40,
+                  padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2563EB),
-                    borderRadius: BorderRadius.circular(10),
+                    color: isOther
+                        ? const Color(0xFFF1F5F9)
+                        : const Color(0xFFEFF6FF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isOther ? Icons.more_horiz : Icons.category_outlined,
+                    color: isOther ? Colors.blueGrey : const Color(0xFF3B82F6),
+                    size: 18,
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      const Text(
-                        "Tap to select this category",
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ],
+                Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B),
+                    height: 1.1,
                   ),
-                ),
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 14,
-                  color: Color(0xFF94A3B8),
                 ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildLoadingState() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(20),
-      itemCount: 6,
-      itemBuilder: (c, i) => Container(
-        height: 80,
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       ),
     );
   }
