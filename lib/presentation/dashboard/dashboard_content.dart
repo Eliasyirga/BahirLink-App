@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:first_app/services/user_service.dart';
-import 'package:first_app/services/service_type_service.dart'; // Ensure this exists
+import 'package:first_app/services/service_type_service.dart';
+import 'package:first_app/services/case_service.dart';
 import 'package:first_app/presentation/categories/user_category_selection_page.dart';
 
 class DashboardContent extends StatefulWidget {
@@ -15,8 +16,11 @@ class DashboardContent extends StatefulWidget {
 class _DashboardContentState extends State<DashboardContent> {
   String fullName = "User";
   bool isLoading = true;
+
+  // Initialize as empty lists to prevent .isEmpty errors on null
   List<dynamic> emergencyTypes = [];
-  List<dynamic> serviceTypes = []; // New dynamic list for utilities
+  List<dynamic> serviceTypes = [];
+  List<dynamic> cases = [];
 
   @override
   void initState() {
@@ -25,13 +29,18 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   Future<void> _initialize() async {
-    // Parallel fetching for faster startup
-    await Future.wait([
-      _fetchUser(),
-      _fetchEmergencyTypes(),
-      _fetchServiceTypes(),
-    ]);
-    if (mounted) setState(() => isLoading = false);
+    try {
+      await Future.wait([
+        _fetchUser(),
+        _fetchEmergencyTypes(),
+        _fetchServiceTypes(),
+        _fetchCases(),
+      ]);
+    } catch (e) {
+      debugPrint("Initialization error: $e");
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
   }
 
   Future<void> _fetchUser() async {
@@ -52,6 +61,7 @@ class _DashboardContentState extends State<DashboardContent> {
 
   Future<void> _fetchEmergencyTypes() async {
     try {
+      // Changed to localhost for Web compatibility
       final response = await http.get(
         Uri.parse("http://localhost:5000/api/emergencyType"),
       );
@@ -61,16 +71,27 @@ class _DashboardContentState extends State<DashboardContent> {
       }
     } catch (e) {
       debugPrint("Emergency type error: $e");
+      setState(() => emergencyTypes = []);
     }
   }
 
   Future<void> _fetchServiceTypes() async {
     try {
-      // Using the service we created earlier
       final data = await ServiceTypeService.getAllServiceTypes();
-      setState(() => serviceTypes = data);
+      setState(() => serviceTypes = data ?? []);
     } catch (e) {
       debugPrint("Service type error: $e");
+      setState(() => serviceTypes = []);
+    }
+  }
+
+  Future<void> _fetchCases() async {
+    try {
+      final data = await CaseService.getAllCases();
+      setState(() => cases = data ?? []);
+    } catch (e) {
+      debugPrint("Cases fetch error: $e");
+      setState(() => cases = []);
     }
   }
 
@@ -93,6 +114,10 @@ class _DashboardContentState extends State<DashboardContent> {
         return Icons.electric_bolt_rounded;
       case "water":
         return Icons.water_drop_rounded;
+      case "missing":
+        return Icons.person_search_rounded;
+      case "wanted":
+        return Icons.gavel_rounded;
       default:
         return Icons.grid_view_rounded;
     }
@@ -150,7 +175,7 @@ class _DashboardContentState extends State<DashboardContent> {
                   "Daily municipal services",
                 ),
                 const SizedBox(height: 16),
-                _buildDynamicServiceGrid(), // Updated method
+                _buildDynamicServiceGrid(),
               ],
             ),
           ),
@@ -158,8 +183,6 @@ class _DashboardContentState extends State<DashboardContent> {
       ),
     );
   }
-
-  // ... [Header, SectionLabel, AlertCarousel, and AdCard methods remain the same] ...
 
   Widget _buildHeader() {
     return Container(
@@ -175,37 +198,13 @@ class _DashboardContentState extends State<DashboardContent> {
           bottomLeft: Radius.circular(40),
           bottomRight: Radius.circular(40),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x4D1E40AF),
-            blurRadius: 20,
-            offset: Offset(0, 10),
-          ),
-        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
-              Container(
-                height: 50,
-                width: 50,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withOpacity(0.2)),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.asset(
-                    "assets/images/logo.webp",
-                    fit: BoxFit.cover,
-                    errorBuilder: (c, e, s) =>
-                        const Icon(Icons.shield_rounded, color: Colors.white),
-                  ),
-                ),
-              ),
+              _buildLogo(),
               const SizedBox(width: 15),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,13 +234,32 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
+  Widget _buildLogo() {
+    return Container(
+      height: 50,
+      width: 50,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image.asset(
+          "assets/images/logo.webp",
+          fit: BoxFit.cover,
+          errorBuilder: (c, e, s) =>
+              const Icon(Icons.shield_rounded, color: Colors.white),
+        ),
+      ),
+    );
+  }
+
   Widget _buildNotificationBadge() {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.15),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
       ),
       child: const Icon(
         Icons.notifications_active_outlined,
@@ -252,25 +270,46 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   Widget _buildAlertCarousel() {
+    // Added explicit null check before calling .isEmpty
+    if (cases.isEmpty) {
+      return Container(
+        height: 150,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: const Text(
+          "No active alerts",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
     return SizedBox(
       height: 150,
-      child: ListView(
+      child: ListView.builder(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
-        children: [
-          _buildAdCard(
-            "MISSING PERSON",
-            "Jane Smith, Central Ave",
-            "REWARD \$10k",
-            [const Color(0xFFF59E0B), Colors.orange.shade700],
-            Icons.person_search_rounded,
-          ),
-          const SizedBox(width: 12),
-          _buildAdCard("WANTED", "ID #8829 - Dangerous", "PRIORITY", [
-            const Color(0xFFEF4444),
-            Colors.red.shade900,
-          ], Icons.gavel_rounded),
-        ],
+        itemCount: cases.length,
+        itemBuilder: (context, index) {
+          final item = cases[index];
+          final type = item['type']?.toString().toLowerCase() ?? "";
+          final isWanted = type == 'wanted';
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: _buildAdCard(
+              (item['title'] ?? "Alert").toUpperCase(),
+              item['description'] ?? "No details available",
+              (item['label'] ?? "Priority").toUpperCase(),
+              isWanted
+                  ? [const Color(0xFFEF4444), Color(0xFF7F1D1D)]
+                  : [const Color(0xFFF59E0B), Color(0xFFC2410C)],
+              isWanted ? Icons.gavel_rounded : Icons.person_search_rounded,
+            ),
+          );
+        },
       ),
     );
   }
@@ -321,6 +360,8 @@ class _DashboardContentState extends State<DashboardContent> {
                 const Spacer(),
                 Text(
                   title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15,
@@ -329,6 +370,8 @@ class _DashboardContentState extends State<DashboardContent> {
                 ),
                 Text(
                   sub,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.8),
                     fontSize: 10,
@@ -376,9 +419,8 @@ class _DashboardContentState extends State<DashboardContent> {
       ),
       itemBuilder: (context, index) {
         final type = emergencyTypes[index];
-        final color = _getColor(type["name"]);
+        final color = _getColor(type["name"] ?? "");
         return InkWell(
-          borderRadius: BorderRadius.circular(20),
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -393,45 +435,18 @@ class _DashboardContentState extends State<DashboardContent> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(_getIcon(type["name"]), color: color, size: 20),
-                ),
+                Icon(_getIcon(type["name"] ?? ""), color: color, size: 20),
                 const SizedBox(height: 6),
-                Flexible(
-                  child: Text(
-                    type["name"],
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 11,
-                      color: Color(0xFF1E293B),
-                    ),
-                  ),
-                ),
                 Text(
-                  "Report",
-                  style: TextStyle(
-                    fontSize: 9,
-                    color: color,
-                    fontWeight: FontWeight.w600,
+                  type["name"] ?? "Report",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                    color: Color(0xFF1E293B),
                   ),
                 ),
               ],
@@ -444,30 +459,24 @@ class _DashboardContentState extends State<DashboardContent> {
 
   Widget _buildDynamicServiceGrid() {
     if (serviceTypes.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 20),
-        child: Center(
-          child: Text(
-            "Connecting to local services...",
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
+      return const Center(
+        child: Text(
+          "No services found",
+          style: TextStyle(fontSize: 12, color: Colors.grey),
         ),
       );
     }
-
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: serviceTypes.length,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 4,
-        mainAxisSpacing: 15,
         childAspectRatio: 0.8,
       ),
       itemBuilder: (context, index) {
         final service = serviceTypes[index];
-        final serviceName = service["name"] ?? "Utility";
-
+        final name = service["name"] ?? "Utility";
         return Column(
           children: [
             Container(
@@ -475,22 +484,17 @@ class _DashboardContentState extends State<DashboardContent> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
-                    blurRadius: 4,
-                  ),
-                ],
               ),
               child: Icon(
-                _getIcon(serviceName),
+                _getIcon(name),
                 color: const Color(0xFF2563EB),
                 size: 20,
               ),
             ),
             const SizedBox(height: 6),
             Text(
-              serviceName,
+              name,
+              textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
