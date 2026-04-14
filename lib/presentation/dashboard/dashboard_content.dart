@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart'; // Required for DateFormat
 import 'package:first_app/services/user_service.dart';
-import 'package:first_app/services/service_type_service.dart';
 import 'package:first_app/services/case_service.dart';
-import 'package:first_app/presentation/categories/user_category_selection_page.dart';
+import 'package:first_app/services/service_type_service.dart';
 
 class DashboardContent extends StatefulWidget {
   const DashboardContent({super.key});
@@ -16,11 +16,9 @@ class DashboardContent extends StatefulWidget {
 class _DashboardContentState extends State<DashboardContent> {
   String fullName = "User";
   bool isLoading = true;
-
-  // Initialize as empty lists to prevent .isEmpty errors on null
+  List<dynamic> cases = [];
   List<dynamic> emergencyTypes = [];
   List<dynamic> serviceTypes = [];
-  List<dynamic> cases = [];
 
   @override
   void initState() {
@@ -34,117 +32,51 @@ class _DashboardContentState extends State<DashboardContent> {
         _fetchUser(),
         _fetchEmergencyTypes(),
         _fetchServiceTypes(),
-        _fetchCases(),
       ]);
+      await _fetchCases();
     } catch (e) {
-      debugPrint("Initialization error: $e");
+      debugPrint("Init Error: $e");
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
   }
 
   Future<void> _fetchUser() async {
-    try {
-      final response = await UserService.getProfile();
-      if (response != null) {
-        final userData = response.containsKey('user')
-            ? response['user']
-            : response;
-        setState(() {
-          fullName = userData["firstName"] ?? "User";
-        });
-      }
-    } catch (e) {
-      debugPrint("User fetch error: $e");
+    final response = await UserService.getProfile();
+    if (response != null) {
+      final userData = response['user'] ?? response;
+      setState(() => fullName = userData["firstName"] ?? "User");
     }
   }
 
   Future<void> _fetchEmergencyTypes() async {
-    try {
-      // Changed to localhost for Web compatibility
-      final response = await http.get(
-        Uri.parse("http://localhost:5000/api/emergencyType"),
+    final res = await http.get(
+      Uri.parse("http://localhost:5000/api/emergencyType"),
+    );
+    if (res.statusCode == 200) {
+      setState(
+        () => emergencyTypes = jsonDecode(res.body)["emergencyTypes"] ?? [],
       );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        setState(() => emergencyTypes = data["emergencyTypes"] ?? []);
-      }
-    } catch (e) {
-      debugPrint("Emergency type error: $e");
-      setState(() => emergencyTypes = []);
     }
   }
 
   Future<void> _fetchServiceTypes() async {
-    try {
-      final data = await ServiceTypeService.getAllServiceTypes();
-      setState(() => serviceTypes = data ?? []);
-    } catch (e) {
-      debugPrint("Service type error: $e");
-      setState(() => serviceTypes = []);
-    }
+    final data = await ServiceTypeService.getAllServiceTypes();
+    setState(() => serviceTypes = data ?? []);
   }
 
   Future<void> _fetchCases() async {
-    try {
-      final data = await CaseService.getAllCases();
-      setState(() => cases = data ?? []);
-    } catch (e) {
-      debugPrint("Cases fetch error: $e");
-      setState(() => cases = []);
-    }
-  }
-
-  // ================= HELPERS =================
-
-  IconData _getIcon(String name) {
-    switch (name.toLowerCase()) {
-      case "fire":
-        return Icons.local_fire_department_rounded;
-      case "crime":
-        return Icons.shield_rounded;
-      case "medical":
-        return Icons.medical_services_rounded;
-      case "flood":
-        return Icons.tsunami_rounded;
-      case "health":
-        return Icons.health_and_safety_rounded;
-      case "power":
-      case "electricity":
-        return Icons.electric_bolt_rounded;
-      case "water":
-        return Icons.water_drop_rounded;
-      case "missing":
-        return Icons.person_search_rounded;
-      case "wanted":
-        return Icons.gavel_rounded;
-      default:
-        return Icons.grid_view_rounded;
-    }
-  }
-
-  Color _getColor(String name) {
-    switch (name.toLowerCase()) {
-      case "fire":
-        return const Color(0xFFF87171);
-      case "crime":
-        return const Color(0xFF818CF8);
-      case "medical":
-        return const Color(0xFFF472B6);
-      case "flood":
-        return const Color(0xFF38BDF8);
-      default:
-        return const Color(0xFF64748B);
-    }
+    final data = await CaseService.getAllCases();
+    setState(() => cases = data ?? []);
   }
 
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: Color(0xFF1E40AF),
+      return const Scaffold(
+        backgroundColor: Color(0xFF0F172A),
+        body: Center(
+          child: CircularProgressIndicator(color: Colors.blueAccent),
         ),
       );
     }
@@ -153,30 +85,33 @@ class _DashboardContentState extends State<DashboardContent> {
       backgroundColor: const Color(0xFFF1F5F9),
       body: Column(
         children: [
-          _buildHeader(),
+          _buildCompactHeader(),
           Expanded(
-            child: ListView(
+            child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              children: [
-                _buildSectionLabel(
-                  "High Alert Tracking",
-                  "Real-time system updates",
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 24,
                 ),
-                const SizedBox(height: 16),
-                _buildAlertCarousel(),
-                const SizedBox(height: 32),
-                _buildSectionLabel("Emergency Report", "Quick action required"),
-                const SizedBox(height: 16),
-                _buildEmergencyGrid(),
-                const SizedBox(height: 32),
-                _buildSectionLabel(
-                  "Public Utilities",
-                  "Daily municipal services",
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSectionHeader("Surveillance", "LIVE INTEL"),
+                    const SizedBox(height: 16),
+                    _buildCaseIntelSlider(),
+                    const SizedBox(height: 32),
+                    _buildSectionHeader("Deployment", "EMERGENCY PROTOCOLS"),
+                    const SizedBox(height: 16),
+                    _buildBentoEmergencyGrid(),
+                    const SizedBox(height: 32),
+                    _buildSectionHeader("Systems", "SERVICE NETWORK"),
+                    const SizedBox(height: 16),
+                    _buildServiceStripList(),
+                    const SizedBox(height: 100),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                _buildDynamicServiceGrid(),
-              ],
+              ),
             ),
           ),
         ],
@@ -184,129 +119,250 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildCompactHeader() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 60, 24, 35),
+      padding: const EdgeInsets.fromLTRB(20, 52, 20, 24),
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1E3A8A), Color(0xFF2563EB), Color(0xFF3B82F6)],
-        ),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(40),
-          bottomRight: Radius.circular(40),
-        ),
+        color: Color(0xFF0F172A),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 20,
+            offset: Offset(0, 10),
+          ),
+        ],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Colors.blueAccent, Colors.blue],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blueAccent.withOpacity(0.3),
+                  blurRadius: 10,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.shield_outlined,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildLogo(),
-              const SizedBox(width: 15),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Welcome back,",
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
+              RichText(
+                text: const TextSpan(
+                  children: [
+                    TextSpan(
+                      text: "BAHIR",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 20,
+                        letterSpacing: 0.5,
+                      ),
                     ),
-                  ),
-                  Text(
-                    fullName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
+                    TextSpan(
+                      text: "LINK",
+                      style: TextStyle(
+                        color: Colors.blueAccent,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 20,
+                        letterSpacing: 0.5,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+              ),
+              Text(
+                "Officer: $fullName",
+                style: TextStyle(
+                  color: Colors.blueGrey[400],
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 1,
+                ),
               ),
             ],
           ),
-          _buildNotificationBadge(),
+          const Spacer(),
+          const CircleAvatar(
+            backgroundColor: Color(0xFF1E293B),
+            child: Icon(
+              Icons.notifications_none_rounded,
+              color: Colors.white70,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildLogo() {
-    return Container(
-      height: 50,
-      width: 50,
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Image.asset(
-          "assets/images/logo.webp",
-          fit: BoxFit.cover,
-          errorBuilder: (c, e, s) =>
-              const Icon(Icons.shield_rounded, color: Colors.white),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNotificationBadge() {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        shape: BoxShape.circle,
-      ),
-      child: const Icon(
-        Icons.notifications_active_outlined,
-        color: Colors.white,
-        size: 24,
-      ),
-    );
-  }
-
-  Widget _buildAlertCarousel() {
-    // Added explicit null check before calling .isEmpty
-    if (cases.isEmpty) {
-      return Container(
-        height: 150,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: const Text(
-          "No active alerts",
-          style: TextStyle(color: Colors.grey),
-        ),
-      );
-    }
+  Widget _buildCaseIntelSlider() {
+    if (cases.isEmpty) return _buildEmptyState();
 
     return SizedBox(
-      height: 150,
+      height: 195, // Increased height for the new metadata
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
         itemCount: cases.length,
+        clipBehavior: Clip.none,
         itemBuilder: (context, index) {
-          final item = cases[index];
-          final type = item['type']?.toString().toLowerCase() ?? "";
-          final isWanted = type == 'wanted';
+          final c = cases[index];
+          final String imageUrl = c['mediaUrl'] != null
+              ? "http://localhost:5000${c['mediaUrl']}"
+              : "https://via.placeholder.com/400x200";
 
-          return Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: _buildAdCard(
-              (item['title'] ?? "Alert").toUpperCase(),
-              item['description'] ?? "No details available",
-              (item['label'] ?? "Priority").toUpperCase(),
-              isWanted
-                  ? [const Color(0xFFEF4444), Color(0xFF7F1D1D)]
-                  : [const Color(0xFFF59E0B), Color(0xFFC2410C)],
-              isWanted ? Icons.gavel_rounded : Icons.person_search_rounded,
+          // Format Date
+          String formattedDate = "N/A";
+          if (c['createdAt'] != null) {
+            try {
+              formattedDate = DateFormat(
+                'MMM d, yyyy',
+              ).format(DateTime.parse(c['createdAt']));
+            } catch (_) {}
+          }
+
+          return Container(
+            width: 300,
+            margin: const EdgeInsets.only(right: 16),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Image.network(imageUrl, fit: BoxFit.cover),
+                  ),
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.9),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Reward Badge
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.greenAccent.withAlpha(230),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        "REWARD: ${c['reward'] ?? '0'} ETB",
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.radar_rounded,
+                              color: Colors.blueAccent,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              c['caseType']?['name']?.toUpperCase() ?? "INTEL",
+                              style: const TextStyle(
+                                color: Colors.blueAccent,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          c['fullName'] ?? "SECURE RECORD",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        // Last Seen & Kebele
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.location_on_outlined,
+                              color: Colors.white70,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                "Last seen: Kebele ${c['Kebele']?['name'] ?? 'BDR'}",
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        // Date
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_today_outlined,
+                              color: Colors.white54,
+                              size: 10,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              formattedDate,
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         },
@@ -314,139 +370,61 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  Widget _buildAdCard(
-    String title,
-    String sub,
-    String badge,
-    List<Color> colors,
-    IconData icon,
-  ) {
-    return Container(
-      width: 250,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: colors),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -10,
-            bottom: -10,
-            child: Icon(icon, size: 90, color: Colors.white.withOpacity(0.1)),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    badge,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                Text(
-                  sub,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionLabel(String title, String subtitle) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title.toUpperCase(),
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w900,
-            color: Color(0xFF1E293B),
-            letterSpacing: 1.1,
-          ),
-        ),
-        Text(
-          subtitle,
-          style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade400),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEmergencyGrid() {
+  Widget _buildBentoEmergencyGrid() {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: emergencyTypes.length,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 0.82,
+        crossAxisCount: 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: 1.3,
       ),
       itemBuilder: (context, index) {
         final type = emergencyTypes[index];
-        final color = _getColor(type["name"] ?? "");
         return InkWell(
-          onTap: () => Navigator.push(
+          onTap: () => Navigator.pushNamed(
             context,
-            MaterialPageRoute(
-              builder: (_) => UserCategorySelectionPage(
-                emergencyTypeId: type["id"],
-                emergencyTypeName: type["name"],
-              ),
-            ),
+            '/category-selection',
+            arguments: type,
           ),
           child: Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(_getIcon(type["name"] ?? ""), color: color, size: 20),
-                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    _getIcon(type['name']),
+                    color: Colors.blueAccent,
+                    size: 22,
+                  ),
+                ),
+                const Spacer(),
                 Text(
-                  type["name"] ?? "Report",
+                  type['name']?.toUpperCase() ?? "",
                   style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11,
-                    color: Color(0xFF1E293B),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                    color: Color(0xFF0F172A),
+                    letterSpacing: 0.2,
                   ),
                 ),
               ],
@@ -457,53 +435,117 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  Widget _buildDynamicServiceGrid() {
-    if (serviceTypes.isEmpty) {
-      return const Center(
-        child: Text(
-          "No services found",
-          style: TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-      );
-    }
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: serviceTypes.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        childAspectRatio: 0.8,
-      ),
-      itemBuilder: (context, index) {
-        final service = serviceTypes[index];
-        final name = service["name"] ?? "Utility";
-        return Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
+  Widget _buildServiceStripList() {
+    return Column(
+      children: serviceTypes
+          .map(
+            (s) => Container(
+              margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white),
               ),
-              child: Icon(
-                _getIcon(name),
-                color: const Color(0xFF2563EB),
-                size: 20,
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    _getIcon(s['name']),
+                    color: const Color(0xFF64748B),
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  s['name'] ?? "",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+                trailing: const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: Color(0xFFCBD5E1),
+                ),
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              name,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF64748B),
-              ),
-            ),
-          ],
-        );
-      },
+          )
+          .toList(),
     );
+  }
+
+  Widget _buildSectionHeader(String title, String tag) {
+    return Row(
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 20,
+            color: Color(0xFF0F172A),
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.blueAccent.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            tag,
+            style: const TextStyle(
+              color: Colors.blueAccent,
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      height: 100,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: const Center(
+        child: Text(
+          "NO RECENT INTEL",
+          style: TextStyle(
+            color: Color(0xFF94A3B8),
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.5,
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _getIcon(String? n) {
+    n = n?.toLowerCase() ?? "";
+    if (n.contains("fire")) return Icons.local_fire_department_rounded;
+    if (n.contains("crime") || n.contains("police"))
+      return Icons.policy_rounded;
+    if (n.contains("medical")) return Icons.health_and_safety_rounded;
+    if (n.contains("water")) return Icons.water_drop_rounded;
+    return Icons.bubble_chart_rounded;
   }
 }

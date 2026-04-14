@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:typed_data'; // ← add this
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -32,14 +32,16 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
     final e = widget.emergency;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(
+        0xFFF8FAFC,
+      ), // Slightly off-white for better contrast
       appBar: AppBar(
         backgroundColor: primaryColor,
-        elevation: 2,
+        elevation: 0,
         centerTitle: true,
         title: const Text(
           "Emergency Details",
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
       ),
       body: SingleChildScrollView(
@@ -57,8 +59,7 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
             _card("Status", safe(e['status'])),
             _card("Reported Time", safe(e['time'])),
             const SizedBox(height: 16),
-            if ((e['mediaUrl'] ?? '').isNotEmpty || _mediaFile != null)
-              _mediaCard(e['mediaUrl']),
+            _mediaCard(e['mediaUrl']),
             const SizedBox(height: 24),
             _buttons(safe(e['id'])),
           ],
@@ -77,11 +78,12 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            label,
-            style: TextStyle(
+            label.toUpperCase(),
+            style: const TextStyle(
               color: primaryColor,
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              letterSpacing: 0.5,
             ),
           ),
           const SizedBox(height: 6),
@@ -103,158 +105,101 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            "Address",
-            style: TextStyle(color: primaryColor, fontWeight: FontWeight.w600),
+          const Text(
+            "ADDRESS",
+            style: TextStyle(
+              color: primaryColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              letterSpacing: 0.5,
+            ),
           ),
           const SizedBox(height: 8),
-          Text("Kebele: $kebele"),
-          Text("Subdivision: $sub"),
-          Text("Street: $street"),
+          _addressRow("Kebele", kebele),
+          _addressRow("Subdivision", sub),
+          _addressRow("Street", street),
         ],
       ),
     );
   }
 
+  Widget _addressRow(String label, String val) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Text("$label: $val", style: const TextStyle(fontSize: 15)),
+  );
+
   Widget _mediaCard(String? mediaUrl) {
-    if (_mediaFile != null) {
-      return Container(
-        padding: const EdgeInsets.all(12),
-        decoration: _box(),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.file(_mediaFile!, fit: BoxFit.cover, height: 200),
-        ),
+    Widget? imageChild;
+
+    if (kIsWeb && _webBytes != null) {
+      imageChild = Image.memory(_webBytes!, fit: BoxFit.cover);
+    } else if (_mediaFile != null) {
+      imageChild = Image.file(_mediaFile!, fit: BoxFit.cover);
+    } else if (mediaUrl != null && mediaUrl.isNotEmpty) {
+      const baseUrl = "http://localhost:5000";
+      final url = mediaUrl.startsWith('http') ? mediaUrl : "$baseUrl$mediaUrl";
+      imageChild = Image.network(
+        url,
+        fit: BoxFit.cover,
+        loadingBuilder: (_, child, prog) => prog == null
+            ? child
+            : const Center(child: CircularProgressIndicator()),
+        errorBuilder: (_, __, ___) =>
+            const Center(child: Text("❌ Image Error")),
       );
     }
 
-    if (mediaUrl == null || mediaUrl.isEmpty) return const SizedBox.shrink();
-
-    const baseUrl = "http://localhost:5000";
-    final url = mediaUrl.startsWith('http') ? mediaUrl : "$baseUrl$mediaUrl";
+    if (imageChild == null) return const SizedBox.shrink();
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      width: double.infinity,
+      padding: const EdgeInsets.all(8),
       decoration: _box(),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
-          height: 200,
-          child: Image.network(
-            url,
-            fit: BoxFit.cover,
-            loadingBuilder: (context, child, progress) => progress == null
-                ? child
-                : const Center(child: CircularProgressIndicator()),
-            errorBuilder: (context, error, stackTrace) => Center(
-              child: Text(
-                "❌ Failed to load image",
-                style: TextStyle(color: Colors.red),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buttons(String id) {
-    return Row(
-      children: [
-        Expanded(
-          child: ElevatedButton(
-            onPressed: () => _showEditDialog(id),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text("Edit"),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: OutlinedButton(
-            onPressed: () => _confirmDelete(id),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: primaryColor),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text("Delete"),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _confirmDelete(String id) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Text("Confirm Delete"),
-        content: const Text("Are you sure you want to delete this emergency?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await ReportsService.deleteEmergency(widget.userId, id);
-              if (!mounted) return;
-              Navigator.pop(context, true);
-            },
-            child: const Text("Delete"),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox(height: 220, child: imageChild),
       ),
     );
   }
 
   void _showEditDialog(String id) {
-    final type = TextEditingController(
-      text: safe(widget.emergency['typeName']),
-    );
-    final category = TextEditingController(
-      text: safe(widget.emergency['categoryName']),
-    );
-    final desc = TextEditingController(
-      text: safe(widget.emergency['description']),
-    );
-    final kebele = TextEditingController(
-      text: safe(widget.emergency['kebele']),
-    );
-    final sub = TextEditingController(
-      text: safe(widget.emergency['subdivision']),
-    );
-    final street = TextEditingController(
-      text: safe(widget.emergency['street']),
-    );
+    final controllers = {
+      'typeName': TextEditingController(
+        text: safe(widget.emergency['typeName']),
+      ),
+      'categoryName': TextEditingController(
+        text: safe(widget.emergency['categoryName']),
+      ),
+      'description': TextEditingController(
+        text: safe(widget.emergency['description']),
+      ),
+      'kebele': TextEditingController(text: safe(widget.emergency['kebele'])),
+      'subdivision': TextEditingController(
+        text: safe(widget.emergency['subdivision']),
+      ),
+      'street': TextEditingController(text: safe(widget.emergency['street'])),
+    };
 
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Edit Emergency"),
+      builder: (context) => AlertDialog(
+        title: const Text("Edit Emergency Report"),
         content: SingleChildScrollView(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              _field("Type", type),
-              _field("Category", category),
-              _field("Description", desc),
-              _field("Kebele", kebele),
-              _field("Subdivision", sub),
-              _field("Street", street),
-              const SizedBox(height: 10),
-              ElevatedButton(
+              ...controllers.entries
+                  .map((e) => _field(e.key.replaceAll('Name', ''), e.value))
+                  .toList(),
+              const SizedBox(height: 12),
+              TextButton.icon(
                 onPressed: _pickMedia,
-                child: const Text("Pick Media"),
+                icon: const Icon(Icons.image),
+                label: Text(
+                  _mediaFile != null || _webBytes != null
+                      ? "Change Media"
+                      : "Update Media",
+                ),
               ),
             ],
           ),
@@ -266,24 +211,87 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
           ),
           ElevatedButton(
             onPressed: () async {
+              final data = controllers.map(
+                (key, controller) => MapEntry(key, controller.text),
+              );
               await ReportsService.updateEmergency(
                 widget.userId,
                 id,
-                {
-                  "typeName": type.text,
-                  "categoryName": category.text,
-                  "description": desc.text,
-                  "kebele": kebele.text,
-                  "subdivision": sub.text,
-                  "street": street.text,
-                },
+                data,
                 file: _mediaFile,
                 webBytes: _webBytes,
               );
-              if (!mounted) return;
+              if (!context.mounted) return;
+              Navigator.pop(context); // Close Dialog
+              Navigator.pop(
+                context,
+                true,
+              ); // Return to list with refresh trigger
+            },
+            child: const Text("Save Changes"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper UI methods
+  Widget _buttons(String id) {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () => _showEditDialog(id),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            child: const Text(
+              "Edit Report",
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () => _confirmDelete(id),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Colors.red),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _confirmDelete(String id) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Report?"),
+        content: const Text("This action cannot be undone."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              await ReportsService.deleteEmergency(widget.userId, id);
+              if (!context.mounted) return;
+              Navigator.pop(context);
               Navigator.pop(context, true);
             },
-            child: const Text("Save"),
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -291,10 +299,8 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
   }
 
   void _pickMedia() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-
-    if (picked != null && mounted) {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (picked != null) {
       if (kIsWeb) {
         _webBytes = await picked.readAsBytes();
       } else {
@@ -311,23 +317,24 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
         controller: c,
         decoration: InputDecoration(
           labelText: label,
+          filled: true,
+          fillColor: Colors.grey[50],
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         ),
       ),
     );
   }
 
-  BoxDecoration _box() {
-    return BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.05),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    );
-  }
+  BoxDecoration _box() => BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(14),
+    border: Border.all(color: Colors.grey.withOpacity(0.1)),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.03),
+        blurRadius: 8,
+        offset: const Offset(0, 2),
+      ),
+    ],
+  );
 }

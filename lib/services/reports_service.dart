@@ -5,83 +5,109 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 class ReportsService {
+  // Use 10.0.2.2 for Android Emulator, localhost for Web/iOS
   static const String baseUrl = "http://localhost:5000/api";
+
+  static Map<String, String> _getHeaders(String? token) {
+    return {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
 
   // ---------------- Fetch Emergencies ----------------
   static Future<List<Map<String, dynamic>>> fetchUserEmergencies(
-    String userId,
-  ) async {
-    final url = Uri.parse("$baseUrl/emergencies/$userId");
-    final response = await http.get(url);
+    String id, {
+    String? token,
+    bool isGuest = false,
+  }) async {
+    // Backend expects guestId in query params: /api/emergencies/:id?guestId=true
+    final url = Uri.parse(
+      "$baseUrl/emergencies/$id${isGuest ? '?guestId=true' : ''}",
+    );
+    final response = await http.get(url, headers: _getHeaders(token));
 
     if (response.statusCode == 200) {
       final jsonResponse = jsonDecode(response.body);
-      if (jsonResponse is List) {
-        return List<Map<String, dynamic>>.from(jsonResponse);
-      } else if (jsonResponse is Map && jsonResponse['data'] is List) {
-        return List<Map<String, dynamic>>.from(jsonResponse['data']);
-      }
-      return [];
+      // Your backend returns { success: true, data: [...] }
+      return List<Map<String, dynamic>>.from(jsonResponse['data'] ?? []);
     } else {
-      throw Exception("Failed to load emergencies (${response.statusCode})");
+      throw Exception("Failed to load emergencies: ${response.body}");
     }
   }
 
   // ---------------- Fetch Emergency Types ----------------
-  static Future<List<Map<String, dynamic>>> fetchEmergencyTypes() async {
+  static Future<List<Map<String, dynamic>>> fetchEmergencyTypes({
+    String? token,
+  }) async {
     final url = Uri.parse("$baseUrl/emergencyType");
-    final response = await http.get(url);
+    final response = await http.get(url, headers: _getHeaders(token));
 
     if (response.statusCode == 200) {
       final jsonResponse = jsonDecode(response.body);
-      if (jsonResponse is List) {
+      // Backend handling for both list and wrapped object
+      if (jsonResponse is List)
         return List<Map<String, dynamic>>.from(jsonResponse);
-      } else if (jsonResponse is Map &&
-          jsonResponse['emergencyTypes'] is List) {
-        return List<Map<String, dynamic>>.from(jsonResponse['emergencyTypes']);
-      }
-      return [];
-    } else {
-      throw Exception(
-        "Failed to load emergency types (${response.statusCode})",
+      return List<Map<String, dynamic>>.from(
+        jsonResponse['emergencyTypes'] ?? [],
       );
     }
+    throw Exception("Failed to load emergency types");
   }
 
   // ---------------- Fetch Categories ----------------
-  static Future<List<Map<String, dynamic>>> fetchCategories() async {
+  static Future<List<Map<String, dynamic>>> fetchCategories({
+    String? token,
+  }) async {
     final url = Uri.parse("$baseUrl/categories");
-    final response = await http.get(url);
+    final response = await http.get(url, headers: _getHeaders(token));
 
     if (response.statusCode == 200) {
       final jsonResponse = jsonDecode(response.body);
-      if (jsonResponse is List) {
-        return List<Map<String, dynamic>>.from(jsonResponse);
-      }
-      return [];
-    } else {
-      throw Exception("Failed to load categories (${response.statusCode})");
+      return List<Map<String, dynamic>>.from(
+        jsonResponse is List ? jsonResponse : (jsonResponse['data'] ?? []),
+      );
     }
+    throw Exception("Failed to load categories");
   }
 
   // ---------------- Update Emergency (Web + Mobile) ----------------
   static Future<Map<String, dynamic>> updateEmergency(
-    String userId,
+    String userOrGuestId,
     String emergencyId,
     Map<String, dynamic> updatedData, {
-    File? file, // Mobile
-    Uint8List? webBytes, // Web
-    String? fileName, // Web filename
+    File? file,
+    Uint8List? webBytes,
+    String? fileName,
+    String? token,
+    bool isGuest = false,
   }) async {
-    final uri = Uri.parse("$baseUrl/emergencies/$userId/$emergencyId");
+    final uri = Uri.parse("$baseUrl/emergencies/$userOrGuestId/$emergencyId");
     final request = http.MultipartRequest('PUT', uri);
 
-    // Add fields
+    // Add Authorization if token exists
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    // Backend updateEmergencyHandler uses req.body.guestId to determine role
+    if (isGuest) {
+      request.fields['guestId'] = userOrGuestId;
+    }
+
+    // Add data fields (location, description, kebele, etc.)
     updatedData.forEach((key, value) {
-      request.fields[key] = value.toString();
+      if (value != null) {
+        if (value is Map || value is List) {
+          request.fields[key] = jsonEncode(value);
+        } else {
+          request.fields[key] = value.toString();
+        }
+      }
     });
 
-    // Add file
+    // Add file (media)
     if (kIsWeb && webBytes != null) {
       request.files.add(
         http.MultipartFile.fromBytes(
@@ -98,21 +124,31 @@ class ReportsService {
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      final decoded = jsonDecode(response.body);
+      return Map<String, dynamic>.from(decoded['data'] ?? decoded);
     } else {
-      throw Exception(
-        "Failed to update emergency (${response.statusCode}): ${response.body}",
-      );
+      throw Exception("Update failed: ${response.body}");
     }
   }
 
   // ---------------- Delete Emergency ----------------
-  static Future<void> deleteEmergency(String userId, String emergencyId) async {
-    final url = Uri.parse("$baseUrl/emergencies/$userId/$emergencyId");
-    final response = await http.delete(url);
+  static Future<void> deleteEmergency(
+    String userOrGuestId,
+    String emergencyId, {
+    String? token,
+    bool isGuest = false,
+  }) async {
+    final url = Uri.parse("$baseUrl/emergencies/$userOrGuestId/$emergencyId");
+
+    // Backend delete handler expects isGuest indicator if applicable
+    final response = await http.delete(
+      url,
+      headers: _getHeaders(token),
+      body: isGuest ? jsonEncode({'guestId': userOrGuestId}) : null,
+    );
 
     if (response.statusCode != 200) {
-      throw Exception("Failed to delete emergency (${response.statusCode})");
+      throw Exception("Failed to delete emergency: ${response.body}");
     }
   }
 }
