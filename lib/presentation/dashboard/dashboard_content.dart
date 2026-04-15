@@ -9,8 +9,9 @@ import 'package:first_app/services/emergency_type_service.dart';
 
 // Models & Pages
 import 'package:first_app/model/emergency_type.dart';
-import 'package:first_app/model/service_type.dart'; // Ensure this model exists
+import 'package:first_app/model/service_type.dart';
 import 'package:first_app/presentation/categories/user_category_selection_page.dart';
+import 'package:first_app/presentation/categories/user_service_category_selection_page.dart';
 
 class DashboardContent extends StatefulWidget {
   const DashboardContent({super.key});
@@ -25,7 +26,7 @@ class _DashboardContentState extends State<DashboardContent> {
   bool _isLoading = true;
   List<dynamic> _cases = [];
   List<EmergencyType> _emergencyTypes = [];
-  List<ServiceType> _serviceTypes = []; // Updated to Model Type
+  List<ServiceType> _serviceTypes = [];
 
   // --- Design System Constants ---
   static const Color _kPrimaryBlue = Color(0xFF2B7CFF);
@@ -47,6 +48,7 @@ class _DashboardContentState extends State<DashboardContent> {
     setState(() => _isLoading = true);
 
     try {
+      // Parallel execution for faster load times
       await Future.wait([
         _fetchUser(),
         _fetchEmergencyTypes(),
@@ -115,7 +117,9 @@ class _DashboardContentState extends State<DashboardContent> {
         onRefresh: _loadDashboardData,
         color: _kPrimaryBlue,
         child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
           slivers: [
             _buildAppBar(),
             SliverPadding(
@@ -145,30 +149,42 @@ class _DashboardContentState extends State<DashboardContent> {
 
   Widget _buildAppBar() {
     return SliverAppBar(
-      expandedHeight: 120,
+      expandedHeight: 140,
       pinned: true,
       backgroundColor: _kPrimaryBlue,
       elevation: 0,
       flexibleSpace: FlexibleSpaceBar(
-        background: Padding(
+        background: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF1D4ED8), _kPrimaryBlue],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
           padding: const EdgeInsets.fromLTRB(20, 60, 20, 0),
           child: Row(
             children: [
               const CircleAvatar(
-                radius: 24,
+                radius: 26,
                 backgroundColor: Colors.white24,
-                child: Icon(Icons.person_rounded, color: Colors.white),
+                child: Icon(
+                  Icons.person_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       "Hello, $_fullName 👋",
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 18,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -206,15 +222,22 @@ class _DashboardContentState extends State<DashboardContent> {
               : "https://via.placeholder.com/400";
 
           return Container(
-            width: MediaQuery.of(context).size.width * 0.82,
+            width: MediaQuery.of(context).size.width * 0.85,
             margin: const EdgeInsets.only(right: 16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
               image: DecorationImage(
                 image: NetworkImage(imageUrl),
                 fit: BoxFit.cover,
                 colorFilter: ColorFilter.mode(
-                  Colors.black.withOpacity(0.4),
+                  Colors.black.withOpacity(0.45),
                   BlendMode.darken,
                 ),
               ),
@@ -239,6 +262,8 @@ class _DashboardContentState extends State<DashboardContent> {
                 const Spacer(),
                 Text(
                   c['fullName'] ?? "Unnamed Incident",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -274,13 +299,12 @@ class _DashboardContentState extends State<DashboardContent> {
         crossAxisCount: 3,
         mainAxisSpacing: 12,
         crossAxisSpacing: 12,
-        childAspectRatio: 0.9,
+        childAspectRatio: 0.85,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
-        // Now consistently uses .name and .id because both are model objects
-        final String name = item.name;
+        final String name = item.name ?? "Unknown";
         final String id = item.id.toString();
 
         return Material(
@@ -289,18 +313,31 @@ class _DashboardContentState extends State<DashboardContent> {
           child: InkWell(
             borderRadius: BorderRadius.circular(20),
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => UserCategorySelectionPage(
-                    emergencyTypeId: id,
-                    emergencyTypeName: name,
+              if (isEmergency) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => UserCategorySelectionPage(
+                      emergencyTypeId: id,
+                      emergencyTypeName: name,
+                    ),
                   ),
-                ),
-              );
+                );
+              } else {
+                // Navigation passing the correct Service Type ID
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => UserServiceCategorySelectionPage(
+                      serviceTypeId: id,
+                      serviceTypeName: name,
+                    ),
+                  ),
+                );
+              }
             },
             child: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: Colors.black.withOpacity(0.05)),
@@ -308,26 +345,31 @@ class _DashboardContentState extends State<DashboardContent> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircleAvatar(
-                    backgroundColor: _kIconBg,
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                      color: _kIconBg,
+                      shape: BoxShape.circle,
+                    ),
                     child: Icon(
                       isEmergency
                           ? _getEmergencyIcon(name)
                           : _getServiceIcon(name),
                       color: _kPrimaryBlue,
-                      size: 20,
+                      size: 22,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   Text(
                     name,
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
                       color: _kTextDark,
+                      height: 1.1,
                     ),
                   ),
                 ],
@@ -340,6 +382,7 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   // --- UI Helpers ---
+
   Widget _buildSectionHeader(String title, VoidCallback onSeeAll) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
@@ -353,7 +396,10 @@ class _DashboardContentState extends State<DashboardContent> {
       ),
       TextButton(
         onPressed: onSeeAll,
-        child: const Text("View All", style: TextStyle(color: _kPrimaryBlue)),
+        child: const Text(
+          "View All",
+          style: TextStyle(color: _kPrimaryBlue, fontWeight: FontWeight.w600),
+        ),
       ),
     ],
   );
@@ -371,7 +417,7 @@ class _DashboardContentState extends State<DashboardContent> {
   );
 
   Widget _buildBadge(String label, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     decoration: BoxDecoration(
       color: color,
       borderRadius: BorderRadius.circular(8),
@@ -380,7 +426,7 @@ class _DashboardContentState extends State<DashboardContent> {
       label,
       style: const TextStyle(
         color: Colors.white,
-        fontSize: 9,
+        fontSize: 10,
         fontWeight: FontWeight.w900,
       ),
     ),
@@ -403,7 +449,11 @@ class _DashboardContentState extends State<DashboardContent> {
     ),
     child: Column(
       children: [
-        Icon(Icons.query_stats, color: _kTextMuted.withOpacity(0.3), size: 40),
+        Icon(
+          Icons.info_outline_rounded,
+          color: _kTextMuted.withOpacity(0.3),
+          size: 44,
+        ),
         const SizedBox(height: 12),
         Text(msg, style: const TextStyle(color: _kTextMuted, fontSize: 13)),
       ],
@@ -414,16 +464,20 @@ class _DashboardContentState extends State<DashboardContent> {
     final n = name.toLowerCase();
     if (n.contains("fire")) return Icons.local_fire_department_rounded;
     if (n.contains("police")) return Icons.shield_rounded;
-    if (n.contains("medical")) return Icons.health_and_safety_rounded;
-    return Icons.grid_view_rounded;
+    if (n.contains("medical") || n.contains("health"))
+      return Icons.health_and_safety_rounded;
+    if (n.contains("accident")) return Icons.car_crash_rounded;
+    return Icons.warning_amber_rounded;
   }
 
   IconData _getServiceIcon(String name) {
     final n = name.toLowerCase();
     if (n.contains("water")) return Icons.water_drop_rounded;
     if (n.contains("electric")) return Icons.bolt_rounded;
-    if (n.contains("waste")) return Icons.delete_outline_rounded;
-    return Icons.hub_outlined;
+    if (n.contains("waste") || n.contains("trash"))
+      return Icons.delete_outline_rounded;
+    if (n.contains("road")) return Icons.add_road_rounded;
+    return Icons.settings_suggest_outlined;
   }
 }
 
@@ -433,7 +487,9 @@ class ServiceTypeService {
 
   static Future<List<ServiceType>> getAllServiceTypes() async {
     try {
-      final response = await http.get(Uri.parse(baseUrl));
+      final response = await http
+          .get(Uri.parse(baseUrl))
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
