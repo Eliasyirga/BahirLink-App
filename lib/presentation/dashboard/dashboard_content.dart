@@ -12,6 +12,7 @@ import 'package:first_app/model/emergency_type.dart';
 import 'package:first_app/model/service_type.dart';
 import 'package:first_app/presentation/categories/user_category_selection_page.dart';
 import 'package:first_app/presentation/categories/user_service_category_selection_page.dart';
+import 'package:first_app/presentation/cases/case_detail_page.dart'; // Ensure this exists
 
 class DashboardContent extends StatefulWidget {
   const DashboardContent({super.key});
@@ -28,7 +29,7 @@ class _DashboardContentState extends State<DashboardContent> {
   List<EmergencyType> _emergencyTypes = [];
   List<ServiceType> _serviceTypes = [];
 
-  // --- Design System Constants ---
+  // --- Design System ---
   static const Color _kPrimaryBlue = Color(0xFF2B7CFF);
   static const Color _kAccentRed = Color(0xFFEF4444);
   static const Color _kSurfaceWhite = Colors.white;
@@ -48,7 +49,7 @@ class _DashboardContentState extends State<DashboardContent> {
     setState(() => _isLoading = true);
 
     try {
-      // Parallel execution for faster load times
+      // Parallel execution for high performance
       await Future.wait([
         _fetchUser(),
         _fetchEmergencyTypes(),
@@ -56,14 +57,13 @@ class _DashboardContentState extends State<DashboardContent> {
         _fetchCases(),
       ]);
     } catch (e) {
-      debugPrint("Dashboard Sync Error: $e");
+      debugPrint("Sync Error: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   // --- Logic Layer ---
-
   Future<void> _fetchUser() async {
     final response = await UserService.getProfile();
     if (response != null && mounted) {
@@ -73,21 +73,13 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   Future<void> _fetchEmergencyTypes() async {
-    try {
-      final data = await EmergencyTypeService.fetchEmergencyTypes();
-      if (mounted) setState(() => _emergencyTypes = data);
-    } catch (e) {
-      debugPrint("Emergency Fetch Error: $e");
-    }
+    final data = await EmergencyTypeService.fetchEmergencyTypes();
+    if (mounted) setState(() => _emergencyTypes = data);
   }
 
   Future<void> _fetchServiceTypes() async {
-    try {
-      final data = await ServiceTypeService.getAllServiceTypes();
-      if (mounted) setState(() => _serviceTypes = data);
-    } catch (e) {
-      debugPrint("Service Fetch Error: $e");
-    }
+    final data = await ServiceTypeService.getAllServiceTypes();
+    if (mounted) setState(() => _serviceTypes = data);
   }
 
   Future<void> _fetchCases() async {
@@ -96,7 +88,6 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   // --- Build Layer ---
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -123,7 +114,7 @@ class _DashboardContentState extends State<DashboardContent> {
           slivers: [
             _buildAppBar(),
             SliverPadding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
                   _buildSectionHeader("Active Intel", () {}),
@@ -210,7 +201,7 @@ class _DashboardContentState extends State<DashboardContent> {
     if (_cases.isEmpty) return _buildEmptyState("No active intel reports.");
 
     return SizedBox(
-      height: 200,
+      height: 220,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         clipBehavior: Clip.none,
@@ -221,67 +212,84 @@ class _DashboardContentState extends State<DashboardContent> {
               ? "http://localhost:5000${c['mediaUrl']}"
               : "https://via.placeholder.com/400";
 
-          return Container(
-            width: MediaQuery.of(context).size.width * 0.85,
-            margin: const EdgeInsets.only(right: 16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+          return GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CaseDetailPage(caseData: c),
                 ),
-              ],
-              image: DecorationImage(
-                image: NetworkImage(imageUrl),
-                fit: BoxFit.cover,
-                colorFilter: ColorFilter.mode(
-                  Colors.black.withOpacity(0.45),
-                  BlendMode.darken,
-                ),
-              ),
-            ),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _buildBadge("${c['reward'] ?? '0'} ETB", _kPrimaryBlue),
-                    _buildBadge(
-                      (c['caseType']?['name'] ?? "ALERT")
-                          .toString()
-                          .toUpperCase(),
-                      _kAccentRed,
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                Text(
-                  c['fullName'] ?? "Unnamed Incident",
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+              );
+            },
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.82,
+              margin: const EdgeInsets.only(right: 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+                image: DecorationImage(
+                  image: NetworkImage(imageUrl),
+                  fit: BoxFit.cover,
+                  colorFilter: ColorFilter.mode(
+                    Colors.black.withOpacity(0.5),
+                    BlendMode.darken,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _buildInfoItem(
-                      Icons.location_on_rounded,
-                      c['Kebele']?['name'] ?? "Unknown Area",
+              ),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildBadge("${c['reward'] ?? '0'} ETB", _kPrimaryBlue),
+                      _buildBadge(
+                        (c['caseType']?['name'] ?? "ALERT")
+                            .toString()
+                            .toUpperCase(),
+                        _kAccentRed,
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Text(
+                    c['fullName'] ?? "Unnamed Incident",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(width: 16),
-                    _buildInfoItem(Icons.access_time_filled_rounded, "Recent"),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.location_on_rounded,
+                        color: Colors.white70,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        c['Kebele']?['name'] ?? "Area Unknown",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           );
         },
@@ -290,7 +298,7 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   Widget _buildBentoGrid(List<dynamic> items, {required bool isEmergency}) {
-    if (items.isEmpty) return _buildEmptyState("No resources available.");
+    if (items.isEmpty) return _buildEmptyState("No data available.");
 
     return GridView.builder(
       shrinkWrap: true,
@@ -313,34 +321,26 @@ class _DashboardContentState extends State<DashboardContent> {
           child: InkWell(
             borderRadius: BorderRadius.circular(20),
             onTap: () {
-              if (isEmergency) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => UserCategorySelectionPage(
-                      emergencyTypeId: id,
-                      emergencyTypeName: name,
-                    ),
-                  ),
-                );
-              } else {
-                // Navigation passing the correct Service Type ID
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => UserServiceCategorySelectionPage(
-                      serviceTypeId: id,
-                      serviceTypeName: name,
-                    ),
-                  ),
-                );
-              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => isEmergency
+                      ? UserCategorySelectionPage(
+                          emergencyTypeId: id,
+                          emergencyTypeName: name,
+                        )
+                      : UserServiceCategorySelectionPage(
+                          serviceTypeId: id,
+                          serviceTypeName: name,
+                        ),
+                ),
+              );
             },
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.black.withOpacity(0.05)),
+                border: Border.all(color: Colors.black.withOpacity(0.04)),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -364,12 +364,10 @@ class _DashboardContentState extends State<DashboardContent> {
                     name,
                     textAlign: TextAlign.center,
                     maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.w700,
                       color: _kTextDark,
-                      height: 1.1,
                     ),
                   ),
                 ],
@@ -381,8 +379,7 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  // --- UI Helpers ---
-
+  // --- Helper Methods ---
   Widget _buildSectionHeader(String title, VoidCallback onSeeAll) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
@@ -404,18 +401,6 @@ class _DashboardContentState extends State<DashboardContent> {
     ],
   );
 
-  Widget _buildAppBarAction(IconData icon) => Container(
-    margin: const EdgeInsets.only(left: 8),
-    decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.15),
-      shape: BoxShape.circle,
-    ),
-    child: IconButton(
-      icon: Icon(icon, color: Colors.white, size: 20),
-      onPressed: () {},
-    ),
-  );
-
   Widget _buildBadge(String label, Color color) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     decoration: BoxDecoration(
@@ -432,12 +417,16 @@ class _DashboardContentState extends State<DashboardContent> {
     ),
   );
 
-  Widget _buildInfoItem(IconData icon, String text) => Row(
-    children: [
-      Icon(icon, color: Colors.white70, size: 14),
-      const SizedBox(width: 4),
-      Text(text, style: const TextStyle(color: Colors.white, fontSize: 11)),
-    ],
+  Widget _buildAppBarAction(IconData icon) => Container(
+    margin: const EdgeInsets.only(left: 8),
+    decoration: BoxDecoration(
+      color: Colors.white.withOpacity(0.15),
+      shape: BoxShape.circle,
+    ),
+    child: IconButton(
+      icon: Icon(icon, color: Colors.white, size: 20),
+      onPressed: () {},
+    ),
   );
 
   Widget _buildEmptyState(String msg) => Container(
@@ -464,9 +453,7 @@ class _DashboardContentState extends State<DashboardContent> {
     final n = name.toLowerCase();
     if (n.contains("fire")) return Icons.local_fire_department_rounded;
     if (n.contains("police")) return Icons.shield_rounded;
-    if (n.contains("medical") || n.contains("health"))
-      return Icons.health_and_safety_rounded;
-    if (n.contains("accident")) return Icons.car_crash_rounded;
+    if (n.contains("medical")) return Icons.health_and_safety_rounded;
     return Icons.warning_amber_rounded;
   }
 
@@ -474,23 +461,17 @@ class _DashboardContentState extends State<DashboardContent> {
     final n = name.toLowerCase();
     if (n.contains("water")) return Icons.water_drop_rounded;
     if (n.contains("electric")) return Icons.bolt_rounded;
-    if (n.contains("waste") || n.contains("trash"))
-      return Icons.delete_outline_rounded;
-    if (n.contains("road")) return Icons.add_road_rounded;
     return Icons.settings_suggest_outlined;
   }
 }
 
-// --- INTEGRATED SERVICE CLASS ---
 class ServiceTypeService {
   static const String baseUrl = "http://localhost:5000/api/serviceType";
-
   static Future<List<ServiceType>> getAllServiceTypes() async {
     try {
       final response = await http
           .get(Uri.parse(baseUrl))
           .timeout(const Duration(seconds: 10));
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         List list = (data is List) ? data : (data["serviceTypes"] ?? []);
@@ -498,7 +479,6 @@ class ServiceTypeService {
       }
       return [];
     } catch (e) {
-      debugPrint("ServiceType Error: $e");
       return [];
     }
   }

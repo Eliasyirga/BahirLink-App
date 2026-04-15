@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'map_picker_page.dart';
 import '../../model/emergency_report_model.dart';
 import '../../services/user_emergency_service.dart';
+import '../../services/kebele_service.dart';
 import 'media_picker_bottom_sheet.dart';
 
 class UserEmergencyReportPage extends StatefulWidget {
@@ -29,9 +30,14 @@ class UserEmergencyReportPage extends StatefulWidget {
 
 class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   final TextEditingController _descriptionController = TextEditingController();
-  final TextEditingController _kebeleController = TextEditingController();
   final TextEditingController _subdivisionController = TextEditingController();
   final TextEditingController _streetController = TextEditingController();
+  final KebeleService _kebeleService = KebeleService();
+
+  // Kebele Selection State
+  List<Map<String, dynamic>> _kebeles = [];
+  int? _selectedKebeleId;
+  bool _isLoadingKebeles = true;
 
   double? _latitude;
   double? _longitude;
@@ -53,6 +59,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   void initState() {
     super.initState();
     _fetchUserId();
+    _fetchKebeles(); // Fetch Kebeles on initialization
   }
 
   Future<void> _fetchUserId() async {
@@ -65,6 +72,19 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
       setState(() => _userId = parsedId);
     } else {
       _showSnack("Failed to fetch user ID", isError: true);
+    }
+  }
+
+  Future<void> _fetchKebeles() async {
+    try {
+      final fetched = await _kebeleService.getAllKebeles();
+      setState(() {
+        _kebeles = fetched;
+        _isLoadingKebeles = false;
+      });
+    } catch (e) {
+      setState(() => _isLoadingKebeles = false);
+      _showSnack("Error loading locations", isError: true);
     }
   }
 
@@ -82,7 +102,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   @override
   void dispose() {
     _descriptionController.dispose();
-    _kebeleController.dispose();
     _subdivisionController.dispose();
     _streetController.dispose();
     super.dispose();
@@ -135,9 +154,9 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
 
   Future<void> _submitReport() async {
     if (_descriptionController.text.isEmpty ||
-        _kebeleController.text.isEmpty ||
+        _selectedKebeleId == null || // Validation for selected ID
         _subdivisionController.text.isEmpty) {
-      _showSnack("Please fill description, kebele, and subdivision");
+      _showSnack("Please fill description, select a kebele, and subdivision");
       return;
     }
     if (_userId == null) {
@@ -152,7 +171,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
       categoryId: widget.categoryId,
       description: _descriptionController.text,
       userId: _userId!,
-      kebele: _kebeleController.text,
+      kebele: _selectedKebeleId.toString(), // Sending the Kebele ID as String
       subdivision: _subdivisionController.text,
       street: _streetController.text,
       latitude: _latitude,
@@ -278,11 +297,58 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
         const SizedBox(height: 24),
         _sectionHeader("Location Details"),
         const SizedBox(height: 10),
-        _buildTextField(
-          _kebeleController,
-          "Kebele",
-          icon: Icons.maps_home_work,
+
+        // --- FETCHED KEBELE DROPDOWN ---
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(15),
+            boxShadow: [
+              BoxShadow(
+                color: primaryBlue.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: _isLoadingKebeles
+              ? const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : DropdownButtonFormField<int>(
+                  value: _selectedKebeleId,
+                  hint: Text(
+                    "Select Kebele",
+                    style: TextStyle(color: Colors.blueGrey.withOpacity(0.5)),
+                  ),
+                  icon: Icon(Icons.arrow_drop_down, color: accentBlue),
+                  decoration: InputDecoration(
+                    prefixIcon: Icon(
+                      Icons.maps_home_work,
+                      color: accentBlue,
+                      size: 20,
+                    ),
+                    border: InputBorder.none,
+                  ),
+                  items: _kebeles.map((kebele) {
+                    return DropdownMenuItem<int>(
+                      value: kebele['id'],
+                      child: Text(
+                        kebele['name'] ?? "Unknown",
+                        style: TextStyle(color: primaryBlue),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() => _selectedKebeleId = value);
+                  },
+                ),
         ),
+
         const SizedBox(height: 12),
         _buildTextField(
           _subdivisionController,

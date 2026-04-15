@@ -8,174 +8,111 @@ import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../model/emergency_report_model.dart';
 
-/// ==========================================================
-/// 🌟 UserEmergencyService (FIXED & CLEAN)
-/// 📍 Location matches Guest (lat/lng direct)
-/// ==========================================================
 class UserEmergencyService {
-  // ========================================================
-  // 🌐 Base URL depending on platform
-  // ========================================================
   static String get baseUrl {
-    if (kIsWeb) {
-      return "http://localhost:5000/api";
-    } else if (Platform.isAndroid) {
-      return "http://10.0.2.2:5000/api";
-    } else {
-      return "http://localhost:5000/api";
-    }
+    if (kIsWeb) return "http://localhost:5000/api";
+    if (Platform.isAndroid) return "http://10.0.2.2:5000/api";
+    return "http://localhost:5000/api";
   }
 
-  // ========================================================
-  // 👤 Get userId from SharedPreferences
-  // ========================================================
+  // ✅ FIX: Added back the missing getUserId method
   static Future<int?> getUserId() async {
     final prefs = await SharedPreferences.getInstance();
     final rawId = prefs.get("userId");
-
     if (rawId is int) return rawId;
     if (rawId is String) return int.tryParse(rawId);
-
     return null;
   }
 
-  // ========================================================
-  // 🚨 Send Emergency Report
-  // ========================================================
   static Future<bool> sendUserEmergency({
     required int userId,
     required EmergencyReportModel report,
-
-    // 📍 Location
     double? latitude,
     double? longitude,
-
-    // 📎 Media
     Uint8List? mediaBytes,
     File? mediaFile,
     String? mediaName,
   }) async {
     try {
-      // -------------------------------
-      // 🔑 Get access token
-      // -------------------------------
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("accessToken");
 
-      if (token == null || token.isEmpty) {
+      if (token == null) {
         print("❌ No access token found");
         return false;
       }
 
-      // -------------------------------
-      // 🔗 API endpoint
-      // -------------------------------
       final uri = Uri.parse("$baseUrl/emergencies/users/$userId");
-
       final request = http.MultipartRequest("POST", uri);
       request.headers['Authorization'] = "Bearer $token";
 
-      // -------------------------------
-      // 📝 Add report fields
-      // -------------------------------
+      // 📝 Get the base map from the model
       final data = report.toJsonForUser();
 
+      // ✅ FIX: Use 'report.kebele' instead of 'report.kebeleId'
+      // Mapping 'kebele' from model to 'kebeleId' for the Backend
+      request.fields['kebeleId'] = report.kebele?.toString() ?? "";
+      request.fields['subdivision'] = report.subdivision ?? "";
+
+      // Add remaining fields
       data.forEach((key, value) {
-        if (value != null) {
+        if (value != null && key != 'kebele' && key != 'subdivision') {
           request.fields[key] = value.toString();
         }
       });
 
-      // -------------------------------
-      // 📍 Add Location
-      // -------------------------------
-      if (latitude != null) {
-        request.fields["latitude"] = latitude.toString();
-      }
+      if (latitude != null) request.fields["latitude"] = latitude.toString();
+      if (longitude != null) request.fields["longitude"] = longitude.toString();
 
-      if (longitude != null) {
-        request.fields["longitude"] = longitude.toString();
-      }
-
-      // -------------------------------
-      // 📎 Attach Media
-      // -------------------------------
+      // 📎 Media Logic
       if (kIsWeb) {
-        // 🌐 Web Media
         if (mediaBytes != null && mediaName != null) {
           final mimeType =
               lookupMimeType(mediaName) ?? "application/octet-stream";
-
           final split = mimeType.split("/");
-
-          final contentType = MediaType(split[0], split[1]);
-
           request.fields['mediaType'] = split.first == 'video'
               ? 'video'
               : 'photo';
-
           request.files.add(
             http.MultipartFile.fromBytes(
               "media",
-              mediaBytes, // ✅ Safe now (checked above)
+              mediaBytes,
               filename: mediaName,
-              contentType: contentType,
+              contentType: MediaType(split[0], split[1]),
             ),
           );
-
-          print("📎 Web media attached: $mediaName");
         }
-      } else {
-        // 📱 Mobile/Desktop Media
-        if (mediaFile != null) {
-          final filename = path.basename(mediaFile.path);
-
-          final mimeType =
-              lookupMimeType(filename) ?? "application/octet-stream";
-
-          final split = mimeType.split("/");
-
-          final contentType = MediaType(split[0], split[1]);
-
-          request.fields['mediaType'] = split.first == 'video'
-              ? 'video'
-              : 'photo';
-
-          request.files.add(
-            await http.MultipartFile.fromPath(
-              "media",
-              mediaFile.path,
-              contentType: contentType,
-            ),
-          );
-
-          print("📎 File attached: $filename");
-        }
+      } else if (mediaFile != null) {
+        final filename = path.basename(mediaFile.path);
+        final mimeType = lookupMimeType(filename) ?? "application/octet-stream";
+        final split = mimeType.split("/");
+        request.fields['mediaType'] = split.first == 'video'
+            ? 'video'
+            : 'photo';
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            "media",
+            mediaFile.path,
+            contentType: MediaType(split[0], split[1]),
+          ),
+        );
       }
 
-      // -------------------------------
-      // 🚀 Send request
-      // -------------------------------
-      print("🔵 Sending emergency report...");
-      print("🌐 URL: $uri");
-      print("📍 Latitude: $latitude");
-      print("📍 Longitude: $longitude");
+      print("🚀 Requesting: POST $uri");
+      print("📦 Payload sent to backend: ${request.fields}");
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
-      print("✅ STATUS: ${response.statusCode}");
-      print("📦 BODY: ${response.body}");
-
       if (response.statusCode == 200 || response.statusCode == 201) {
-        print("🎉 Emergency sent successfully");
+        print("🎉 Emergency report successful");
         return true;
       } else {
-        print("❌ Failed to send emergency");
+        print("❌ Server Error ${response.statusCode}: ${response.body}");
         return false;
       }
     } catch (e) {
-      print("❌ UserEmergencyService Error: $e");
+      print("❌ UserEmergencyService Exception: $e");
       return false;
     }
   }

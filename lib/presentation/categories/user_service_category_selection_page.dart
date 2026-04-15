@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/service_category_service.dart';
-// Import your service reporting page here
-// import '../reporting/user_service_report_page.dart';
+import '../reporting/user_service_report_page.dart'; // Ensure this matches your file path
 
 class UserServiceCategorySelectionPage extends StatefulWidget {
   final String serviceTypeId;
@@ -46,7 +45,6 @@ class _UserServiceCategorySelectionPageState
 
   Future<void> fetchCategories() async {
     try {
-      // Calling the specific ServiceCategoryService method
       final response = await ServiceCategoryService.getCategoriesByServiceType(
         widget.serviceTypeId,
       );
@@ -67,161 +65,170 @@ class _UserServiceCategorySelectionPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: Color(0xFF2563EB),
-                      strokeWidth: 2,
-                    ),
-                  )
-                : _buildGrid(),
+      backgroundColor: const Color(0xFF0F0F0F), // Industrial Black
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          _buildSliverAppBar(),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              child: Text(
+                "SELECT CATEGORY",
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.5),
+                  letterSpacing: 2,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
           ),
+          isLoading
+              ? const SliverFillRemaining(
+                  child: Center(
+                    child: CircularProgressIndicator(color: Colors.blueAccent),
+                  ),
+                )
+              : _buildSliverGrid(),
         ],
       ),
     );
   }
 
-  Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1D4ED8), Color(0xFF3B82F6)], // Vibrant Blue
+  Widget _buildSliverAppBar() {
+    return SliverAppBar(
+      expandedHeight: 160.0,
+      floating: false,
+      pinned: true,
+      backgroundColor: const Color(0xFF1A1A1A),
+      leading: IconButton(
+        icon: const Icon(
+          Icons.arrow_back_ios_new,
+          size: 18,
+          color: Colors.white,
         ),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(30),
-          bottomRight: Radius.circular(30),
-        ),
+        onPressed: () => Navigator.pop(context),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.arrow_back_ios_new,
+      flexibleSpace: FlexibleSpaceBar(
+        centerTitle: false,
+        titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
+        title: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              widget.serviceTypeName.toUpperCase(),
+              style: const TextStyle(
                 color: Colors.white,
-                size: 12,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            widget.serviceTypeName,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+            Text(
+              "Industrial Service Infrastructure",
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.5),
+                fontSize: 10,
+              ),
             ),
-          ),
-          Text(
-            "Select service request type",
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
-              fontSize: 12,
+          ],
+        ),
+        background: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Dark gradient overlay
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF0F0F0F), Colors.transparent],
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildGrid() {
+  Widget _buildSliverGrid() {
     if (categories.isEmpty) {
-      return const Center(child: Text("No service categories available"));
+      return const SliverFillRemaining(
+        child: Center(
+          child: Text(
+            "No categories found",
+            style: TextStyle(color: Colors.white54),
+          ),
+        ),
+      );
     }
 
-    return GridView.builder(
+    return SliverPadding(
       padding: const EdgeInsets.all(16),
-      physics: const BouncingScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.2,
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.1,
+        ),
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final cat = categories[index];
+          return _buildIndustrialCard(cat["name"], cat["id"]);
+        }, childCount: categories.length),
       ),
-      itemCount: categories.length,
-      itemBuilder: (context, index) {
-        final cat = categories[index];
-        return _buildCategoryCard(cat["name"], cat["id"]);
-      },
     );
   }
 
-  Widget _buildCategoryCard(String name, String id) {
-    bool isOther =
-        name.toLowerCase() == "others" || name.toLowerCase() == "other";
+  Widget _buildIndustrialCard(String name, String id) {
+    bool isOther = name.toLowerCase().contains("other");
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF3B82F6).withOpacity(0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            debugPrint("Navigating to report for: $name");
-            // Navigation logic to your reporting page would go here
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: isOther
-                        ? const Color(0xFFF1F5F9)
-                        : const Color(0xFFEFF6FF),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    isOther
-                        ? Icons.more_horiz
-                        : Icons.settings_suggest_outlined,
-                    color: isOther ? Colors.blueGrey : const Color(0xFF3B82F6),
-                    size: 18,
-                  ),
-                ),
-                Text(
-                  name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1E293B),
-                    height: 1.1,
-                  ),
-                ),
-              ],
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => UserServiceReportPage(
+              serviceTypeId: widget.serviceTypeId,
+              categoryId: id,
+              categoryName: name,
             ),
           ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(
+            color: isOther
+                ? Colors.white10
+                : Colors.blueAccent.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Icon(
+              isOther ? Icons.more_horiz : Icons.terminal_outlined,
+              color: isOther ? Colors.white38 : Colors.blueAccent,
+              size: 24,
+            ),
+            Text(
+              name,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ],
         ),
       ),
     );
