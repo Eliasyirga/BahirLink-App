@@ -7,9 +7,10 @@ class EmergencyType {
 
   factory EmergencyType.fromJson(Map<String, dynamic> json) {
     return EmergencyType(
-      id: json['id'],
-      name: json['name'],
-      description: json['description'],
+      // MongoDB uses _id. If your API returns 'id', this fallback handles both.
+      id: (json['_id'] ?? json['id'] ?? '').toString(),
+      name: json['name']?.toString() ?? 'Unknown',
+      description: json['description']?.toString(),
     );
   }
 }
