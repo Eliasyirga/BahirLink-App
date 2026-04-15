@@ -1,31 +1,33 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../model/service_type.dart';
 
 class ServiceTypeService {
-  // Use 10.0.2.2 if testing on an Android Emulator, or your local IP if on a physical device
   static const String baseUrl = "http://localhost:5000/api/serviceType";
 
-  static Future<List<dynamic>> getAllServiceTypes() async {
+  static Future<List<ServiceType>> getAllServiceTypes() async {
     try {
-      final response = await http
-          .get(Uri.parse(baseUrl))
-          .timeout(const Duration(seconds: 10));
+      final response = await http.get(Uri.parse(baseUrl));
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(response.body);
+        final data = jsonDecode(response.body);
 
-        // Ensure we are specifically targeting the list inside the response
-        final List<dynamic>? serviceTypes = data["serviceTypes"];
+        List list;
+        if (data is List) {
+          // If backend returns a raw array: [{}, {}]
+          list = data;
+        } else {
+          // If backend returns a map: {"serviceTypes": [{}, {}]}
+          list = data["serviceTypes"] ?? [];
+        }
 
-        return serviceTypes ?? [];
+        return list.map((e) => ServiceType.fromJson(e)).toList();
       } else {
-        debugPrint("Server Error: ${response.statusCode}");
-        return [];
+        throw Exception("Failed to load service types");
       }
     } catch (e) {
-      debugPrint("Network or Parsing Error: $e");
-      // Returning an empty list ensures .isEmpty works in the UI
+      // Log error and return empty list to prevent UI crash
+      print("ServiceTypeService Error: $e");
       return [];
     }
   }
