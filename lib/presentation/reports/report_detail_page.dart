@@ -20,189 +20,337 @@ class ReportDetailsPage extends StatefulWidget {
 }
 
 class _ReportDetailsPageState extends State<ReportDetailsPage> {
-  static const Color primaryColor = Color(0xFF0D47A1);
+  static const Color primaryBlue = Color(0xFF0D47A1);
 
   File? _mediaFile;
   Uint8List? _webBytes;
 
-  String safe(dynamic v) => v?.toString() ?? '';
+  String safe(dynamic v) => v?.toString() ?? 'N/A';
 
   @override
   Widget build(BuildContext context) {
     final e = widget.emergency;
+    final status = safe(e['status']).toUpperCase();
+    final bool isCritical = safe(
+      e['typeName'],
+    ).toLowerCase().contains('critical');
 
     return Scaffold(
-      backgroundColor: const Color(
-        0xFFF8FAFC,
-      ), // Slightly off-white for better contrast
-      appBar: AppBar(
-        backgroundColor: primaryColor,
-        elevation: 0,
-        centerTitle: true,
-        title: const Text(
-          "Emergency Details",
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _card("Type", safe(e['typeName'])),
-            _card("Category", safe(e['categoryName'])),
-            _card("Description", safe(e['description'])),
-            _addressCard(
-              safe(e['kebele']),
-              safe(e['subdivision']),
-              safe(e['street']),
+      backgroundColor: const Color(0xFFF1F5F9),
+      body: CustomScrollView(
+        slivers: [
+          // 1. IMAGE HEADER
+          SliverAppBar(
+            expandedHeight: 250,
+            pinned: true,
+            backgroundColor: primaryBlue,
+            leading: IconButton(
+              icon: const CircleAvatar(
+                backgroundColor: Colors.black26,
+                child: Icon(Icons.arrow_back, color: Colors.white, size: 20),
+              ),
+              onPressed: () => Navigator.pop(context),
             ),
-            _card("Status", safe(e['status'])),
-            _card("Reported Time", safe(e['time'])),
-            const SizedBox(height: 16),
-            _mediaCard(e['mediaUrl']),
-            const SizedBox(height: 24),
-            _buttons(safe(e['id'])),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _card(String label, String value) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: _box(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              color: primaryColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-              letterSpacing: 0.5,
+            flexibleSpace: FlexibleSpaceBar(
+              background: _buildHeroImage(e['mediaUrl']),
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 16, color: Colors.black87),
+
+          // 2. DETAILS BODY
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _badge(
+                        safe(e['typeName']),
+                        isCritical ? Colors.red : primaryBlue,
+                      ),
+                      _badge(status, _getStatusColor(status)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    safe(e['categoryName']),
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.access_time,
+                        size: 14,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        safe(e['time']),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 40),
+
+                  _sectionHeader("DESCRIPTION"),
+                  Text(
+                    safe(e['description']),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      height: 1.5,
+                      color: Color(0xFF475569),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // LOCATION SECTION (Kebele name only - Lat/Long hidden)
+                  _locationCard(e),
+
+                  const SizedBox(height: 32),
+
+                  // ACTIONS
+                  _actionButtons(safe(e['id'])),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _addressCard(String kebele, String sub, String street) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: _box(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "ADDRESS",
-            style: TextStyle(
-              color: primaryColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 8),
-          _addressRow("Kebele", kebele),
-          _addressRow("Subdivision", sub),
-          _addressRow("Street", street),
-        ],
-      ),
-    );
-  }
+  // --- UI COMPONENTS ---
 
-  Widget _addressRow(String label, String val) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 2),
-    child: Text("$label: $val", style: const TextStyle(fontSize: 15)),
-  );
-
-  Widget _mediaCard(String? mediaUrl) {
-    Widget? imageChild;
-
-    if (kIsWeb && _webBytes != null) {
-      imageChild = Image.memory(_webBytes!, fit: BoxFit.cover);
-    } else if (_mediaFile != null) {
-      imageChild = Image.file(_mediaFile!, fit: BoxFit.cover);
-    } else if (mediaUrl != null && mediaUrl.isNotEmpty) {
-      const baseUrl = "http://localhost:5000";
-      final url = mediaUrl.startsWith('http') ? mediaUrl : "$baseUrl$mediaUrl";
-      imageChild = Image.network(
-        url,
-        fit: BoxFit.cover,
-        loadingBuilder: (_, child, prog) => prog == null
-            ? child
-            : const Center(child: CircularProgressIndicator()),
-        errorBuilder: (_, __, ___) =>
-            const Center(child: Text("❌ Image Error")),
-      );
+  Widget _locationCard(Map<String, dynamic> e) {
+    // Extracting name only from the kebele object
+    String kebeleName = 'N/A';
+    if (e['kebele'] != null) {
+      kebeleName = e['kebele'] is Map
+          ? (e['kebele']['name'] ?? 'N/A')
+          : e['kebele'].toString();
     }
 
-    if (imageChild == null) return const SizedBox.shrink();
-
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(8),
-      decoration: _box(),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: SizedBox(height: 220, child: imageChild),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.location_on, color: primaryBlue),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "KEBELE",
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                    letterSpacing: 1,
+                  ),
+                ),
+                Text(
+                  kebeleName,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                // Note: Lat/Long data exists in the 'e' map, but we simply don't build widgets for them here.
+              ],
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  Widget _actionButtons(String id) {
+    return Row(
+      children: [
+        Expanded(
+          flex: 2,
+          child: ElevatedButton.icon(
+            onPressed: () => _showEditDialog(id),
+            icon: const Icon(Icons.edit_note, size: 20),
+            label: const Text("Edit Details"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryBlue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        // CLEAR LOCALLY BUTTON
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: IconButton(
+            onPressed: () => _confirmLocalClear(id),
+            icon: const Icon(
+              Icons.visibility_off_outlined,
+              color: Colors.orange,
+            ),
+            tooltip: "Hide from phone",
+            padding: const EdgeInsets.all(14),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- LOGIC: HIDE FROM PHONE ---
+
+  void _confirmLocalClear(String id) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Hide Report?"),
+        content: const Text(
+          "This removes the report from your screen locally. It will not be deleted from the server.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx); // Close dialog
+              Navigator.pop(
+                context,
+                id,
+              ); // Close page & pass ID back to list to hide it
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text("Hide Now"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- HELPER METHODS ---
+
+  Widget _badge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: primaryBlue,
+          fontWeight: FontWeight.w900,
+          fontSize: 12,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroImage(String? mediaUrl) {
+    if (kIsWeb && _webBytes != null)
+      return Image.memory(_webBytes!, fit: BoxFit.cover);
+    if (_mediaFile != null) return Image.file(_mediaFile!, fit: BoxFit.cover);
+    if (mediaUrl != null && mediaUrl.isNotEmpty) {
+      final url = mediaUrl.startsWith('http')
+          ? mediaUrl
+          : "http://localhost:5000$mediaUrl";
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _imagePlaceholder(),
+      );
+    }
+    return _imagePlaceholder();
+  }
+
+  Widget _imagePlaceholder() {
+    return Container(
+      color: Colors.blueGrey[100],
+      child: const Icon(Icons.image, size: 50, color: Colors.white),
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    if (status.contains('RESOLVED')) return Colors.green;
+    if (status.contains('PENDING')) return Colors.orange;
+    return Colors.blueGrey;
   }
 
   void _showEditDialog(String id) {
-    final controllers = {
-      'typeName': TextEditingController(
-        text: safe(widget.emergency['typeName']),
-      ),
-      'categoryName': TextEditingController(
-        text: safe(widget.emergency['categoryName']),
-      ),
-      'description': TextEditingController(
-        text: safe(widget.emergency['description']),
-      ),
-      'kebele': TextEditingController(text: safe(widget.emergency['kebele'])),
-      'subdivision': TextEditingController(
-        text: safe(widget.emergency['subdivision']),
-      ),
-      'street': TextEditingController(text: safe(widget.emergency['street'])),
-    };
+    final descC = TextEditingController(
+      text: safe(widget.emergency['description']),
+    );
+    final kObj = widget.emergency['kebele'];
+    final kebeleC = TextEditingController(
+      text: kObj is Map ? safe(kObj['name']) : safe(kObj),
+    );
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Edit Emergency Report"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ...controllers.entries
-                  .map((e) => _field(e.key.replaceAll('Name', ''), e.value))
-                  .toList(),
-              const SizedBox(height: 12),
-              TextButton.icon(
-                onPressed: _pickMedia,
-                icon: const Icon(Icons.image),
-                label: Text(
-                  _mediaFile != null || _webBytes != null
-                      ? "Change Media"
-                      : "Update Media",
-                ),
-              ),
-            ],
-          ),
+        title: const Text("Edit Report"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _field("Kebele", kebeleC),
+            _field("Description", descC, maxLines: 3),
+          ],
         ),
         actions: [
           TextButton(
@@ -211,87 +359,14 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
           ),
           ElevatedButton(
             onPressed: () async {
-              final data = controllers.map(
-                (key, controller) => MapEntry(key, controller.text),
-              );
-              await ReportsService.updateEmergency(
-                widget.userId,
-                id,
-                data,
-                file: _mediaFile,
-                webBytes: _webBytes,
-              );
-              if (!context.mounted) return;
-              Navigator.pop(context); // Close Dialog
-              Navigator.pop(
-                context,
-                true,
-              ); // Return to list with refresh trigger
+              final data = {'description': descC.text, 'kebele': kebeleC.text};
+              await ReportsService.updateEmergency(widget.userId, id, data);
+              if (mounted) {
+                Navigator.pop(context);
+                Navigator.pop(context, true);
+              }
             },
-            child: const Text("Save Changes"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Helper UI methods
-  Widget _buttons(String id) {
-    return Row(
-      children: [
-        Expanded(
-          child: ElevatedButton(
-            onPressed: () => _showEditDialog(id),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            child: const Text(
-              "Edit Report",
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: OutlinedButton(
-            onPressed: () => _confirmDelete(id),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: Colors.red),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            child: const Text("Delete", style: TextStyle(color: Colors.red)),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _confirmDelete(String id) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Delete Report?"),
-        content: const Text("This action cannot be undone."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () async {
-              await ReportsService.deleteEmergency(widget.userId, id);
-              if (!context.mounted) return;
-              Navigator.pop(context);
-              Navigator.pop(context, true);
-            },
-            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+            child: const Text("Save"),
           ),
         ],
       ),
@@ -299,42 +374,27 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
   }
 
   void _pickMedia() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (picked != null) {
-      if (kIsWeb) {
-        _webBytes = await picked.readAsBytes();
-      } else {
-        _mediaFile = File(picked.path);
-      }
+    final p = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (p != null) {
+      if (kIsWeb)
+        _webBytes = await p.readAsBytes();
+      else
+        _mediaFile = File(p.path);
       setState(() {});
     }
   }
 
-  Widget _field(String label, TextEditingController c) {
+  Widget _field(String label, TextEditingController c, {int maxLines = 1}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
         controller: c,
+        maxLines: maxLines,
         decoration: InputDecoration(
           labelText: label,
-          filled: true,
-          fillColor: Colors.grey[50],
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
   }
-
-  BoxDecoration _box() => BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(14),
-    border: Border.all(color: Colors.grey.withOpacity(0.1)),
-    boxShadow: [
-      BoxShadow(
-        color: Colors.black.withOpacity(0.03),
-        blurRadius: 8,
-        offset: const Offset(0, 2),
-      ),
-    ],
-  );
 }
