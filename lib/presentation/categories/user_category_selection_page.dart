@@ -27,13 +27,16 @@ class _UserCategorySelectionPageState extends State<UserCategorySelectionPage> {
     fetchCategories();
   }
 
+  // Helper to sort categories alphabetically but keep "Others" at the end
   List<Map<String, dynamic>> _sortCategories(List<Map<String, dynamic>> list) {
     List<Map<String, dynamic>> sorted = List.from(list);
     sorted.sort((a, b) {
       String nameA = a["name"].toString().toLowerCase();
       String nameB = b["name"].toString().toLowerCase();
+
       bool isAOther = nameA == "others" || nameA == "other";
       bool isBOther = nameB == "others" || nameB == "other";
+
       if (isAOther && !isBOther) return 1;
       if (!isAOther && isBOther) return -1;
       return nameA.compareTo(nameB);
@@ -46,12 +49,20 @@ class _UserCategorySelectionPageState extends State<UserCategorySelectionPage> {
       final response = await CategoryService.getCategories(
         widget.emergencyTypeId,
       );
+
+      // CRITICAL FIX: Check if the widget is still in the tree
+      if (!mounted) return;
+
       setState(() {
         categories = _sortCategories(List<Map<String, dynamic>>.from(response));
         isLoading = false;
       });
     } catch (e) {
       debugPrint("Category fetch error: $e");
+
+      // Check mounted here as well
+      if (!mounted) return;
+
       setState(() => isLoading = false);
     }
   }
@@ -81,13 +92,12 @@ class _UserCategorySelectionPageState extends State<UserCategorySelectionPage> {
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
-      // Reduced padding for a smaller header
       padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1D4ED8), Color(0xFF3B82F6)], // Vibrant Blue
+          colors: [Color(0xFF1D4ED8), Color(0xFF3B82F6)],
         ),
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(30),
@@ -116,7 +126,7 @@ class _UserCategorySelectionPageState extends State<UserCategorySelectionPage> {
           Text(
             widget.emergencyTypeName,
             style: const TextStyle(
-              fontSize: 22, // Smaller font
+              fontSize: 22,
               fontWeight: FontWeight.bold,
               color: Colors.white,
             ),
@@ -145,12 +155,13 @@ class _UserCategorySelectionPageState extends State<UserCategorySelectionPage> {
         crossAxisCount: 2,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        childAspectRatio: 1.2, // Makes the boxes shorter
+        childAspectRatio: 1.2,
       ),
       itemCount: categories.length,
       itemBuilder: (context, index) {
         final cat = categories[index];
-        return _buildCategoryCard(cat["name"], cat["id"]);
+        // Convert ID to string to ensure compatibility with Widget parameters
+        return _buildCategoryCard(cat["name"].toString(), cat["id"].toString());
       },
     );
   }
@@ -162,7 +173,7 @@ class _UserCategorySelectionPageState extends State<UserCategorySelectionPage> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16), // Smaller radius
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF3B82F6).withOpacity(0.06),
@@ -189,7 +200,7 @@ class _UserCategorySelectionPageState extends State<UserCategorySelectionPage> {
             );
           },
           child: Padding(
-            padding: const EdgeInsets.all(12), // Reduced padding
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -205,7 +216,7 @@ class _UserCategorySelectionPageState extends State<UserCategorySelectionPage> {
                   child: Icon(
                     isOther ? Icons.more_horiz : Icons.category_outlined,
                     color: isOther ? Colors.blueGrey : const Color(0xFF3B82F6),
-                    size: 18, // Smaller icon
+                    size: 18,
                   ),
                 ),
                 Text(
@@ -213,7 +224,7 @@ class _UserCategorySelectionPageState extends State<UserCategorySelectionPage> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 13, // Smaller text
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: Color(0xFF1E293B),
                     height: 1.1,
