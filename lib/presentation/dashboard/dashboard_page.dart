@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/widgets/bottom_navbar.dart';
 import 'dashboard_content.dart';
-import '../categories/categories_page.dart';
+// Removed CategoriesPage import
+import '../reports/service_report_page.dart'; // Updated path
 import '../profile/profile_page.dart';
 import '../reports/reports_page.dart';
 import '../settings/settings_page.dart';
@@ -35,7 +36,8 @@ class _DashboardPageState extends State<DashboardPage> {
         return const DashboardContent();
 
       case 1:
-        return const CategoriesPage();
+        // Replaced CategoriesPage with ServiceReportPage
+        return ServiceReportPage(userId: widget.userId);
 
       case 2:
         return const ProfilePage();

@@ -30,7 +30,8 @@ class BahirBottomNavBar extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _navItem(Icons.home_outlined, "Home", 0),
-          _navItem(Icons.dashboard_customize_outlined, "Categories", 1),
+          // Updated from Categories to Services
+          _navItem(Icons.build_circle_outlined, "Services", 1),
           _navItem(Icons.person_outline, "Profile", 2),
           _navItem(Icons.bar_chart_outlined, "Reports", 3),
           _navItem(Icons.settings_outlined, "Settings", 4),

@@ -24,7 +24,7 @@ class UserServiceService {
     return null;
   }
 
-  /// Sends a service request to the backend with optional media
+  /// Sends a service request to the backend with the standardized "media" key
   static Future<bool> sendUserService({
     required int userId,
     required ServiceReportModel report,
@@ -37,7 +37,7 @@ class UserServiceService {
       final token = prefs.getString("accessToken");
 
       if (token == null) {
-        debugPrint("❌ No access token found");
+        debugPrint("❌ UserService Error: Access token missing");
         return false;
       }
 
@@ -46,42 +46,45 @@ class UserServiceService {
       final request = http.MultipartRequest("POST", uri);
       request.headers['Authorization'] = "Bearer $token";
 
-      // ✅ Fix: Mandatory Model Field 'name'
-      request.fields['name'] =
-          "Service Req: ${report.subdivision ?? 'General'}";
+      // 📝 1. Map Model Data to Backend Fields
+      // 'name' is required by backend, using 'subdivision' as the source
+      request.fields['name'] = "Service Req: ${report.subdivision}";
+      request.fields['description'] = report.description;
+      request.fields['serviceTypeId'] = report.serviceTypeId;
+      request.fields['serviceCategoryId'] = report.serviceCategoryId;
+      request.fields['kebeleId'] = report.kebeleId.toString();
+      request.fields['subdivision'] = report.subdivision;
+      request.fields['street'] = report.street;
 
-      // Map model fields to multipart text fields
-      final data = report.toJson();
-      data.forEach((key, value) {
-        if (value != null) {
-          // ✅ FIX: Option A - Format ISO Date string to PostgreSQL TIME format (HH:mm:ss)
-          if (key == 'time' && value is String && value.contains('T')) {
-            try {
-              // Extract "05:40:00" from "2026-04-16T05:40:00.000"
-              final timeOnly = value.split('T')[1].split('.')[0];
-              request.fields[key] = timeOnly;
-            } catch (e) {
-              request.fields[key] = value.toString();
-            }
-          } else {
-            request.fields[key] = value.toString();
-          }
-        }
-      });
+      if (report.latitude != null) {
+        request.fields['latitude'] = report.latitude.toString();
+      }
+      if (report.longitude != null) {
+        request.fields['longitude'] = report.longitude.toString();
+      }
 
-      // 📎 Media Logic
+      // Format Time (ISO -> HH:mm:ss) to prevent DB timestamp errors
+      request.fields['time'] = report.time
+          .toIso8601String()
+          .split('T')[1]
+          .split('.')[0];
+
+      // 📎 2. Synchronized Media Logic
+      // IMPORTANT: This key MUST be "media" to match upload.single("media")
+      const String fileKey = "media";
+
       if (kIsWeb) {
         if (mediaBytes != null && mediaName != null) {
-          final mimeType =
-              lookupMimeType(mediaName) ?? "application/octet-stream";
+          final mimeType = lookupMimeType(mediaName) ?? "image/jpeg";
           final split = mimeType.split("/");
+
           request.fields['mediaType'] = split.first == 'video'
               ? 'video'
               : 'photo';
 
           request.files.add(
             http.MultipartFile.fromBytes(
-              "media",
+              fileKey,
               mediaBytes,
               filename: mediaName,
               contentType: MediaType(split[0], split[1]),
@@ -90,29 +93,33 @@ class UserServiceService {
         }
       } else if (mediaFile != null) {
         final filename = path.basename(mediaFile.path);
-        final mimeType = lookupMimeType(filename) ?? "application/octet-stream";
+        final mimeType = lookupMimeType(filename) ?? "image/jpeg";
         final split = mimeType.split("/");
+
         request.fields['mediaType'] = split.first == 'video'
             ? 'video'
             : 'photo';
 
         request.files.add(
           await http.MultipartFile.fromPath(
-            "media",
+            fileKey,
             mediaFile.path,
             contentType: MediaType(split[0], split[1]),
           ),
         );
       }
 
-      debugPrint("🚀 Requesting: POST $uri");
-      debugPrint("📦 Payload: ${request.fields}");
+      debugPrint("🚀 DISPATCHING SERVICE: POST $uri");
+      debugPrint("📦 PAYLOAD SENT: ${request.fields}");
 
-      final streamedResponse = await request.send();
+      // 🚀 3. Execute Request
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 25),
+      );
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        debugPrint("🎉 Service request successful");
+        debugPrint("🎉 Service Submission Successful");
         return true;
       } else {
         debugPrint("❌ Server Error ${response.statusCode}: ${response.body}");
