@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'map_picker_page.dart';
 import '../../services/emergency_service.dart';
-import '../../services/device_service.dart';
+import '../../services/kebele_service.dart';
 import 'media_picker_bottom_sheet.dart';
 
 class GuestEmergencyReportPage extends StatefulWidget {
@@ -28,100 +28,367 @@ class GuestEmergencyReportPage extends StatefulWidget {
 }
 
 class _GuestEmergencyReportPageState extends State<GuestEmergencyReportPage> {
+  // Text Controllers
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _kebeleController = TextEditingController();
   final TextEditingController _subdivisionController = TextEditingController();
   final TextEditingController _streetController = TextEditingController();
 
-  DateTime? _selectedTime;
+  // Logic & State
+  // ✅ Initialized as empty list to prevent JS "Symbol(dartx.map)" error
+  List<Map<String, dynamic>> _kebeles = [];
+  String? _selectedKebeleId;
+  bool _isFetchingKebeles = true;
+  bool _isLoading = false;
+
   double? _latitude;
   double? _longitude;
-  String? _deviceId;
-
   Uint8List? _selectedMediaBytes;
   File? _selectedFile;
   String? _selectedFileName;
 
-  bool _isLoading = false;
-
-  // Modern Blue Color Palette
+  // Design Tokens (BahirLink Brand)
   final Color primaryBlue = const Color(0xff0D47A1);
   final Color accentBlue = const Color(0xff1976D2);
-  final Color lightBlueBg = const Color(0xffF0F7FF);
+  final Color scaffoldBg = const Color(0xffF8FAFD);
 
   @override
   void initState() {
     super.initState();
-    _loadDeviceId();
+    _fetchKebeleData();
   }
 
-  Future<void> _loadDeviceId() async {
-    final id = await DeviceService.getDeviceId();
-    setState(() => _deviceId = id);
-  }
-
-  void _showSnack(String message, {bool isError = true}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, style: const TextStyle(color: Colors.white)),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: isError ? Colors.redAccent : Colors.green,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+  Future<void> _fetchKebeleData() async {
+    try {
+      final data = await KebeleService().getAllKebeles();
+      if (mounted) {
+        setState(() {
+          _kebeles = data ?? [];
+          _isFetchingKebeles = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Kebele Fetch Error: $e");
+      if (mounted) {
+        setState(() {
+          _kebeles = [];
+          _isFetchingKebeles = false;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
     _descriptionController.dispose();
     _phoneController.dispose();
-    _kebeleController.dispose();
     _subdivisionController.dispose();
     _streetController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickTime() async {
-    final now = DateTime.now();
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: scaffoldBg,
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: primaryBlue,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.emergencyTypeName,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              widget.categoryName,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeaderIcon(),
+                const SizedBox(height: 32),
+                _sectionTitle("Emergency Details"),
+                _buildTextArea(
+                  _descriptionController,
+                  "Describe the situation...",
+                ),
+                const SizedBox(height: 24),
+
+                _sectionTitle("Location & Contact"),
+                _buildInputField(
+                  _phoneController,
+                  "Contact Phone",
+                  Icons.phone_android,
+                  keyboard: TextInputType.phone,
+                ),
+                const SizedBox(height: 16),
+
+                // ✅ Drodown with safety guards
+                _buildKebeleDropdown(),
+
+                const SizedBox(height: 16),
+                _buildInputField(
+                  _subdivisionController,
+                  "Subdivision / Village",
+                  Icons.location_city,
+                ),
+                const SizedBox(height: 16),
+                _buildInputField(
+                  _streetController,
+                  "Street (Optional)",
+                  Icons.add_road,
+                ),
+                const SizedBox(height: 32),
+
+                _sectionTitle("Attachments"),
+                _buildLocationPicker(),
+                const SizedBox(height: 12),
+                _buildMediaPicker(),
+                const SizedBox(height: 48),
+
+                _buildSubmitButton(),
+                const SizedBox(height: 60),
+              ],
+            ),
+          ),
+          if (_isLoading) _buildLoadingOverlay(),
+        ],
+      ),
     );
-    if (picked != null) {
-      setState(() {
-        _selectedTime = DateTime(
-          now.year,
-          now.month,
-          now.day,
-          picked.hour,
-          picked.minute,
-        );
-      });
-    }
   }
 
-  void _pickMedia() {
+  // --- UI Components ---
+
+  Widget _buildHeaderIcon() => Center(
+    child: Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.1),
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(
+        Icons.emergency_share,
+        color: Colors.redAccent,
+        size: 40,
+      ),
+    ),
+  );
+
+  Widget _sectionTitle(String title) => Padding(
+    padding: const EdgeInsets.only(bottom: 12, left: 4),
+    child: Text(
+      title.toUpperCase(),
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        color: primaryBlue.withOpacity(0.6),
+        letterSpacing: 1.1,
+      ),
+    ),
+  );
+
+  Widget _buildKebeleDropdown() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: _inputDecoration(),
+      child: DropdownButtonFormField<String>(
+        value: _selectedKebeleId,
+        isExpanded: true,
+        hint: Text(
+          _isFetchingKebeles ? "Loading locations..." : "Select Kebele",
+        ),
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          icon: Icon(Icons.map_outlined, size: 20),
+        ),
+
+        // ✅ CRITICAL: Prevent .map() on null/empty via ternary
+        items: _kebeles.isEmpty
+            ? null
+            : _kebeles
+                  .map(
+                    (k) => DropdownMenuItem<String>(
+                      value: k['id']?.toString(),
+                      child: Text(k['name'] ?? "Unknown"),
+                    ),
+                  )
+                  .toList(),
+
+        onChanged: _isFetchingKebeles
+            ? null
+            : (val) => setState(() => _selectedKebeleId = val),
+      ),
+    );
+  }
+
+  Widget _buildInputField(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    TextInputType keyboard = TextInputType.text,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: _inputDecoration(),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboard,
+        decoration: InputDecoration(
+          icon: Icon(icon, size: 20, color: accentBlue),
+          hintText: label,
+          border: InputBorder.none,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextArea(TextEditingController controller, String hint) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _inputDecoration(),
+      child: TextField(
+        controller: controller,
+        maxLines: 4,
+        decoration: InputDecoration(hintText: hint, border: InputBorder.none),
+      ),
+    );
+  }
+
+  Widget _buildLocationPicker() {
+    bool hasLoc = _latitude != null;
+    return GestureDetector(
+      onTap: () async {
+        final res = await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MapPickerPage()),
+        );
+        if (res != null)
+          setState(() {
+            _latitude = res.latitude;
+            _longitude = res.longitude;
+          });
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: _inputDecoration(),
+        child: Row(
+          children: [
+            Icon(Icons.gps_fixed, color: hasLoc ? Colors.green : accentBlue),
+            const SizedBox(width: 12),
+            Text(
+              hasLoc ? "Location Pinned" : "Pin GPS Location",
+              style: TextStyle(color: hasLoc ? Colors.green : Colors.black87),
+            ),
+            const Spacer(),
+            if (hasLoc)
+              const Icon(Icons.check_circle, color: Colors.green, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMediaPicker() {
+    return GestureDetector(
+      onTap: _handleMediaSelection,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: _inputDecoration(),
+        child: Row(
+          children: [
+            Icon(
+              Icons.camera_alt_outlined,
+              color: _selectedFileName != null ? Colors.green : accentBlue,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _selectedFileName ?? "Upload Photo/Video",
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (_selectedFileName != null)
+              const Icon(Icons.check_circle, color: Colors.green, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubmitButton() => SizedBox(
+    width: double.infinity,
+    height: 56,
+    child: ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: primaryBlue,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 0,
+      ),
+      onPressed: _isLoading ? null : _submitReport,
+      child: const Text(
+        "SEND EMERGENCY REPORT",
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1,
+          color: Colors.white,
+        ),
+      ),
+    ),
+  );
+
+  BoxDecoration _inputDecoration() => BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(16),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.03),
+        blurRadius: 10,
+        offset: const Offset(0, 4),
+      ),
+    ],
+  );
+
+  Widget _buildLoadingOverlay() => Container(
+    color: Colors.black26,
+    child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+  );
+
+  // --- Actions ---
+
+  void _handleMediaSelection() {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => MediaPickerBottomSheet(
-        onFileSelectedWeb: (bytes, name) {
-          setState(() {
-            _selectedMediaBytes = bytes;
-            _selectedFileName = name;
-            _selectedFile = null;
-          });
-        },
-        onFileSelectedMobile: (file) {
-          setState(() {
-            _selectedFile = file;
-            _selectedFileName = file.path.split("/").last;
-            _selectedMediaBytes = null;
-          });
-        },
+        onFileSelectedWeb: (bytes, name) => setState(() {
+          _selectedMediaBytes = bytes;
+          _selectedFileName = name;
+          _selectedFile = null;
+        }),
+        onFileSelectedMobile: (file) => setState(() {
+          _selectedFile = file;
+          _selectedFileName = file.path.split("/").last;
+          _selectedMediaBytes = null;
+        }),
       ),
     );
   }
@@ -129,18 +396,18 @@ class _GuestEmergencyReportPageState extends State<GuestEmergencyReportPage> {
   Future<void> _submitReport() async {
     if (_descriptionController.text.isEmpty ||
         _phoneController.text.isEmpty ||
-        _kebeleController.text.isEmpty ||
-        _subdivisionController.text.isEmpty) {
-      _showSnack("Please fill in all required fields");
+        _selectedKebeleId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please fill all required fields")),
+      );
       return;
     }
 
     setState(() => _isLoading = true);
-
     try {
-      final result = await EmergencyService.createGuestEmergency(
+      final res = await EmergencyService.createGuestEmergency(
         contactNo: _phoneController.text,
-        kebele: _kebeleController.text,
+        kebele: _selectedKebeleId!,
         subdivision: _subdivisionController.text,
         street: _streetController.text,
         description: _descriptionController.text,
@@ -148,327 +415,31 @@ class _GuestEmergencyReportPageState extends State<GuestEmergencyReportPage> {
         categoryId: widget.categoryId,
         latitude: _latitude,
         longitude: _longitude,
-        time: _selectedTime != null
-            ? "${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}:00"
-            : null,
         mediaBytes: _selectedMediaBytes,
         mediaFile: _selectedFile,
         mediaName: _selectedFileName,
       );
 
-      final success = result['success'] ?? false;
-      _showSnack(
-        success ? "Report Sent Successfully" : "Failed to Send Report",
-        isError: !success,
-      );
-      if (success) Navigator.pop(context);
+      if (mounted) {
+        if (res['success'] == true) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Report Sent"),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          throw Exception("Failed");
+        }
+      }
     } catch (e) {
-      _showSnack("Error: $e", isError: true);
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to submit report")),
+        );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: lightBlueBg.withOpacity(0.5),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  topRight: Radius.circular(30),
-                ),
-              ),
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.all(24),
-                child: _buildForm(),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader() => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.only(top: 60, bottom: 30, left: 20, right: 20),
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        colors: [primaryBlue, accentBlue],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-    ),
-    child: Row(
-      children: [
-        GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.arrow_back_ios_new,
-              color: Colors.white,
-              size: 20,
-            ),
-          ),
-        ),
-        const SizedBox(width: 20),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.emergencyTypeName,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              Text(
-                widget.categoryName,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.8),
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _buildForm() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionHeader("Description"),
-        const SizedBox(height: 10),
-        _buildTextField(
-          _descriptionController,
-          "Explain what is happening...",
-          maxLines: 4,
-          icon: Icons.edit_note,
-        ),
-        const SizedBox(height: 24),
-
-        _sectionHeader("Contact & Location"),
-        const SizedBox(height: 10),
-        _buildTextField(
-          _phoneController,
-          "Contact Number",
-          icon: Icons.phone,
-          keyboard: TextInputType.phone,
-        ),
-        const SizedBox(height: 12),
-        _buildTextField(
-          _kebeleController,
-          "Kebele",
-          icon: Icons.maps_home_work,
-        ),
-        const SizedBox(height: 12),
-        _buildTextField(
-          _subdivisionController,
-          "Subdivision",
-          icon: Icons.business,
-        ),
-        const SizedBox(height: 12),
-        _buildTextField(
-          _streetController,
-          "Street (Optional)",
-          icon: Icons.add_road,
-        ),
-        const SizedBox(height: 24),
-
-        _sectionHeader("Time & GPS"),
-        const SizedBox(height: 10),
-        _buildPickerRow(
-          icon: Icons.access_time_filled,
-          label: "Report Time",
-          value: _selectedTime != null
-              ? "${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}"
-              : "Select Time",
-          onTap: _pickTime,
-        ),
-        const SizedBox(height: 12),
-        _buildPickerRow(
-          icon: Icons.my_location,
-          label: "Pin Location",
-          value: _latitude != null ? "Location Pinned" : "Tap to open map",
-          onTap: () async {
-            final pickedLocation = await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const MapPickerPage()),
-            );
-            if (pickedLocation != null) {
-              setState(() {
-                _latitude = pickedLocation.latitude;
-                _longitude = pickedLocation.longitude;
-              });
-            }
-          },
-        ),
-        const SizedBox(height: 24),
-
-        _sectionHeader("Evidence"),
-        const SizedBox(height: 10),
-        _buildPickerRow(
-          icon: Icons.cloud_upload,
-          label: "Media Attachment",
-          value: _selectedFileName ?? "Upload Photo/Video",
-          valueColor: _selectedFileName != null ? Colors.green : accentBlue,
-          onTap: _pickMedia,
-        ),
-        const SizedBox(height: 40),
-        _buildSubmitButton(),
-        const SizedBox(height: 40),
-      ],
-    );
-  }
-
-  Widget _sectionHeader(String title) => Text(
-    title.toUpperCase(),
-    style: TextStyle(
-      fontSize: 12,
-      fontWeight: FontWeight.w800,
-      color: primaryBlue.withOpacity(0.6),
-      letterSpacing: 1.5,
-    ),
-  );
-
-  Widget _buildTextField(
-    TextEditingController controller,
-    String hint, {
-    int maxLines = 1,
-    required IconData icon,
-    TextInputType keyboard = TextInputType.text,
-  }) => Container(
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(15),
-      boxShadow: [
-        BoxShadow(
-          color: primaryBlue.withOpacity(0.05),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    ),
-    child: TextField(
-      controller: controller,
-      maxLines: maxLines,
-      keyboardType: keyboard,
-      style: TextStyle(color: primaryBlue),
-      decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: accentBlue, size: 20),
-        hintText: hint,
-        hintStyle: TextStyle(color: Colors.blueGrey.withOpacity(0.5)),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
-      ),
-    ),
-  );
-
-  Widget _buildPickerRow({
-    required IconData icon,
-    required String label,
-    required String value,
-    Color? valueColor,
-    required VoidCallback onTap,
-  }) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(15),
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: primaryBlue.withOpacity(0.1)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: accentBlue),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(fontWeight: FontWeight.w600, color: primaryBlue),
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              color: valueColor ?? accentBlue,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Icon(Icons.chevron_right, color: primaryBlue.withOpacity(0.3)),
-        ],
-      ),
-    ),
-  );
-
-  Widget _buildSubmitButton() => Container(
-    width: double.infinity,
-    height: 60,
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(15),
-      boxShadow: [
-        BoxShadow(
-          color: primaryBlue.withOpacity(0.3),
-          blurRadius: 12,
-          offset: const Offset(0, 6),
-        ),
-      ],
-    ),
-    child: ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: primaryBlue,
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        elevation: 0,
-      ),
-      onPressed: _isLoading ? null : _submitReport,
-      child: _isLoading
-          ? const SizedBox(
-              height: 24,
-              width: 24,
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2,
-              ),
-            )
-          : const Text(
-              "SUBMIT REPORT",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-              ),
-            ),
-    ),
-  );
 }

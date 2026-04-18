@@ -8,12 +8,10 @@ import 'package:path/path.dart' as path;
 import 'package:mime/mime.dart';
 
 class EmergencyService {
+  // Use 10.0.2.2 for Android Emulator, or your actual IP for physical devices
   static const String baseUrl = "http://localhost:5000/api";
   static const String guestEmergencyEndpoint = "$baseUrl/emergencies/guests";
 
-  /// ------------------------
-  /// CREATE GUEST + REPORT EMERGENCY
-  /// ------------------------
   static Future<Map<String, dynamic>> createGuestEmergency({
     required String contactNo,
     required String kebele,
@@ -35,71 +33,95 @@ class EmergencyService {
         Uri.parse(guestEmergencyEndpoint),
       );
 
-      // Add basic fields
-      request.fields.addAll({
+      // 1. Map basic fields
+      final Map<String, String> fields = {
         "contactNo": contactNo,
         "kebele": kebele,
         "subdivision": subdivision,
-        if (street != null) "street": street,
-        if (description != null) "description": description,
         "emergencyTypeId": emergencyTypeId,
         "categoryId": categoryId,
         "time": time ?? DateTime.now().toIso8601String(),
-        if (latitude != null) "latitude": latitude.toString(),
-        if (longitude != null) "longitude": longitude.toString(),
-      });
+      };
 
-      String? detectedMediaType;
+      if (street != null) fields["street"] = street;
+      if (description != null) fields["description"] = description;
+      if (latitude != null) fields["latitude"] = latitude.toString();
+      if (longitude != null) fields["longitude"] = longitude.toString();
 
-      // MEDIA FOR WEB
-      if (kIsWeb && mediaBytes != null && mediaName != null) {
-        final mimeType =
-            lookupMimeType(mediaName) ?? 'application/octet-stream';
-        final split = mimeType.split('/');
-        detectedMediaType = split.first == "video" ? "video" : "photo";
-        request.fields['mediaType'] = detectedMediaType;
+      request.fields.addAll(fields);
 
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'media',
-            mediaBytes,
-            filename: mediaName,
-            contentType: MediaType(split[0], split[1]),
-          ),
-        );
+      // 2. Handle Media (Web vs Mobile)
+      if (kIsWeb) {
+        if (mediaBytes != null && mediaName != null) {
+          _addMultipartFileWeb(request, mediaBytes, mediaName);
+        }
+      } else {
+        if (mediaFile != null) {
+          await _addMultipartFileMobile(request, mediaFile);
+        }
       }
 
-      // MEDIA FOR MOBILE
-      if (!kIsWeb && mediaFile != null) {
-        final fileName = path.basename(mediaFile.path);
-        final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
-        final split = mimeType.split('/');
-        detectedMediaType = split.first == "video" ? "video" : "photo";
-        request.fields['mediaType'] = detectedMediaType;
-
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'media',
-            mediaFile.path,
-            contentType: MediaType(split[0], split[1]),
-          ),
-        );
-      }
-
-      final streamedResponse = await request.send();
+      // 3. Send Request
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 30),
+      );
       final response = await http.Response.fromStream(streamedResponse);
 
-      print("HTTP Status: ${response.statusCode}");
-      print("Response Body: ${response.body}");
+      debugPrint("Emergency Report Status: ${response.statusCode}");
 
-      if (response.statusCode == 201) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        return {"success": true, "data": decoded};
       } else {
-        throw Exception("Failed to create guest emergency: ${response.body}");
+        return {
+          "success": false,
+          "message": "Server returned ${response.statusCode}: ${response.body}",
+        };
       }
     } catch (e) {
-      print("createGuestEmergency Error: $e");
-      rethrow;
+      debugPrint("createGuestEmergency Exception: $e");
+      return {"success": false, "message": e.toString()};
     }
+  }
+
+  // Helper for Web File Uploads
+  static void _addMultipartFileWeb(
+    http.MultipartRequest request,
+    Uint8List bytes,
+    String fileName,
+  ) {
+    final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
+    final split = mimeType.split('/');
+
+    request.fields['mediaType'] = split.first == "video" ? "video" : "photo";
+
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'media',
+        bytes,
+        filename: fileName,
+        contentType: MediaType(split[0], split[1]),
+      ),
+    );
+  }
+
+  // Helper for Mobile File Uploads
+  static Future<void> _addMultipartFileMobile(
+    http.MultipartRequest request,
+    File file,
+  ) async {
+    final fileName = path.basename(file.path);
+    final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
+    final split = mimeType.split('/');
+
+    request.fields['mediaType'] = split.first == "video" ? "video" : "photo";
+
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'media',
+        file.path,
+        contentType: MediaType(split[0], split[1]),
+      ),
+    );
   }
 }
