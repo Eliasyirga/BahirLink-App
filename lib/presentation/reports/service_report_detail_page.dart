@@ -1,67 +1,97 @@
 import 'package:flutter/material.dart';
 import '../../services/service_report_service.dart';
+import '../../services/kebele_service.dart';
+import '../chat/chat_page.dart'; // Ensure this path is correct
 
 class ServiceReportDetailPage extends StatelessWidget {
   final dynamic service;
 
   const ServiceReportDetailPage({super.key, required this.service});
 
-  // Helper to safely convert dynamic values to String
-  String safe(dynamic v) => v?.toString() ?? 'N/A';
+  // Fetch the real name by matching the ID from your service
+  Future<String> _getKebeleName() async {
+    try {
+      final String? targetId =
+          service['kebeleId']?.toString() ?? service['kebele']?.toString();
+      if (targetId == null) return "Unknown Kebele";
+
+      final List<Map<String, dynamic>> kebeles = await KebeleService()
+          .getAllKebeles();
+
+      final match = kebeles.firstWhere(
+        (k) =>
+            k['id'].toString() == targetId || k['_id'].toString() == targetId,
+        orElse: () => {},
+      );
+
+      return match['name']?.toString() ?? "Kebele $targetId";
+    } catch (e) {
+      debugPrint("Lookup Error: $e");
+      return "Kebele ${service['kebeleId'] ?? 'N/A'}";
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Refined Blue & White Palette for high-end engineering brand
     const Color primaryBlue = Color(0xFF1E40AF);
     const Color accentBlue = Color(0xFF3B82F6);
     const Color softBlueBG = Color(0xFFF0F7FF);
     const Color slate900 = Color(0xFF0F172A);
 
-    // ✅ EXTRACT KEBELE DATA (matching your provided example logic)
-    String kebeleName = 'N/A';
-    final dynamic k = service['kebele'];
-    if (k != null) {
-      kebeleName = k is Map ? (k['name'] ?? 'N/A') : k.toString();
-    }
-
-    final String type = safe(
-      service['serviceType']?['name'] ?? "General Service",
-    );
-    final String category = safe(
-      service['serviceCategory']?['name'] ?? "Public Service",
-    );
-    final String status = safe(service['status'] ?? 'Pending').toUpperCase();
-    final String street = safe(service['street']);
-    final String dateStr =
-        service['createdAt']?.toString().split('T')[0] ?? "N/A";
-
-    // Resolve the full URL
+    final String type = service['serviceType']?['name'] ?? "General Service";
+    final String category =
+        service['serviceCategory']?['name'] ?? "Public Utility";
+    final String status = (service['status'] ?? 'Pending')
+        .toString()
+        .toUpperCase();
     final String fullImageUrl = ServiceReportService.getFullImageUrl(
       service['mediaUrl'],
     );
+    final String dateStr =
+        service['createdAt']?.toString().split('T')[0] ?? "N/A";
+    final String street = service['street'] ?? "Not provided";
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          "REPORT OVERVIEW",
+          "REPORT SUMMARY",
           style: TextStyle(
             fontWeight: FontWeight.w900,
-            fontSize: 14,
+            fontSize: 13,
             letterSpacing: 1.5,
           ),
         ),
         centerTitle: true,
-        elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: primaryBlue,
+        elevation: 0,
       ),
+
+      // ✅ ADDED CHAT FLOATING ACTION BUTTON
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  ChatPage(emergencyId: service['_id'].toString()),
+            ),
+          );
+        },
+        backgroundColor: accentBlue,
+        elevation: 4,
+        child: const Icon(
+          Icons.chat_bubble_outline_rounded,
+          color: Colors.white,
+        ),
+      ),
+
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. IMAGE HEADER
             _buildImageHeader(fullImageUrl, softBlueBG),
 
             Padding(
@@ -69,32 +99,32 @@ class ServiceReportDetailPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 2. STATUS & CATEGORY CHIPS
-                  Row(
-                    children: [
-                      _badge(status, _getStatusColor(status)),
-                      const SizedBox(width: 8),
-                      _badge(category, primaryBlue),
-                    ],
-                  ),
+                  _statusRow(status, category, primaryBlue),
                   const SizedBox(height: 20),
 
-                  // 3. PRIMARY KEBELE HEADING
-                  Text(
-                    kebeleName.toUpperCase(),
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      color: slate900,
-                      letterSpacing: -0.5,
-                    ),
+                  // DYNAMIC KEBELE NAME
+                  FutureBuilder<String>(
+                    future: _getKebeleName(),
+                    builder: (context, snapshot) {
+                      return Text(
+                        snapshot.data ?? "Loading...",
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          color: slate900,
+                          letterSpacing: -0.8,
+                        ),
+                      );
+                    },
                   ),
+
                   Text(
-                    type,
+                    type.toUpperCase(),
                     style: TextStyle(
                       color: accentBlue.withOpacity(0.8),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      letterSpacing: 1.2,
                     ),
                   ),
 
@@ -103,11 +133,11 @@ class ServiceReportDetailPage extends StatelessWidget {
                     child: Divider(color: softBlueBG, thickness: 2),
                   ),
 
-                  // 4. DESCRIPTION
-                  _sectionHeader("DESCRIPTION", primaryBlue),
+                  _sectionLabel("ISSUE DESCRIPTION"),
                   const SizedBox(height: 12),
                   Text(
-                    safe(service['description']),
+                    service['description'] ??
+                        "No additional information provided.",
                     style: const TextStyle(
                       fontSize: 16,
                       height: 1.6,
@@ -116,33 +146,31 @@ class ServiceReportDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 32),
 
-                  // 5. LOCATION CARD (Kebele Focus)
-                  _sectionHeader("LOCATION DETAILS", primaryBlue),
+                  // ✅ ADDITIONAL INFORMATION CARDS
+                  _sectionLabel("REPORT DETAILS"),
                   const SizedBox(height: 12),
-                  _locationCard(kebeleName, street, primaryBlue, softBlueBG),
+                  _infoCard([
+                    _infoTile(
+                      Icons.location_on_rounded,
+                      "STREET",
+                      street,
+                      primaryBlue,
+                    ),
+                    _infoTile(
+                      Icons.calendar_today_rounded,
+                      "DATE REPORTED",
+                      dateStr,
+                      primaryBlue,
+                    ),
+                    _infoTile(
+                      Icons.verified_user_outlined,
+                      "SYSTEM STATUS",
+                      "Official Report",
+                      primaryBlue,
+                    ),
+                  ], softBlueBG),
 
-                  const SizedBox(height: 24),
-
-                  // 6. DATE INFO
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.calendar_today_rounded,
-                        size: 16,
-                        color: Colors.blueGrey,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        "Submitted on $dateStr",
-                        style: const TextStyle(
-                          color: Colors.blueGrey,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 80), // Space for FAB
                 ],
               ),
             ),
@@ -152,7 +180,7 @@ class ServiceReportDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _locationCard(String kebele, String street, Color primary, Color bg) {
+  Widget _infoCard(List<Widget> children, Color bg) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -160,39 +188,37 @@ class ServiceReportDetailPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.blue.shade100),
       ),
+      child: Column(children: children),
+    );
+  }
+
+  Widget _infoTile(IconData icon, String label, String value, Color primary) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
         children: [
-          Icon(Icons.location_on_rounded, color: primary, size: 28),
+          Icon(icon, color: primary, size: 20),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "BAHIR DAR",
-                  style: TextStyle(
+                  label,
+                  style: const TextStyle(
                     fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.blue.shade300,
-                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blueGrey,
                   ),
                 ),
                 Text(
-                  kebele,
+                  value,
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: primary,
+                    color: primary.withOpacity(0.9),
                   ),
                 ),
-                if (street != 'N/A')
-                  Text(
-                    street,
-                    style: TextStyle(
-                      color: Colors.blueGrey.shade600,
-                      fontSize: 14,
-                    ),
-                  ),
               ],
             ),
           ),
@@ -201,69 +227,67 @@ class ServiceReportDetailPage extends StatelessWidget {
     );
   }
 
+  Widget _statusRow(String status, String cat, Color primary) {
+    return Row(
+      children: [
+        _chip(status, status == 'COMPLETED' ? Colors.teal : Colors.orange),
+        const SizedBox(width: 8),
+        _chip(cat, primary),
+      ],
+    );
+  }
+
+  Widget _chip(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w900,
+          fontSize: 10,
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String text) => Text(
+    text,
+    style: const TextStyle(
+      color: Colors.blueGrey,
+      fontWeight: FontWeight.w900,
+      fontSize: 11,
+      letterSpacing: 1.2,
+    ),
+  );
+
   Widget _buildImageHeader(String url, Color bg) {
     return Container(
       width: double.infinity,
       height: 260,
       margin: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(30),
         color: bg,
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(30),
         child: url.isNotEmpty && url.startsWith('http')
             ? Image.network(
                 url,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stack) => _placeholderIcon(),
+                errorBuilder: (c, e, s) => const Icon(
+                  Icons.broken_image_outlined,
+                  color: Colors.blue,
+                  size: 40,
+                ),
               )
-            : _placeholderIcon(),
+            : const Icon(Icons.image_outlined, color: Colors.blue, size: 40),
       ),
     );
-  }
-
-  Widget _placeholderIcon() {
-    return const Center(
-      child: Icon(Icons.image_outlined, size: 48, color: Colors.blue),
-    );
-  }
-
-  Widget _badge(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w900,
-          fontSize: 10,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-
-  Widget _sectionHeader(String title, Color color) {
-    return Text(
-      title,
-      style: TextStyle(
-        color: color,
-        fontWeight: FontWeight.w900,
-        fontSize: 11,
-        letterSpacing: 1.5,
-      ),
-    );
-  }
-
-  Color _getStatusColor(String status) {
-    if (status.contains('COMPLETED')) return Colors.teal;
-    if (status.contains('REJECTED')) return Colors.red;
-    if (status.contains('PENDING')) return Colors.orange;
-    return Colors.blueGrey;
   }
 }
