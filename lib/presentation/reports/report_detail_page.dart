@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/reports_service.dart';
+// Ensure this import path is correct for your project structure
+import '../chat/chat_page.dart';
 
 class ReportDetailsPage extends StatefulWidget {
   final Map<String, dynamic> emergency;
@@ -20,7 +22,11 @@ class ReportDetailsPage extends StatefulWidget {
 }
 
 class _ReportDetailsPageState extends State<ReportDetailsPage> {
-  static const Color primaryBlue = Color(0xFF0D47A1);
+  // Refined Blue & White Palette
+  static const Color primaryBlue = Color(0xFF1E40AF); // Deep Tactical Blue
+  static const Color accentBlue = Color(0xFF3B82F6); // Bright Action Blue
+  static const Color softBlueBG = Color(0xFFF0F7FF); // Clean Background Blue
+  static const Color slate900 = Color(0xFF0F172A);
 
   File? _mediaFile;
   Uint8List? _webBytes;
@@ -36,90 +42,141 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
     ).toLowerCase().contains('critical');
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: Colors.white,
+      // Floating Chat Button
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatPage(emergencyId: safe(e['id'])),
+            ),
+          );
+        },
+        backgroundColor: accentBlue,
+        elevation: 4,
+        child: const Icon(
+          Icons.chat_bubble_outline_rounded,
+          color: Colors.white,
+        ),
+      ),
       body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
         slivers: [
-          // 1. IMAGE HEADER
+          // 1. DYNAMIC HEADER (Image Area)
           SliverAppBar(
-            expandedHeight: 250,
+            expandedHeight: 280,
             pinned: true,
+            stretch: true,
             backgroundColor: primaryBlue,
-            leading: IconButton(
-              icon: const CircleAvatar(
+            leading: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: CircleAvatar(
                 backgroundColor: Colors.black26,
-                child: Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                child: IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ),
-              onPressed: () => Navigator.pop(context),
             ),
             flexibleSpace: FlexibleSpaceBar(
-              background: _buildHeroImage(e['mediaUrl']),
+              stretchModes: const [StretchMode.zoomBackground],
+              background: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _buildHeroImage(e['mediaUrl']),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black26,
+                          Colors.transparent,
+                          Colors.black54,
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
 
-          // 2. DETAILS BODY
+          // 2. INFORMATION BODY
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _badge(
-                        safe(e['typeName']),
-                        isCritical ? Colors.red : primaryBlue,
-                      ),
-                      _badge(status, _getStatusColor(status)),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    safe(e['categoryName']),
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B),
+            child: Container(
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Status Badges
+                    Row(
+                      children: [
+                        _badge(
+                          safe(e['typeName']),
+                          isCritical ? Colors.red.shade700 : primaryBlue,
+                        ),
+                        const SizedBox(width: 8),
+                        _badge(status, _getStatusColor(status)),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.access_time,
-                        size: 14,
-                        color: Colors.grey[600],
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        safe(e['time']),
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 40),
+                    const SizedBox(height: 20),
 
-                  _sectionHeader("DESCRIPTION"),
-                  Text(
-                    safe(e['description']),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      height: 1.5,
-                      color: Color(0xFF475569),
+                    // Title
+                    Text(
+                      safe(e['categoryName']),
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: slate900,
+                        letterSpacing: -0.5,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Incident reported at ${safe(e['time'])}",
+                      style: TextStyle(
+                        color: Colors.blueGrey.shade400,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
 
-                  // LOCATION SECTION (Kebele name only - Lat/Long hidden)
-                  _locationCard(e),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Divider(color: softBlueBG, thickness: 2),
+                    ),
 
-                  const SizedBox(height: 32),
+                    _sectionHeader("DESCRIPTION"),
+                    const SizedBox(height: 12),
+                    Text(
+                      safe(e['description']),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        height: 1.5,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
 
-                  // ACTIONS
-                  _actionButtons(safe(e['id'])),
-                  const SizedBox(height: 40),
-                ],
+                    _sectionHeader("LOCATION"),
+                    const SizedBox(height: 12),
+                    _locationCard(e),
+
+                    const SizedBox(height: 40),
+
+                    // Actions
+                    _actionButtons(safe(e['id'])),
+                    const SizedBox(height: 60), // Extra space for FAB
+                  ],
+                ),
               ),
             ),
           ),
@@ -128,10 +185,9 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
     );
   }
 
-  // --- UI COMPONENTS ---
+  // --- UI WIDGETS ---
 
   Widget _locationCard(Map<String, dynamic> e) {
-    // Extracting name only from the kebele object
     String kebeleName = 'N/A';
     if (e['kebele'] != null) {
       kebeleName = e['kebele'] is Map
@@ -142,50 +198,35 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: softBlueBG,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.blue.shade100),
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.location_on, color: primaryBlue),
-          ),
+          const Icon(Icons.location_on_rounded, color: primaryBlue, size: 24),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  "KEBELE",
+                Text(
+                  "BAHIR DAR, KEBELE",
                   style: TextStyle(
                     fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                    letterSpacing: 1,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.blue.shade300,
+                    letterSpacing: 1.2,
                   ),
                 ),
                 Text(
                   kebeleName,
                   style: const TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1E293B),
+                    fontWeight: FontWeight.bold,
+                    color: primaryBlue,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-                // Note: Lat/Long data exists in the 'e' map, but we simply don't build widgets for them here.
               ],
             ),
           ),
@@ -198,75 +239,41 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
     return Row(
       children: [
         Expanded(
-          flex: 2,
           child: ElevatedButton.icon(
             onPressed: () => _showEditDialog(id),
-            icon: const Icon(Icons.edit_note, size: 20),
-            label: const Text("Edit Details"),
+            icon: const Icon(Icons.edit_rounded, size: 18),
+            label: const Text("UPDATE DETAILS"),
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryBlue,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              textStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
               ),
             ),
           ),
         ),
         const SizedBox(width: 12),
-        // CLEAR LOCALLY BUTTON
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.orange.shade50,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: IconButton(
-            onPressed: () => _confirmLocalClear(id),
-            icon: const Icon(
-              Icons.visibility_off_outlined,
-              color: Colors.orange,
+        IconButton.filledTonal(
+          onPressed: () => _confirmLocalClear(id),
+          icon: const Icon(Icons.archive_outlined),
+          style: IconButton.styleFrom(
+            backgroundColor: Colors.blue.shade50,
+            foregroundColor: accentBlue,
+            padding: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
             ),
-            tooltip: "Hide from phone",
-            padding: const EdgeInsets.all(14),
           ),
         ),
       ],
     );
   }
-
-  // --- LOGIC: HIDE FROM PHONE ---
-
-  void _confirmLocalClear(String id) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text("Hide Report?"),
-        content: const Text(
-          "This removes the report from your screen locally. It will not be deleted from the server.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx); // Close dialog
-              Navigator.pop(
-                context,
-                id,
-              ); // Close page & pass ID back to list to hide it
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            child: const Text("Hide Now"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- HELPER METHODS ---
 
   Widget _badge(String text, Color color) {
     return Container(
@@ -274,30 +281,27 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Text(
-        text,
+        text.toUpperCase(),
         style: TextStyle(
           color: color,
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
+          fontWeight: FontWeight.w900,
+          fontSize: 10,
+          letterSpacing: 0.8,
         ),
       ),
     );
   }
 
   Widget _sectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: primaryBlue,
-          fontWeight: FontWeight.w900,
-          fontSize: 12,
-          letterSpacing: 1.2,
-        ),
+    return Text(
+      title,
+      style: const TextStyle(
+        color: primaryBlue,
+        fontWeight: FontWeight.w900,
+        fontSize: 11,
+        letterSpacing: 1.5,
       ),
     );
   }
@@ -306,6 +310,7 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
     if (kIsWeb && _webBytes != null)
       return Image.memory(_webBytes!, fit: BoxFit.cover);
     if (_mediaFile != null) return Image.file(_mediaFile!, fit: BoxFit.cover);
+
     if (mediaUrl != null && mediaUrl.isNotEmpty) {
       final url = mediaUrl.startsWith('http')
           ? mediaUrl
@@ -321,15 +326,52 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
 
   Widget _imagePlaceholder() {
     return Container(
-      color: Colors.blueGrey[100],
-      child: const Icon(Icons.image, size: 50, color: Colors.white),
+      color: softBlueBG,
+      child: const Icon(
+        Icons.image_not_supported_outlined,
+        size: 50,
+        color: Colors.blue,
+      ),
     );
   }
 
   Color _getStatusColor(String status) {
-    if (status.contains('RESOLVED')) return Colors.green;
+    if (status.contains('RESOLVED')) return Colors.teal;
     if (status.contains('PENDING')) return Colors.orange;
     return Colors.blueGrey;
+  }
+
+  void _confirmLocalClear(String id) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Archive Report?",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          "Hide this report from your current tactical view?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Keep"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pop(context, id);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue.shade50,
+              foregroundColor: primaryBlue,
+            ),
+            child: const Text("Archive"),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showEditDialog(String id) {
@@ -344,18 +386,22 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Edit Report"),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Update Information",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _field("Kebele", kebeleC),
-            _field("Description", descC, maxLines: 3),
+            _field("Operational Kebele", kebeleC),
+            _field("Description Update", descC, maxLines: 4),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
+            child: const Text("Discard"),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -366,33 +412,31 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
                 Navigator.pop(context, true);
               }
             },
-            child: const Text("Save"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryBlue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text("Confirm Changes"),
           ),
         ],
       ),
     );
   }
 
-  void _pickMedia() async {
-    final p = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (p != null) {
-      if (kIsWeb)
-        _webBytes = await p.readAsBytes();
-      else
-        _mediaFile = File(p.path);
-      setState(() {});
-    }
-  }
-
   Widget _field(String label, TextEditingController c, {int maxLines = 1}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 16),
       child: TextField(
         controller: c,
         maxLines: maxLines,
         decoration: InputDecoration(
           labelText: label,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          filled: true,
+          fillColor: softBlueBG,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
         ),
       ),
     );

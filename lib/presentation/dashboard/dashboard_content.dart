@@ -112,7 +112,7 @@ class _DashboardContentState extends State<DashboardContent> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading)
+    if (_isLoading) {
       return const Scaffold(
         backgroundColor: Colors.white,
         body: Center(
@@ -122,10 +122,10 @@ class _DashboardContentState extends State<DashboardContent> {
           ),
         ),
       );
+    }
 
     return Scaffold(
-      backgroundColor:
-          _kBgSoft, // Use a very soft gray background to make the white cards pop
+      backgroundColor: _kBgSoft,
       appBar: _buildSuperAppHeader(),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -141,7 +141,7 @@ class _DashboardContentState extends State<DashboardContent> {
             const SizedBox(height: 16),
             _sectionLabel("Public Services"),
             _buildGrid(_serviceTypes, false),
-            const SizedBox(height: 40),
+            const SizedBox(height: 80),
           ],
         ),
       ),
@@ -323,11 +323,9 @@ class _DashboardContentState extends State<DashboardContent> {
           },
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white, // White background for the box
+              color: Colors.white,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: _kPrimaryBlue.withOpacity(0.08),
-              ), // Subtle blue border
+              border: Border.all(color: _kPrimaryBlue.withOpacity(0.08)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.02),
@@ -349,7 +347,7 @@ class _DashboardContentState extends State<DashboardContent> {
                     isEmergency
                         ? Icons.emergency_rounded
                         : Icons.account_balance_rounded,
-                    color: _kPrimaryBlue, // Blue icon
+                    color: _kPrimaryBlue,
                     size: 20,
                   ),
                 ),
@@ -364,7 +362,7 @@ class _DashboardContentState extends State<DashboardContent> {
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                       color: _kPrimaryBlue,
-                    ), // Blue text
+                    ),
                   ),
                 ),
               ],

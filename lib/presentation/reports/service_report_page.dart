@@ -4,7 +4,6 @@ import 'service_report_detail_page.dart';
 
 class ServiceReportPage extends StatefulWidget {
   final String userId;
-
   const ServiceReportPage({super.key, required this.userId});
 
   @override
@@ -15,253 +14,281 @@ class _ServiceReportPageState extends State<ServiceReportPage> {
   final ServiceReportService _apiService = ServiceReportService();
   late Future<List<dynamic>> _servicesFuture;
 
-  // Colors
+  // Modern Color Palette
   final Color primaryBlue = const Color(0xFF0D47A1);
-  final Color bgGrey = const Color(0xFFF8FAFF);
+  final Color accentBlue = const Color(0xFFE3F2FD);
+  final Color bgGrey = const Color(0xFFF1F5F9);
 
   @override
   void initState() {
     super.initState();
-    _servicesFuture = _apiService.getUserServices(widget.userId);
+    _refreshData();
+  }
+
+  void _refreshData() {
+    setState(() {
+      _servicesFuture = _apiService.getUserServices(widget.userId);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: bgGrey,
-      appBar: AppBar(
-        title: const Text(
-          "Service Reports",
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22),
-        ),
-        centerTitle: false,
-        backgroundColor: Colors.transparent,
-        foregroundColor: primaryBlue,
-        elevation: 0,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0),
-            child: CircleAvatar(
-              backgroundColor: Colors.white,
-              child: IconButton(
-                icon: Icon(Icons.refresh, color: primaryBlue, size: 20),
-                onPressed: () => setState(() {
-                  _servicesFuture = _apiService.getUserServices(widget.userId);
-                }),
-              ),
-            ),
+      body: RefreshIndicator(
+        onRefresh: () async => _refreshData(),
+        color: primaryBlue,
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
           ),
-        ],
-      ),
-      body: FutureBuilder<List<dynamic>>(
-        future: _servicesFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator(color: primaryBlue));
-          } else if (snapshot.hasError) {
-            return _buildErrorState(snapshot.error.toString());
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return _buildEmptyState();
-          }
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 100.0,
+              floating: false,
+              pinned: true,
+              elevation: 0,
+              backgroundColor: bgGrey,
+              flexibleSpace: FlexibleSpaceBar(
+                titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
+                title: Text(
+                  "Service Reports",
+                  style: TextStyle(
+                    color: primaryBlue,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 20,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ),
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 16, top: 8),
+                  child: IconButton(
+                    icon: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.refresh_rounded,
+                        color: primaryBlue,
+                        size: 20,
+                      ),
+                    ),
+                    onPressed: _refreshData,
+                  ),
+                ),
+              ],
+            ),
+            FutureBuilder<List<dynamic>>(
+              future: _servicesFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SliverFillRemaining(
+                    child: Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                }
 
-          final services = snapshot.data!;
-          return ListView.builder(
-            padding: const EdgeInsets.all(20),
-            itemCount: services.length,
-            itemBuilder: (context, index) => _buildModernCard(services[index]),
-          );
-        },
+                if (snapshot.hasError) {
+                  return SliverToBoxAdapter(
+                    child: _buildErrorState(snapshot.error.toString()),
+                  );
+                }
+
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return SliverFillRemaining(child: _buildEmptyState());
+                }
+
+                final services = snapshot.data!;
+                return SliverPadding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => _buildModernCard(services[index]),
+                      childCount: services.length,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildModernCard(dynamic service) {
-    // Handling nested data from your Sequelize include
-    String type = service['ServiceType']?['name'] ?? "General Service";
-    String category = service['ServiceCategory']?['name'] ?? "Uncategorized";
-    String status = (service['status'] ?? 'Pending').toUpperCase();
-    String date = service['createdAt']?.toString().substring(0, 10) ?? "N/A";
+    // Map data carefully with fallbacks
+    final typeName = service['serviceType']?['name'] ?? "General Service";
+    final categoryName =
+        service['serviceCategory']?['name'] ?? "Public Service";
+    final status = (service['status'] ?? 'Pending').toString().toUpperCase();
 
-    return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ServiceReportDetailPage(service: service),
-        ),
+    // Format Date string
+    String dateStr = "N/A";
+    if (service['createdAt'] != null) {
+      DateTime dt = DateTime.parse(service['createdAt']);
+      dateStr = "${dt.day}/${dt.month}/${dt.year}";
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: primaryBlue.withOpacity(0.06),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ServiceReportDetailPage(service: service),
             ),
-          ],
-        ),
-        child: Column(
-          children: [
-            // Top Bar: Icon and Status
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: primaryBlue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.analytics_rounded,
-                      color: primaryBlue,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      type,
-                      style: TextStyle(
-                        color: primaryBlue,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
                       ),
-                    ),
-                  ),
-                  _statusChip(status),
-                ],
-              ),
-            ),
-
-            // Middle section: Category and Label
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Divider(color: Colors.grey.withOpacity(0.1), thickness: 1),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "CATEGORY",
+                      decoration: BoxDecoration(
+                        color: accentBlue,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        categoryName.toUpperCase(),
                         style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
+                          color: primaryBlue,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        category,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
+                    ),
+                    _statusChip(status),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  typeName,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      const Text(
-                        "DATE",
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        date,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.access_time_rounded,
+                      size: 14,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      dateStr,
+                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 12,
+                      color: Colors.grey[300],
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
   Widget _statusChip(String status) {
-    Color color;
-    if (status == 'COMPLETED')
-      color = const Color(0xFF43A047);
-    else if (status == 'REJECTED')
-      color = const Color(0xFFE53935);
-    else
-      color = const Color(0xFFFB8C00);
+    Color color = const Color(0xFFF59E0B); // Default Amber
+    if (status == 'COMPLETED') color = const Color(0xFF10B981);
+    if (status == 'REJECTED') color = const Color(0xFFEF4444);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         status,
         style: TextStyle(
           color: color,
-          fontSize: 11,
+          fontSize: 9,
           fontWeight: FontWeight.w900,
         ),
       ),
     );
   }
 
-  // State Builders (Empty/Error)
   Widget _buildEmptyState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.layers_clear_outlined,
-            size: 70,
-            color: primaryBlue.withOpacity(0.2),
+            Icons.inventory_2_outlined,
+            size: 64,
+            color: primaryBlue.withOpacity(0.1),
           ),
           const SizedBox(height: 16),
-          const Text(
-            "No active reports",
-            style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
-          ),
+          const Text("No reports found", style: TextStyle(color: Colors.grey)),
         ],
       ),
     );
   }
 
   Widget _buildErrorState(String error) {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.all(20),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.red[50],
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          "Connection error. Check if backend is running.",
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.red[900]),
-        ),
+    return Container(
+      padding: const EdgeInsets.all(40),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Colors.redAccent,
+            size: 40,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            "Fetch Failed",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            error,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ],
       ),
     );
   }
