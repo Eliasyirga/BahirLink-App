@@ -33,7 +33,6 @@ class _DashboardContentState extends State<DashboardContent> {
   Timer? _sliderTimer;
   int _currentIdx = 0;
 
-  // Premium Super App Palette
   static const Color _kPrimaryBlue = Color(0xFF1E40AF);
   static const Color _kAccentBlue = Color(0xFF3B82F6);
   static const Color _kBgSoft = Color(0xFFF8FAFC);
@@ -95,8 +94,18 @@ class _DashboardContentState extends State<DashboardContent> {
 
   Future<void> _fetchEmergencyTypes() async =>
       _emergencyTypes = await EmergencyTypeService.fetchEmergencyTypes();
-  Future<void> _fetchCases() async =>
-      _cases = await CaseService.getAllCases() ?? [];
+
+  Future<void> _fetchCases() async {
+    final fetchedCases = await CaseService.getAllCases() ?? [];
+    setState(() {
+      // FIX: Filter out cases with status 'rejected' or 'resolved'
+      _cases = fetchedCases.where((c) {
+        final status = (c['status'] ?? '').toString().toLowerCase();
+        return status != 'rejected' && status != 'resolved';
+      }).toList();
+    });
+  }
+
   Future<void> _fetchServiceTypes() async {
     final response = await http.get(
       Uri.parse("http://localhost:5000/api/serviceType"),
@@ -133,8 +142,10 @@ class _DashboardContentState extends State<DashboardContent> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 12),
-            _sectionLabel("Live Reports"),
-            _buildCaseSlider(),
+            if (_cases.isNotEmpty) ...[
+              _sectionLabel("Live Reports"),
+              _buildCaseSlider(),
+            ],
             const SizedBox(height: 16),
             _sectionLabel("Emergency Assist"),
             _buildGrid(_emergencyTypes, true),
