@@ -12,6 +12,12 @@ class CaseReportPage extends StatefulWidget {
 }
 
 class _CaseReportPageState extends State<CaseReportPage> {
+  // Static constants fix the "withOpacity on undefined" JS error
+  static const Color _primaryBlue = Color(0xFF2B7CFF);
+  static const Color _darkSlate = Color(0xFF0F172A);
+  static const Color _bgSlate = Color(0xFFF8FAFC);
+  static const Color _borderGray = Color(0xFFE2E8F0);
+
   final _descriptionController = TextEditingController();
   final KebeleService _kebeleService = KebeleService();
   final CaseReportService _reportService = CaseReportService();
@@ -29,35 +35,45 @@ class _CaseReportPageState extends State<CaseReportPage> {
     _loadKebeles();
   }
 
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadKebeles() async {
     try {
       final data = await _kebeleService.getAllKebeles();
-      setState(() {
-        _kebeles = data;
-        _isLoadingKebeles = false;
-      });
+      if (mounted) {
+        setState(() {
+          _kebeles = data;
+          _isLoadingKebeles = false;
+        });
+      }
     } catch (e) {
-      setState(() => _isLoadingKebeles = false);
-      _showSnackBar("Failed to load locations");
+      if (mounted) {
+        setState(() => _isLoadingKebeles = false);
+        _triggerNotification("Failed to fetch location data", isError: true);
+      }
     }
   }
 
   Future<void> _pickDateTime() async {
-    final date = await showDatePicker(
+    final DateTime? date = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
-      firstDate: DateTime(2024),
+      firstDate: DateTime(2025),
       lastDate: DateTime.now(),
       builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.light(primary: Color(0xFF2B7CFF)),
-        ),
+        data: Theme.of(
+          context,
+        ).copyWith(colorScheme: const ColorScheme.light(primary: _primaryBlue)),
         child: child!,
       ),
     );
     if (date == null) return;
 
-    final time = await showTimePicker(
+    final TimeOfDay? time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
     );
@@ -74,42 +90,68 @@ class _CaseReportPageState extends State<CaseReportPage> {
     });
   }
 
-  Future<void> _submitReport() async {
+  Future<void> _handleSubmission() async {
     if (_selectedKebeleId == null || _selectedDateTime == null) {
-      _showSnackBar("Please fill in the location and time.");
+      _triggerNotification("Please select both location and time");
       return;
     }
 
     setState(() => _isSubmitting = true);
+
     final payload = {
       "caseId": widget.caseData['id'],
       "caseTypeId": widget.caseData['caseTypeId'],
       "kebeleId": _selectedKebeleId,
       "spottedAt": _selectedDateTime!.toIso8601String(),
       "description": _descriptionController.text,
-      "reporterId": null,
+      "reporterId": null, // Anonymous or profile-linked
     };
 
-    final success = await _reportService.createReport(payload);
+    final bool success = await _reportService.createReport(payload);
 
     if (mounted) {
       setState(() => _isSubmitting = false);
+
       if (success) {
-        _showSnackBar("Report submitted successfully!", isError: false);
+        // 1. Capture the messenger state before the widget is disposed by pop()
+        final messenger = ScaffoldMessenger.of(context);
+
+        // 2. Unfocus keyboard to prevent layout flicker
+        FocusScope.of(context).unfocus();
+
+        // 3. Pop the current page
         Navigator.pop(context);
+
+        // 4. Delay the notification slightly so the animation runs on the NEW stable tree
+        Future.delayed(const Duration(milliseconds: 100), () {
+          messenger.showSnackBar(
+            SnackBar(
+              content: const Text("Sighting submitted successfully"),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: Colors.green.shade800,
+              margin: const EdgeInsets.all(20),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        });
       } else {
-        _showSnackBar("Failed to submit report.");
+        _triggerNotification("Submission failed. Please check connection.");
       }
     }
   }
 
-  void _showSnackBar(String message, {bool isError = true}) {
+  void _triggerNotification(String message, {bool isError = true}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        backgroundColor: isError ? Colors.redAccent : Colors.green.shade700,
+        backgroundColor: isError ? Colors.redAccent : _primaryBlue,
+        margin: const EdgeInsets.all(20),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -117,184 +159,157 @@ class _CaseReportPageState extends State<CaseReportPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: _bgSlate,
       appBar: AppBar(
         title: const Text(
-          "Submit Sighting",
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+          "INTEL REPORT",
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 13,
+            letterSpacing: 1.2,
+          ),
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
+        foregroundColor: _darkSlate,
         elevation: 0,
-        foregroundColor: const Color(0xFF1E293B),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: _isLoadingKebeles
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF2B7CFF)),
+              child: CircularProgressIndicator(
+                color: _primaryBlue,
+                strokeWidth: 2,
+              ),
             )
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildCaseSummary(),
+                  _buildHeader(),
                   const SizedBox(height: 32),
 
-                  _sectionHeader("WHERE WERE THEY SEEN?"),
-                  const SizedBox(height: 12),
-                  _buildCardWrapper(
+                  _label("GEOGRAPHIC PRECISION"),
+                  const SizedBox(height: 10),
+                  _cardWrapper(
                     child: DropdownButtonFormField<int>(
                       value: _selectedKebeleId,
-                      icon: const Icon(Icons.expand_more_rounded),
                       items: _kebeles
                           .map(
                             (k) => DropdownMenuItem<int>(
                               value: k['id'],
                               child: Text(
-                                k['name'],
-                                style: const TextStyle(fontSize: 15),
+                                k['name'] ?? "Unknown Kebele",
+                                style: const TextStyle(fontSize: 14),
                               ),
                             ),
                           )
                           .toList(),
                       onChanged: (val) =>
                           setState(() => _selectedKebeleId = val),
-                      decoration: _inputDecoration(
-                        "Select Location (Kebele)",
-                        Icons.location_on_rounded,
+                      decoration: _inputStyle(
+                        "Select current Kebele",
+                        Icons.share_location_rounded,
                       ),
                     ),
                   ),
 
                   const SizedBox(height: 24),
-                  _sectionHeader("WHEN DID THIS HAPPEN?"),
-                  const SizedBox(height: 12),
-                  _buildCardWrapper(
-                    child: InkWell(
+                  _label("TIMESTAMPS"),
+                  const SizedBox(height: 10),
+                  _cardWrapper(
+                    child: ListTile(
                       onTap: _pickDateTime,
-                      borderRadius: BorderRadius.circular(15),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 18,
+                      leading: const Icon(
+                        Icons.timer_outlined,
+                        color: _primaryBlue,
+                      ),
+                      title: Text(
+                        _selectedDateTime == null
+                            ? "Select time of sighting"
+                            : DateFormat(
+                                'MMMM dd, yyyy • hh:mm a',
+                              ).format(_selectedDateTime!),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: _selectedDateTime == null
+                              ? Colors.grey
+                              : _darkSlate,
+                          fontWeight: _selectedDateTime == null
+                              ? FontWeight.normal
+                              : FontWeight.w600,
                         ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.calendar_today_rounded,
-                              color: Color(0xFF2B7CFF),
-                              size: 20,
-                            ),
-                            const SizedBox(width: 14),
-                            Text(
-                              _selectedDateTime == null
-                                  ? "Choose date and time"
-                                  : DateFormat(
-                                      'MMM dd, yyyy • hh:mm a',
-                                    ).format(_selectedDateTime!),
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: _selectedDateTime == null
-                                    ? Colors.grey.shade500
-                                    : Color(0xFF1E293B),
-                                fontWeight: _selectedDateTime == null
-                                    ? FontWeight.normal
-                                    : FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
+                      ),
+                      trailing: const Icon(
+                        Icons.calendar_month,
+                        size: 18,
+                        color: Colors.grey,
                       ),
                     ),
                   ),
 
                   const SizedBox(height: 24),
-                  _sectionHeader("ADDITIONAL OBSERVATIONS"),
-                  const SizedBox(height: 12),
-                  _buildCardWrapper(
+                  _label("VISUAL DESCRIPTION / CLUES"),
+                  const SizedBox(height: 10),
+                  _cardWrapper(
                     child: TextField(
                       controller: _descriptionController,
                       maxLines: 4,
-                      style: const TextStyle(fontSize: 15),
-                      decoration: _inputDecoration(
-                        "Describe clothing, direction of travel, etc...",
-                        Icons.notes_rounded,
+                      style: const TextStyle(fontSize: 14),
+                      decoration: _inputStyle(
+                        "Clothing, companions, or vehicle details...",
+                        Icons.visibility_outlined,
                       ),
                     ),
                   ),
 
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 48),
                   _buildSubmitButton(),
-                  const SizedBox(height: 20),
-                  const Center(
-                    child: Text(
-                      "This report is encrypted and anonymous.",
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                  ),
                 ],
               ),
             ),
     );
   }
 
-  Widget _buildCaseSummary() {
+  Widget _buildHeader() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2B7CFF), Color(0xFF0056D2)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
+        color: _darkSlate,
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2B7CFF).withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
+            color: _darkSlate.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(
-              Icons.person_search_rounded,
-              color: Colors.white,
-              size: 32,
+          const Text(
+            "REPORTING TARGET",
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.0,
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "REPORTING FOR",
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.1,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.caseData['title'] ?? "Active Case",
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 8),
+          Text(
+            widget.caseData['fullName']?.toString().toUpperCase() ??
+                "UNKNOWN ENTITY",
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
             ),
           ),
         ],
@@ -303,73 +318,82 @@ class _CaseReportPageState extends State<CaseReportPage> {
   }
 
   Widget _buildSubmitButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 58,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF1E293B),
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          elevation: 0,
-        ),
-        onPressed: _isSubmitting ? null : _submitReport,
-        child: _isSubmitting
-            ? const SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-            : const Text(
-                "SUBMIT ANONYMOUS TIP",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 58,
+          child: ElevatedButton(
+            onPressed: _isSubmitting ? null : _handleSubmission,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primaryBlue,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
-      ),
+              elevation: 0,
+            ),
+            child: _isSubmitting
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Text(
+                    "SECURE TRANSMISSION",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Opacity(
+          opacity: 0.5,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.verified_user_outlined, size: 14),
+              SizedBox(width: 8),
+              Text(
+                "Encrypted Service Protocol",
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _sectionHeader(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w800,
-        color: Color(0xFF64748B),
-        letterSpacing: 1.0,
-      ),
-    );
-  }
+  Widget _label(String text) => Text(
+    text,
+    style: const TextStyle(
+      fontSize: 10,
+      fontWeight: FontWeight.w900,
+      color: Colors.grey,
+      letterSpacing: 1.2,
+    ),
+  );
 
-  Widget _buildCardWrapper({required Widget child}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: child,
-    );
-  }
+  Widget _cardWrapper({required Widget child}) => Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: _borderGray),
+    ),
+    child: child,
+  );
 
-  InputDecoration _inputDecoration(String hint, IconData icon) {
-    return InputDecoration(
-      hintText: hint,
-      prefixIcon: Icon(icon, color: const Color(0xFF94A3B8), size: 20),
-      hintStyle: TextStyle(color: Colors.grey.shade400),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      border: InputBorder.none,
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-        borderSide: const BorderSide(color: Color(0xFF2B7CFF), width: 1.5),
-      ),
-    );
-  }
+  InputDecoration _inputStyle(String hint, IconData icon) => InputDecoration(
+    hintText: hint,
+    prefixIcon: Icon(icon, color: _primaryBlue, size: 20),
+    hintStyle: const TextStyle(color: Colors.grey, fontSize: 13),
+    border: InputBorder.none,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+  );
 }
