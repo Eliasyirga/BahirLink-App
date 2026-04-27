@@ -87,92 +87,66 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
         content: Text(message),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // The main verification card
-    Widget cardContent = Container(
-      padding: const EdgeInsets.all(26),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+    // Shared content for both Popup and Full Screen
+    Widget mainContent = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(
+          Icons.mark_email_unread_rounded,
+          size: 60,
+          color: Color(0xFF4A90E2),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          "Verify Your Email",
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF444444),
           ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.mark_email_read_outlined,
-            size: 60,
-            color: Color(0xFF3B82F6),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            "Verify Your Email",
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF0F172A),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            "We sent a 4-digit code to\n${widget.email}",
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-          ),
-          const SizedBox(height: 25),
-
-          // Reusing the themed text field style
-          _buildCodeField(),
-
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.timer_outlined,
-                size: 18,
-                color: Colors.redAccent,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                "Expires in: $_timerText",
-                style: const TextStyle(
-                  color: Colors.redAccent,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 25),
-          _buildPrimaryButton(),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          "A 4-digit code was sent to\n${widget.email}",
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.grey, fontSize: 14),
+        ),
+        const SizedBox(height: 30),
+        _buildCodeField(),
+        const SizedBox(height: 20),
+        _buildTimerDisplay(),
+        const SizedBox(height: 30),
+        _buildVerifyButton(),
+      ],
     );
 
     if (widget.isPopup) {
       return Center(
-        child: SingleChildScrollView(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(30),
+          ),
           child: Material(
             color: Colors.transparent,
             child: Stack(
+              clipBehavior: Clip.none,
               children: [
-                cardContent,
+                mainContent,
                 Positioned(
-                  top: 10,
-                  right: 10,
+                  top: -10,
+                  right: -10,
                   child: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.grey),
+                    icon: const Icon(Icons.cancel, color: Colors.grey),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ),
@@ -184,18 +158,74 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: Center(
-        child: Padding(padding: const EdgeInsets.all(24.0), child: cardContent),
+      backgroundColor: Colors.white,
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            _buildWaveHeader(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 30),
+              child: mainContent,
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildWaveHeader() {
+    return Stack(
+      children: [
+        ClipPath(
+          clipper: _VerifyWaveClipper(),
+          child: Container(
+            height: 220,
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 60,
+          left: 0,
+          right: 0,
+          child: Column(
+            children: [
+              Image.asset(
+                'assets/images/logo.webp',
+                height: 70,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.link, size: 60, color: Colors.white),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                "BAHIR LINK",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildCodeField() {
     return Container(
+      width: 200,
       decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(16),
+        color: const Color(0xFFF1F7FF),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: TextField(
         controller: _codeController,
@@ -203,12 +233,14 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
         maxLength: 4,
         textAlign: TextAlign.center,
         style: const TextStyle(
-          fontSize: 24,
+          fontSize: 28,
           fontWeight: FontWeight.bold,
-          letterSpacing: 10,
+          letterSpacing: 15,
+          color: Color(0xFF4A90E2),
         ),
         decoration: const InputDecoration(
           hintText: "0000",
+          hintStyle: TextStyle(color: Colors.black12, letterSpacing: 15),
           counterText: "",
           border: InputBorder.none,
           contentPadding: EdgeInsets.symmetric(vertical: 16),
@@ -217,30 +249,77 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
     );
   }
 
-  Widget _buildPrimaryButton() {
+  Widget _buildTimerDisplay() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.access_time_rounded,
+            size: 18,
+            color: _secondsRemaining < 60 ? Colors.redAccent : Colors.grey),
+        const SizedBox(width: 6),
+        Text(
+          "Code expires in: $_timerText",
+          style: TextStyle(
+            color: _secondsRemaining < 60 ? Colors.redAccent : Colors.grey,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVerifyButton() {
     return SizedBox(
       width: double.infinity,
-      height: 56,
+      height: 52,
       child: ElevatedButton(
         onPressed: _isLoading ? null : _verifyCode,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF2563EB),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+          backgroundColor: Colors.white,
+          side: const BorderSide(color: Color(0xFF4A90E2), width: 1.5),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
           elevation: 0,
         ),
         child: _isLoading
-            ? const CircularProgressIndicator(color: Colors.white)
-            : const Text(
-                "VERIFY NOW",
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Color(0xFF4A90E2)))
+            : const Text("Verify Account",
                 style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+                    color: Color(0xFF4A90E2),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16)),
       ),
     );
   }
+}
+
+// Custom Clipper to keep the design language consistent
+class _VerifyWaveClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    var path = Path();
+    path.lineTo(0, size.height - 60);
+    var firstControlPoint = Offset(size.width / 4, size.height);
+    var firstEndPoint = Offset(size.width / 2.25, size.height - 30);
+    path.quadraticBezierTo(firstControlPoint.dx, firstControlPoint.dy,
+        firstEndPoint.dx, firstEndPoint.dy);
+
+    var secondControlPoint =
+        Offset(size.width - (size.width / 3.25), size.height - 65);
+    var secondEndPoint = Offset(size.width, size.height - 20);
+    path.quadraticBezierTo(secondControlPoint.dx, secondControlPoint.dy,
+        secondEndPoint.dx, secondEndPoint.dy);
+
+    path.lineTo(size.width, 0);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }

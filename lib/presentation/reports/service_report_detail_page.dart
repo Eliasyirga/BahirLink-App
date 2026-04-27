@@ -1,22 +1,28 @@
 import 'package:flutter/material.dart';
 import '../../services/service_report_service.dart';
 import '../../services/kebele_service.dart';
-import '../chat/chat_page.dart'; // Ensure this path is correct
+import '../chat/chat_page.dart';
 
 class ServiceReportDetailPage extends StatelessWidget {
   final dynamic service;
+  final String userId; // 1. Added userId
+  final String token; // 2. Added token
 
-  const ServiceReportDetailPage({super.key, required this.service});
+  const ServiceReportDetailPage({
+    super.key,
+    required this.service,
+    required this.userId, // Required in constructor
+    required this.token, // Required in constructor
+  });
 
-  // Fetch the real name by matching the ID from your service
   Future<String> _getKebeleName() async {
     try {
       final String? targetId =
           service['kebeleId']?.toString() ?? service['kebele']?.toString();
       if (targetId == null) return "Unknown Kebele";
 
-      final List<Map<String, dynamic>> kebeles = await KebeleService()
-          .getAllKebeles();
+      final List<Map<String, dynamic>> kebeles =
+          await KebeleService().getAllKebeles();
 
       final match = kebeles.firstWhere(
         (k) =>
@@ -41,12 +47,10 @@ class ServiceReportDetailPage extends StatelessWidget {
     final String type = service['serviceType']?['name'] ?? "General Service";
     final String category =
         service['serviceCategory']?['name'] ?? "Public Utility";
-    final String status = (service['status'] ?? 'Pending')
-        .toString()
-        .toUpperCase();
-    final String fullImageUrl = ServiceReportService.getFullImageUrl(
-      service['mediaUrl'],
-    );
+    final String status =
+        (service['status'] ?? 'Pending').toString().toUpperCase();
+    final String fullImageUrl =
+        ServiceReportService.getFullImageUrl(service['mediaUrl']);
     final String dateStr =
         service['createdAt']?.toString().split('T')[0] ?? "N/A";
     final String street = service['street'] ?? "Not provided";
@@ -57,43 +61,39 @@ class ServiceReportDetailPage extends StatelessWidget {
         title: const Text(
           "REPORT SUMMARY",
           style: TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 13,
-            letterSpacing: 1.5,
-          ),
+              fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.5),
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
         foregroundColor: primaryBlue,
         elevation: 0,
       ),
-
-      // ✅ ADDED CHAT FLOATING ACTION BUTTON
       floatingActionButton: FloatingActionButton(
         onPressed: () {
+          // ✅ FIXED: Passing all required named parameters to ChatPage
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) =>
-                  ChatPage(emergencyId: service['_id'].toString()),
+              builder: (context) => ChatPage(
+                emergencyId:
+                    int.tryParse(service['_id'].toString()) ?? 0, // Cast to int
+                token: token, // Pass token
+                userId: int.tryParse(userId) ?? 0, // Pass userId as int
+              ),
             ),
           );
         },
         backgroundColor: accentBlue,
         elevation: 4,
-        child: const Icon(
-          Icons.chat_bubble_outline_rounded,
-          color: Colors.white,
-        ),
+        child:
+            const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white),
       ),
-
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildImageHeader(fullImageUrl, softBlueBG),
-
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: Column(
@@ -101,76 +101,51 @@ class ServiceReportDetailPage extends StatelessWidget {
                 children: [
                   _statusRow(status, category, primaryBlue),
                   const SizedBox(height: 20),
-
-                  // DYNAMIC KEBELE NAME
                   FutureBuilder<String>(
                     future: _getKebeleName(),
                     builder: (context, snapshot) {
                       return Text(
                         snapshot.data ?? "Loading...",
                         style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w900,
-                          color: slate900,
-                          letterSpacing: -0.8,
-                        ),
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            color: slate900,
+                            letterSpacing: -0.8),
                       );
                     },
                   ),
-
                   Text(
                     type.toUpperCase(),
                     style: TextStyle(
-                      color: accentBlue.withOpacity(0.8),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12,
-                      letterSpacing: 1.2,
-                    ),
+                        color: accentBlue.withOpacity(0.8),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        letterSpacing: 1.2),
                   ),
-
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
                     child: Divider(color: softBlueBG, thickness: 2),
                   ),
-
                   _sectionLabel("ISSUE DESCRIPTION"),
                   const SizedBox(height: 12),
                   Text(
                     service['description'] ??
                         "No additional information provided.",
                     style: const TextStyle(
-                      fontSize: 16,
-                      height: 1.6,
-                      color: Color(0xFF334155),
-                    ),
+                        fontSize: 16, height: 1.6, color: Color(0xFF334155)),
                   ),
                   const SizedBox(height: 32),
-
-                  // ✅ ADDITIONAL INFORMATION CARDS
                   _sectionLabel("REPORT DETAILS"),
                   const SizedBox(height: 12),
                   _infoCard([
-                    _infoTile(
-                      Icons.location_on_rounded,
-                      "STREET",
-                      street,
-                      primaryBlue,
-                    ),
-                    _infoTile(
-                      Icons.calendar_today_rounded,
-                      "DATE REPORTED",
-                      dateStr,
-                      primaryBlue,
-                    ),
-                    _infoTile(
-                      Icons.verified_user_outlined,
-                      "SYSTEM STATUS",
-                      "Official Report",
-                      primaryBlue,
-                    ),
+                    _infoTile(Icons.location_on_rounded, "STREET", street,
+                        primaryBlue),
+                    _infoTile(Icons.calendar_today_rounded, "DATE REPORTED",
+                        dateStr, primaryBlue),
+                    _infoTile(Icons.verified_user_outlined, "SYSTEM STATUS",
+                        "Official Report", primaryBlue),
                   ], softBlueBG),
-
-                  const SizedBox(height: 80), // Space for FAB
+                  const SizedBox(height: 80),
                 ],
               ),
             ),
@@ -180,14 +155,14 @@ class ServiceReportDetailPage extends StatelessWidget {
     );
   }
 
+  // UI Helper methods...
   Widget _infoCard(List<Widget> children, Color bg) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.blue.shade100),
-      ),
+          color: bg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.blue.shade100)),
       child: Column(children: children),
     );
   }
@@ -203,22 +178,16 @@ class ServiceReportDetailPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blueGrey,
-                  ),
-                ),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: primary.withOpacity(0.9),
-                  ),
-                ),
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueGrey)),
+                Text(value,
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: primary.withOpacity(0.9))),
               ],
             ),
           ),
@@ -241,51 +210,37 @@ class ServiceReportDetailPage extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w900,
-          fontSize: 10,
-        ),
-      ),
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(6)),
+      child: Text(text.toUpperCase(),
+          style: TextStyle(
+              color: color, fontWeight: FontWeight.w900, fontSize: 10)),
     );
   }
 
-  Widget _sectionLabel(String text) => Text(
-    text,
-    style: const TextStyle(
-      color: Colors.blueGrey,
-      fontWeight: FontWeight.w900,
-      fontSize: 11,
-      letterSpacing: 1.2,
-    ),
-  );
+  Widget _sectionLabel(String text) => Text(text,
+      style: const TextStyle(
+          color: Colors.blueGrey,
+          fontWeight: FontWeight.w900,
+          fontSize: 11,
+          letterSpacing: 1.2));
 
   Widget _buildImageHeader(String url, Color bg) {
     return Container(
       width: double.infinity,
       height: 260,
       margin: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(30),
-        color: bg,
-      ),
+      decoration:
+          BoxDecoration(borderRadius: BorderRadius.circular(30), color: bg),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(30),
         child: url.isNotEmpty && url.startsWith('http')
-            ? Image.network(
-                url,
+            ? Image.network(url,
                 fit: BoxFit.cover,
                 errorBuilder: (c, e, s) => const Icon(
-                  Icons.broken_image_outlined,
-                  color: Colors.blue,
-                  size: 40,
-                ),
-              )
+                    Icons.broken_image_outlined,
+                    color: Colors.blue,
+                    size: 40))
             : const Icon(Icons.image_outlined, color: Colors.blue, size: 40),
       ),
     );

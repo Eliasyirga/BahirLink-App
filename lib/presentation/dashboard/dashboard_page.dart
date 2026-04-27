@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import '../../core/widgets/bottom_navbar.dart';
 import 'dashboard_content.dart';
-// Removed CategoriesPage import
-import '../reports/service_report_page.dart'; // Updated path
+import '../reports/service_report_page.dart';
 import '../profile/profile_page.dart';
 import '../reports/reports_page.dart';
 import '../settings/settings_page.dart';
 
 class DashboardPage extends StatefulWidget {
   final String userId;
+  final String token; // 1. Added token parameter
 
-  const DashboardPage({super.key, required this.userId});
+  const DashboardPage({
+    super.key,
+    required this.userId,
+    required this.token, // Required in constructor
+  });
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -22,7 +26,23 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _buildPage(),
+      // 2. Added IndexedStack to preserve scroll state of pages when switching tabs
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: [
+          const DashboardContent(),
+          ServiceReportPage(
+            userId: widget.userId,
+            token: widget.token, // Passing token here
+          ),
+          const ProfilePage(),
+          ReportsPage(
+            userId: widget.userId,
+            token: widget.token, // Passing token here
+          ),
+          const SettingsPage(),
+        ],
+      ),
       bottomNavigationBar: BahirBottomNavBar(
         selectedIndex: _selectedIndex,
         onItemSelected: (index) => setState(() => _selectedIndex = index),
@@ -30,26 +50,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildPage() {
-    switch (_selectedIndex) {
-      case 0:
-        return const DashboardContent();
-
-      case 1:
-        // Replaced CategoriesPage with ServiceReportPage
-        return ServiceReportPage(userId: widget.userId);
-
-      case 2:
-        return const ProfilePage();
-
-      case 3:
-        return ReportsPage(userId: widget.userId);
-
-      case 4:
-        return const SettingsPage();
-
-      default:
-        return const DashboardContent();
-    }
-  }
+  // Note: I replaced the switch statement with IndexedStack above.
+  // It's more efficient for BottomNavBars as it doesn't "re-init"
+  // the pages every time you tap a tab.
 }

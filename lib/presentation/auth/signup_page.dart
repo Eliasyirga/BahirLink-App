@@ -19,6 +19,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final TextEditingController _passwordController = TextEditingController();
 
   bool _isLoading = false;
+  bool _isPasswordVisible = false;
 
   @override
   void dispose() {
@@ -31,7 +32,6 @@ class _SignUpPageState extends State<SignUpPage> {
 
   Future<void> _signUp() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
 
     try {
@@ -87,54 +87,66 @@ class _SignUpPageState extends State<SignUpPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: Colors.white,
       body: SingleChildScrollView(
         child: Column(
           children: [
-            _buildHeader(context),
+            _buildWaveHeader(),
             Padding(
-              padding: const EdgeInsets.all(30.0),
+              padding: const EdgeInsets.symmetric(horizontal: 30),
               child: Form(
                 key: _formKey,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildWelcomeText(),
-                    const SizedBox(height: 25),
+                    const SizedBox(height: 20),
+                    const Text(
+                      "Create Account",
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF444444),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
                     _buildTextField(
-                      label: "First Name",
                       controller: _firstNameController,
-                      hint: "Enter first name",
+                      hint: "First Name",
                       icon: Icons.person_outline,
+                      validator: (v) => v!.isEmpty ? "Enter first name" : null,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 15),
                     _buildTextField(
-                      label: "Last Name",
                       controller: _lastNameController,
-                      hint: "Enter last name",
+                      hint: "Last Name",
                       icon: Icons.person_outline,
+                      validator: (v) => v!.isEmpty ? "Enter last name" : null,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 15),
                     _buildTextField(
-                      label: "Email",
                       controller: _emailController,
-                      hint: "Enter your email",
+                      hint: "Email Address",
                       icon: Icons.email_outlined,
                       keyboardType: TextInputType.emailAddress,
-                      isEmail: true,
+                      validator: (v) =>
+                          !v!.contains('@') ? "Invalid email" : null,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 15),
                     _buildTextField(
-                      label: "Password",
                       controller: _passwordController,
-                      hint: "Create password",
+                      hint: "Password",
                       icon: Icons.lock_outline,
                       isPassword: true,
+                      obscureText: !_isPasswordVisible,
+                      onSuffixPressed: () => setState(
+                          () => _isPasswordVisible = !_isPasswordVisible),
+                      validator: (v) =>
+                          v!.length < 6 ? "Min 6 characters" : null,
                     ),
                     const SizedBox(height: 30),
-                    _buildPrimaryButton(),
-                    const SizedBox(height: 25),
-                    _buildLoginLink(context),
+                    _buildSignUpButton(),
+                    const SizedBox(height: 20),
+                    _buildLoginLink(),
+                    const SizedBox(height: 40),
                   ],
                 ),
               ),
@@ -145,147 +157,127 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.25,
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.only(bottomLeft: Radius.circular(80)),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: const [
-          Icon(Icons.bolt_rounded, size: 60, color: Colors.white),
-          Text(
-            "BAHIR LINK",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2,
+  Widget _buildWaveHeader() {
+    return Stack(
+      children: [
+        ClipPath(
+          clipper: CustomWaveClipper(),
+          child: Container(
+            height: 200,
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWelcomeText() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          "Create Account",
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF0F172A),
-          ),
         ),
-        Text(
-          "Join the Bahir Dar service network",
-          style: TextStyle(color: Colors.grey.shade600),
+        Positioned(
+          top: 50,
+          left: 0,
+          right: 0,
+          child: Column(
+            children: [
+              Image.asset(
+                'assets/images/logo.webp',
+                height: 60,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.link, size: 50, color: Colors.white),
+              ),
+              const SizedBox(height: 5),
+              const Text(
+                "BAHIR LINK",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 3,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 
   Widget _buildTextField({
-    required String label,
     required TextEditingController controller,
     required String hint,
     required IconData icon,
     bool isPassword = false,
-    bool isEmail = false,
+    bool obscureText = false,
+    VoidCallback? onSuffixPressed,
     TextInputType? keyboardType,
+    String? Function(String?)? validator,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF64748B),
-            ),
-          ),
+    return TextFormField(
+      controller: controller,
+      obscureText: obscureText,
+      validator: validator,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+        prefixIcon: Icon(icon, color: const Color(0xFF4A90E2), size: 20),
+        suffixIcon: isPassword
+            ? IconButton(
+                icon: Icon(
+                    obscureText ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.grey,
+                    size: 18),
+                onPressed: onSuffixPressed,
+              )
+            : null,
+        filled: true,
+        fillColor: const Color(0xFFF1F7FF),
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: BorderSide.none,
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: TextFormField(
-            controller: controller,
-            obscureText: isPassword,
-            keyboardType: keyboardType,
-            validator: (v) {
-              if (v == null || v.isEmpty) return "Enter $label";
-              if (isEmail && !v.contains('@')) return "Invalid email";
-              if (isPassword && v.length < 6) return "Min 6 characters";
-              return null;
-            },
-            decoration: InputDecoration(
-              prefixIcon: Icon(icon, color: const Color(0xFF3B82F6)),
-              hintText: hint,
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 16,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPrimaryButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: _isLoading ? null : _signUp,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF2563EB),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 0,
-        ),
-        child: _isLoading
-            ? const CircularProgressIndicator(color: Colors.white)
-            : const Text(
-                "SIGN UP",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
       ),
     );
   }
 
-  Widget _buildLoginLink(BuildContext context) {
+  Widget _buildSignUpButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _signUp,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          side: const BorderSide(color: Color(0xFF4A90E2), width: 1.5),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          elevation: 0,
+        ),
+        child: _isLoading
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Color(0xFF4A90E2)))
+            : const Text("Create Account",
+                style: TextStyle(
+                    color: Color(0xFF4A90E2),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16)),
+      ),
+    );
+  }
+
+  Widget _buildLoginLink() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text("Already have an account? "),
+        const Text("Already have an account? ",
+            style: TextStyle(color: Colors.grey)),
         GestureDetector(
           onTap: () => Navigator.pushReplacement(
             context,
@@ -294,12 +286,36 @@ class _SignUpPageState extends State<SignUpPage> {
           child: const Text(
             "Login",
             style: TextStyle(
-              color: Color(0xFF2563EB),
-              fontWeight: FontWeight.bold,
-            ),
+                color: Color(0xFF4A90E2), fontWeight: FontWeight.bold),
           ),
         ),
       ],
     );
   }
+}
+
+// Re-using the same clipper for design consistency
+class CustomWaveClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    var path = Path();
+    path.lineTo(0, size.height - 60);
+    var firstControlPoint = Offset(size.width / 4, size.height);
+    var firstEndPoint = Offset(size.width / 2.25, size.height - 30);
+    path.quadraticBezierTo(firstControlPoint.dx, firstControlPoint.dy,
+        firstEndPoint.dx, firstEndPoint.dy);
+
+    var secondControlPoint =
+        Offset(size.width - (size.width / 3.25), size.height - 65);
+    var secondEndPoint = Offset(size.width, size.height - 20);
+    path.quadraticBezierTo(secondControlPoint.dx, secondControlPoint.dy,
+        secondEndPoint.dx, secondEndPoint.dy);
+
+    path.lineTo(size.width, 0);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }

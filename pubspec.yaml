@@ -1,53 +1,59 @@
 name: first_app
-description: "A new Flutter project."
+description: "BahirLink Emergency Response System - User App"
 publish_to: "none"
 
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.9.2 <4.0.0"
+  sdk: ">=3.0.0 <4.0.0" # Adjusted for broader compatibility
 
 dependencies:
   flutter:
     sdk: flutter
 
-  # State & storage
-  shared_preferences: ^2.1.0
+  # --- Real-time & Networking ---
+  socket_io_client: ^2.0.3 # CRITICAL: For the chat feature
   http: ^1.1.0
+  intl: ^0.19.0 # CRITICAL: For formatting chat timestamps
+
+  # --- State & Storage ---
+  shared_preferences: ^2.1.0
   device_info_plus: ^12.3.0
 
-  # Animations
+  # --- Animations ---
   animate_do: ^3.0.0
 
-  # Verification / image handling
+  # --- Verification / Image Handling ---
   image_picker: ^0.8.7+5
   flutter_image_compress: ^2.4.0
   path: ^1.8.3
 
-  # FREE OpenStreetMap support
+  # --- FREE OpenStreetMap Support ---
   flutter_map: ^6.1.0
   latlong2: ^0.9.0
 
-  # GPS location
-  geolocator: ^14.0.2
+  # --- GPS Location ---
+  geolocator: ^11.0.0 # Updated to a stable version compatible with most SDKs
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
-  flutter_launcher_icons: ^0.10.0
+  flutter_launcher_icons: ^0.13.1 # Updated version
 
 flutter:
   uses-material-design: true
 
-  # App assets
+  # --- App Assets ---
   assets:
     - assets/images/bg.jpg
     - assets/images/logo.webp
     - assets/images/avatar.jpg
 
-# Flutter Launcher Icons Configuration
-flutter_icons:
-  android: true
+# --- Flutter Launcher Icons Configuration ---
+flutter_launcher_icons:
+  android: "launcher_icon"
   ios: true
   image_path: "assets/images/logo.webp"
+  adaptive_icon_background: "#ffffff" # Optional: White background for Android adaptive icons
+  adaptive_icon_foreground: "assets/images/logo.webp"

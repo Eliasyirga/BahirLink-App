@@ -4,7 +4,10 @@ import 'service_report_detail_page.dart';
 
 class ServiceReportPage extends StatefulWidget {
   final String userId;
-  const ServiceReportPage({super.key, required this.userId});
+  final String token; // 1. Added token
+
+  const ServiceReportPage(
+      {super.key, required this.userId, required this.token});
 
   @override
   State<ServiceReportPage> createState() => _ServiceReportPageState();
@@ -14,7 +17,6 @@ class _ServiceReportPageState extends State<ServiceReportPage> {
   final ServiceReportService _apiService = ServiceReportService();
   late Future<List<dynamic>> _servicesFuture;
 
-  // Modern Color Palette
   final Color primaryBlue = const Color(0xFF0D47A1);
   final Color accentBlue = const Color(0xFFE3F2FD);
   final Color bgGrey = const Color(0xFFF1F5F9);
@@ -27,6 +29,7 @@ class _ServiceReportPageState extends State<ServiceReportPage> {
 
   void _refreshData() {
     setState(() {
+      // ✅ Passing both userId and token to the service
       _servicesFuture = _apiService.getUserServices(widget.userId);
     });
   }
@@ -45,7 +48,6 @@ class _ServiceReportPageState extends State<ServiceReportPage> {
           slivers: [
             SliverAppBar(
               expandedHeight: 100.0,
-              floating: false,
               pinned: true,
               elevation: 0,
               backgroundColor: bgGrey,
@@ -68,14 +70,9 @@ class _ServiceReportPageState extends State<ServiceReportPage> {
                     icon: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.refresh_rounded,
-                        color: primaryBlue,
-                        size: 20,
-                      ),
+                          color: Colors.white, shape: BoxShape.circle),
+                      child: Icon(Icons.refresh_rounded,
+                          color: primaryBlue, size: 20),
                     ),
                     onPressed: _refreshData,
                   ),
@@ -88,27 +85,21 @@ class _ServiceReportPageState extends State<ServiceReportPage> {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const SliverFillRemaining(
                     child: Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
+                        child: CircularProgressIndicator(strokeWidth: 2)),
                   );
                 }
-
                 if (snapshot.hasError) {
                   return SliverToBoxAdapter(
-                    child: _buildErrorState(snapshot.error.toString()),
-                  );
+                      child: _buildErrorState(snapshot.error.toString()));
                 }
-
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return SliverFillRemaining(child: _buildEmptyState());
                 }
 
                 final services = snapshot.data!;
                 return SliverPadding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 10,
-                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) => _buildModernCard(services[index]),
@@ -125,13 +116,11 @@ class _ServiceReportPageState extends State<ServiceReportPage> {
   }
 
   Widget _buildModernCard(dynamic service) {
-    // Map data carefully with fallbacks
     final typeName = service['serviceType']?['name'] ?? "General Service";
     final categoryName =
         service['serviceCategory']?['name'] ?? "Public Service";
     final status = (service['status'] ?? 'Pending').toString().toUpperCase();
 
-    // Format Date string
     String dateStr = "N/A";
     if (service['createdAt'] != null) {
       DateTime dt = DateTime.parse(service['createdAt']);
@@ -145,10 +134,9 @@ class _ServiceReportPageState extends State<ServiceReportPage> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4)),
         ],
       ),
       child: Material(
@@ -158,7 +146,11 @@ class _ServiceReportPageState extends State<ServiceReportPage> {
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ServiceReportDetailPage(service: service),
+              builder: (context) => ServiceReportDetailPage(
+                service: service,
+                userId: widget.userId, // ✅ Passing userId
+                token: widget.token, // ✅ Passing token
+              ),
             ),
           ),
           child: Padding(
@@ -171,53 +163,39 @@ class _ServiceReportPageState extends State<ServiceReportPage> {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: accentBlue,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
+                          color: accentBlue,
+                          borderRadius: BorderRadius.circular(6)),
                       child: Text(
                         categoryName.toUpperCase(),
                         style: TextStyle(
-                          color: primaryBlue,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                        ),
+                            color: primaryBlue,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800),
                       ),
                     ),
                     _statusChip(status),
                   ],
                 ),
                 const SizedBox(height: 14),
-                Text(
-                  typeName,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
+                Text(typeName,
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B))),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Icon(
-                      Icons.access_time_rounded,
-                      size: 14,
-                      color: Colors.grey[400],
-                    ),
+                    Icon(Icons.access_time_rounded,
+                        size: 14, color: Colors.grey[400]),
                     const SizedBox(width: 6),
-                    Text(
-                      dateStr,
-                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                    ),
+                    Text(dateStr,
+                        style:
+                            TextStyle(color: Colors.grey[500], fontSize: 12)),
                     const Spacer(),
-                    Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 12,
-                      color: Colors.grey[300],
-                    ),
+                    Icon(Icons.arrow_forward_ios_rounded,
+                        size: 12, color: Colors.grey[300]),
                   ],
                 ),
               ],
@@ -228,25 +206,19 @@ class _ServiceReportPageState extends State<ServiceReportPage> {
     );
   }
 
+  // UI Helpers (Status Chip, Empty State, Error State) remain the same...
   Widget _statusChip(String status) {
-    Color color = const Color(0xFFF59E0B); // Default Amber
+    Color color = const Color(0xFFF59E0B);
     if (status == 'COMPLETED') color = const Color(0xFF10B981);
     if (status == 'REJECTED') color = const Color(0xFFEF4444);
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: color,
-          fontSize: 9,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20)),
+      child: Text(status,
+          style: TextStyle(
+              color: color, fontSize: 9, fontWeight: FontWeight.w900)),
     );
   }
 
@@ -255,11 +227,8 @@ class _ServiceReportPageState extends State<ServiceReportPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.inventory_2_outlined,
-            size: 64,
-            color: primaryBlue.withOpacity(0.1),
-          ),
+          Icon(Icons.inventory_2_outlined,
+              size: 64, color: primaryBlue.withOpacity(0.1)),
           const SizedBox(height: 16),
           const Text("No reports found", style: TextStyle(color: Colors.grey)),
         ],
@@ -272,22 +241,15 @@ class _ServiceReportPageState extends State<ServiceReportPage> {
       padding: const EdgeInsets.all(40),
       child: Column(
         children: [
-          const Icon(
-            Icons.error_outline_rounded,
-            color: Colors.redAccent,
-            size: 40,
-          ),
+          const Icon(Icons.error_outline_rounded,
+              color: Colors.redAccent, size: 40),
           const SizedBox(height: 12),
-          const Text(
-            "Fetch Failed",
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
+          const Text("Fetch Failed",
+              style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          Text(
-            error,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
-          ),
+          Text(error,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: Colors.grey)),
         ],
       ),
     );

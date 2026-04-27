@@ -4,17 +4,18 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/reports_service.dart';
-// Ensure this import path is correct for your project structure
 import '../chat/chat_page.dart';
 
 class ReportDetailsPage extends StatefulWidget {
   final Map<String, dynamic> emergency;
   final String userId;
+  final String token; // 1. Added token here so we can pass it to Chat
 
   const ReportDetailsPage({
     super.key,
     required this.emergency,
     required this.userId,
+    required this.token, // 2. Required in constructor
   });
 
   @override
@@ -22,10 +23,9 @@ class ReportDetailsPage extends StatefulWidget {
 }
 
 class _ReportDetailsPageState extends State<ReportDetailsPage> {
-  // Refined Blue & White Palette
-  static const Color primaryBlue = Color(0xFF1E40AF); // Deep Tactical Blue
-  static const Color accentBlue = Color(0xFF3B82F6); // Bright Action Blue
-  static const Color softBlueBG = Color(0xFFF0F7FF); // Clean Background Blue
+  static const Color primaryBlue = Color(0xFF1E40AF);
+  static const Color accentBlue = Color(0xFF3B82F6);
+  static const Color softBlueBG = Color(0xFFF0F7FF);
   static const Color slate900 = Color(0xFF0F172A);
 
   File? _mediaFile;
@@ -37,19 +37,22 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
   Widget build(BuildContext context) {
     final e = widget.emergency;
     final status = safe(e['status']).toUpperCase();
-    final bool isCritical = safe(
-      e['typeName'],
-    ).toLowerCase().contains('critical');
+    final bool isCritical =
+        safe(e['typeName']).toLowerCase().contains('critical');
 
     return Scaffold(
       backgroundColor: Colors.white,
-      // Floating Chat Button
       floatingActionButton: FloatingActionButton(
         onPressed: () {
+          // 3. FIXED: Passing all required named parameters to ChatPage
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ChatPage(emergencyId: safe(e['id'])),
+              builder: (context) => ChatPage(
+                emergencyId: int.tryParse(safe(e['id'])) ?? 0, // Cast to int
+                token: widget.token, // Pass token
+                userId: int.tryParse(widget.userId) ?? 0, // Pass userId as int
+              ),
             ),
           );
         },
@@ -63,7 +66,6 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          // 1. DYNAMIC HEADER (Image Area)
           SliverAppBar(
             expandedHeight: 280,
             pinned: true,
@@ -74,11 +76,8 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
               child: CircleAvatar(
                 backgroundColor: Colors.black26,
                 child: IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new,
-                    color: Colors.white,
-                    size: 18,
-                  ),
+                  icon: const Icon(Icons.arrow_back_ios_new,
+                      color: Colors.white, size: 18),
                   onPressed: () => Navigator.pop(context),
                 ),
               ),
@@ -97,7 +96,7 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
                         colors: [
                           Colors.black26,
                           Colors.transparent,
-                          Colors.black54,
+                          Colors.black54
                         ],
                       ),
                     ),
@@ -106,8 +105,6 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
               ),
             ),
           ),
-
-          // 2. INFORMATION BODY
           SliverToBoxAdapter(
             child: Container(
               color: Colors.white,
@@ -116,20 +113,15 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Status Badges
                     Row(
                       children: [
-                        _badge(
-                          safe(e['typeName']),
-                          isCritical ? Colors.red.shade700 : primaryBlue,
-                        ),
+                        _badge(safe(e['typeName']),
+                            isCritical ? Colors.red.shade700 : primaryBlue),
                         const SizedBox(width: 8),
                         _badge(status, _getStatusColor(status)),
                       ],
                     ),
                     const SizedBox(height: 20),
-
-                    // Title
                     Text(
                       safe(e['categoryName']),
                       style: const TextStyle(
@@ -143,38 +135,28 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
                     Text(
                       "Incident reported at ${safe(e['time'])}",
                       style: TextStyle(
-                        color: Colors.blueGrey.shade400,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
+                          color: Colors.blueGrey.shade400,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500),
                     ),
-
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Divider(color: softBlueBG, thickness: 2),
                     ),
-
                     _sectionHeader("DESCRIPTION"),
                     const SizedBox(height: 12),
                     Text(
                       safe(e['description']),
                       style: const TextStyle(
-                        fontSize: 16,
-                        height: 1.5,
-                        color: Color(0xFF334155),
-                      ),
+                          fontSize: 16, height: 1.5, color: Color(0xFF334155)),
                     ),
                     const SizedBox(height: 32),
-
                     _sectionHeader("LOCATION"),
                     const SizedBox(height: 12),
                     _locationCard(e),
-
                     const SizedBox(height: 40),
-
-                    // Actions
                     _actionButtons(safe(e['id'])),
-                    const SizedBox(height: 60), // Extra space for FAB
+                    const SizedBox(height: 60),
                   ],
                 ),
               ),
@@ -185,8 +167,7 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
     );
   }
 
-  // --- UI WIDGETS ---
-
+  // UI Helper methods remain unchanged...
   Widget _locationCard(Map<String, dynamic> e) {
     String kebeleName = 'N/A';
     if (e['kebele'] != null) {
@@ -194,7 +175,6 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
           ? (e['kebele']['name'] ?? 'N/A')
           : e['kebele'].toString();
     }
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -210,23 +190,17 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  "BAHIR DAR, KEBELE",
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.blue.shade300,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                Text(
-                  kebeleName,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: primaryBlue,
-                  ),
-                ),
+                Text("BAHIR DAR, KEBELE",
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.blue.shade300,
+                        letterSpacing: 1.2)),
+                Text(kebeleName,
+                    style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: primaryBlue)),
               ],
             ),
           ),
@@ -247,14 +221,8 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
               backgroundColor: primaryBlue,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 18),
-              elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              textStyle: const TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
-              ),
+                  borderRadius: BorderRadius.circular(14)),
             ),
           ),
         ),
@@ -266,9 +234,8 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
             backgroundColor: Colors.blue.shade50,
             foregroundColor: accentBlue,
             padding: const EdgeInsets.all(16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
       ],
@@ -279,60 +246,45 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w900,
-          fontSize: 10,
-          letterSpacing: 0.8,
-        ),
-      ),
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8)),
+      child: Text(text.toUpperCase(),
+          style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 10,
+              letterSpacing: 0.8)),
     );
   }
 
   Widget _sectionHeader(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        color: primaryBlue,
-        fontWeight: FontWeight.w900,
-        fontSize: 11,
-        letterSpacing: 1.5,
-      ),
-    );
+    return Text(title,
+        style: const TextStyle(
+            color: primaryBlue,
+            fontWeight: FontWeight.w900,
+            fontSize: 11,
+            letterSpacing: 1.5));
   }
 
   Widget _buildHeroImage(String? mediaUrl) {
     if (kIsWeb && _webBytes != null)
       return Image.memory(_webBytes!, fit: BoxFit.cover);
     if (_mediaFile != null) return Image.file(_mediaFile!, fit: BoxFit.cover);
-
     if (mediaUrl != null && mediaUrl.isNotEmpty) {
       final url = mediaUrl.startsWith('http')
           ? mediaUrl
           : "http://localhost:5000$mediaUrl";
-      return Image.network(
-        url,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _imagePlaceholder(),
-      );
+      return Image.network(url,
+          fit: BoxFit.cover, errorBuilder: (_, __, ___) => _imagePlaceholder());
     }
     return _imagePlaceholder();
   }
 
   Widget _imagePlaceholder() {
     return Container(
-      color: softBlueBG,
-      child: const Icon(
-        Icons.image_not_supported_outlined,
-        size: 50,
-        color: Colors.blue,
-      ),
-    );
+        color: softBlueBG,
+        child: const Icon(Icons.image_not_supported_outlined,
+            size: 50, color: Colors.blue));
   }
 
   Color _getStatusColor(String status) {
@@ -346,27 +298,21 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          "Archive Report?",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          "Hide this report from your current tactical view?",
-        ),
+        title: const Text("Archive Report?",
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content:
+            const Text("Hide this report from your current tactical view?"),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Keep"),
-          ),
+              onPressed: () => Navigator.pop(ctx), child: const Text("Keep")),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
               Navigator.pop(context, id);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade50,
-              foregroundColor: primaryBlue,
-            ),
+                backgroundColor: Colors.blue.shade50,
+                foregroundColor: primaryBlue),
             child: const Text("Archive"),
           ),
         ],
@@ -375,34 +321,25 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
   }
 
   void _showEditDialog(String id) {
-    final descC = TextEditingController(
-      text: safe(widget.emergency['description']),
-    );
+    final descC =
+        TextEditingController(text: safe(widget.emergency['description']));
     final kObj = widget.emergency['kebele'];
     final kebeleC = TextEditingController(
-      text: kObj is Map ? safe(kObj['name']) : safe(kObj),
-    );
-
+        text: kObj is Map ? safe(kObj['name']) : safe(kObj));
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          "Update Information",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _field("Operational Kebele", kebeleC),
-            _field("Description Update", descC, maxLines: 4),
-          ],
-        ),
+        title: const Text("Update Information",
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          _field("Operational Kebele", kebeleC),
+          _field("Description Update", descC, maxLines: 4)
+        ]),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Discard"),
-          ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Discard")),
           ElevatedButton(
             onPressed: () async {
               final data = {'description': descC.text, 'kebele': kebeleC.text};
@@ -413,9 +350,7 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: primaryBlue,
-              foregroundColor: Colors.white,
-            ),
+                backgroundColor: primaryBlue, foregroundColor: Colors.white),
             child: const Text("Confirm Changes"),
           ),
         ],
@@ -434,9 +369,8 @@ class _ReportDetailsPageState extends State<ReportDetailsPage> {
           filled: true,
           fillColor: softBlueBG,
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none),
         ),
       ),
     );

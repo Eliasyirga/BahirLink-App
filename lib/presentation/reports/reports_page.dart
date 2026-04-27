@@ -5,8 +5,9 @@ import './report_detail_page.dart';
 
 class ReportsPage extends StatefulWidget {
   final String userId;
+  final String token; // 1. Added token parameter
 
-  const ReportsPage({super.key, required this.userId});
+  const ReportsPage({super.key, required this.userId, required this.token});
 
   @override
   State<ReportsPage> createState() => _ReportsPageState();
@@ -22,7 +23,6 @@ class _ReportsPageState extends State<ReportsPage> {
     fetchInitialData();
   }
 
-  /// Extracts ID safely (handles both top-level 'id' and MongoDB '_id')
   String? _extractId(dynamic field) {
     if (field == null) return null;
     if (field is String) return field;
@@ -46,9 +46,8 @@ class _ReportsPageState extends State<ReportsPage> {
     setState(() => loading = true);
 
     try {
-      final emergenciesResponse = await ReportsService.fetchUserEmergencies(
-        widget.userId,
-      );
+      final emergenciesResponse =
+          await ReportsService.fetchUserEmergencies(widget.userId);
       final categories = await ReportsService.fetchCategories();
 
       final Map<String, String> categoryMap = {
@@ -65,7 +64,6 @@ class _ReportsPageState extends State<ReportsPage> {
             _extractId(e['categoryId']) ?? _extractId(e['category']);
         return {
           ...e,
-          // Ensure a clean ID exists for local removal logic
           'id': _extractId(e['id']) ?? _extractId(e['_id']),
           'categoryName': categoryId != null
               ? (categoryMap[categoryId] ?? "Uncategorized")
@@ -108,21 +106,14 @@ class _ReportsPageState extends State<ReportsPage> {
             pinned: true,
             backgroundColor: primaryBlue,
             leading: IconButton(
-              icon: const Icon(
-                Icons.arrow_back_ios_new,
-                color: Colors.white,
-                size: 20,
-              ),
+              icon: const Icon(Icons.arrow_back_ios_new,
+                  color: Colors.white, size: 20),
               onPressed: () => Navigator.pop(context),
             ),
             flexibleSpace: FlexibleSpaceBar(
-              title: const Text(
-                "My Reports",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              title: const Text("My Reports",
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
               background: Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(colors: [primaryBlue, accentBlue]),
@@ -133,21 +124,19 @@ class _ReportsPageState extends State<ReportsPage> {
           loading
               ? const SliverFillRemaining(
                   child: Center(
-                    child: CircularProgressIndicator(color: primaryBlue),
-                  ),
-                )
+                      child: CircularProgressIndicator(color: primaryBlue)))
               : emergencies.isEmpty
-              ? _buildEmptyState()
-              : SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 80),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) =>
-                          _buildReportCard(emergencies[index], accentBlue),
-                      childCount: emergencies.length,
+                  ? _buildEmptyState()
+                  : SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 80),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) =>
+                              _buildReportCard(emergencies[index], accentBlue),
+                          childCount: emergencies.length,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
         ],
       ),
     );
@@ -159,16 +148,11 @@ class _ReportsPageState extends State<ReportsPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.assignment_late_outlined,
-              size: 64,
-              color: Colors.grey.shade400,
-            ),
+            Icon(Icons.assignment_late_outlined,
+                size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
-            Text(
-              "No reports found",
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
-            ),
+            Text("No reports found",
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
           ],
         ),
       ),
@@ -187,10 +171,9 @@ class _ReportsPageState extends State<ReportsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4)),
         ],
       ),
       child: Material(
@@ -198,26 +181,25 @@ class _ReportsPageState extends State<ReportsPage> {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () async {
-            // UPDATED NAVIGATION LOGIC
+            // ✅ FIXED: Passing 'token' and 'userId' to ReportDetailsPage
             final result = await Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) =>
-                    ReportDetailsPage(emergency: report, userId: widget.userId),
+                builder: (_) => ReportDetailsPage(
+                  emergency: report,
+                  userId: widget.userId,
+                  token: widget.token, // Added token
+                ),
               ),
             );
 
-            // 1. Check if the result is a String (The ID returned from 'Clear Locally')
             if (result is String) {
               setState(() {
-                // Remove the report from the local phone memory immediately
                 emergencies.removeWhere(
                   (item) => (item['id'] ?? item['_id']).toString() == result,
                 );
               });
-            }
-            // 2. Check if the result is 'true' (An edit happened)
-            else if (result == true) {
+            } else if (result == true) {
               fetchInitialData();
             }
           },
@@ -230,49 +212,33 @@ class _ReportsPageState extends State<ReportsPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     _buildBadge(typeName, statusColor),
-                    Text(
-                      _formatDate(report['createdAt']),
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 11,
-                      ),
-                    ),
+                    Text(_formatDate(report['createdAt']),
+                        style: TextStyle(
+                            color: Colors.grey.shade500, fontSize: 11)),
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  report['categoryName'] ?? "Unknown",
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                Text(report['categoryName'] ?? "Unknown",
+                    style: const TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text(
-                  report['description'] ?? "",
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Text(report['description'] ?? "",
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 16),
                 const Divider(height: 1),
                 const SizedBox(height: 12),
                 const Row(
                   children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 14,
-                      color: Colors.blueAccent,
-                    ),
+                    Icon(Icons.info_outline,
+                        size: 14, color: Colors.blueAccent),
                     SizedBox(width: 6),
-                    Text(
-                      "Tap to view full details",
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.blueAccent,
-                      ),
-                    ),
+                    Text("Tap to view full details",
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blueAccent)),
                     Spacer(),
                     Icon(Icons.arrow_forward_ios, size: 12, color: Colors.grey),
                   ],
@@ -289,17 +255,11 @@ class _ReportsPageState extends State<ReportsPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label.toUpperCase(),
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(8)),
+      child: Text(label.toUpperCase(),
+          style: TextStyle(
+              color: color, fontSize: 10, fontWeight: FontWeight.w900)),
     );
   }
 }

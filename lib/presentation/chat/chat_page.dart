@@ -1,158 +1,262 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'dart:async';
+import 'package:http/http.dart' as http;
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class ChatPage extends StatefulWidget {
-  final String emergencyId;
+  final int emergencyId;
+  final String token;
+  final int userId;
 
-  const ChatPage({super.key, required this.emergencyId});
+  const ChatPage({
+    super.key,
+    required this.emergencyId,
+    required this.token,
+    required this.userId,
+  });
 
   @override
   State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage>
-    with SingleTickerProviderStateMixin {
-  final TextEditingController _messageController = TextEditingController();
+class _ChatPageState extends State<ChatPage> {
+  // Use your computer's local IP (e.g. 192.168.x.x) for physical devices!
+  final String serverUrl = "http://localhost:5000";
+
+  IO.Socket? socket;
+  int? _chatId;
+  bool _isLoading = true;
+  bool _isPartnerTyping = false;
+  String _partnerName = "Support";
+
   final List<Map<String, dynamic>> _messages = [];
-
-  // Animation for Audio Recording
-  bool _isRecording = false;
-  late AnimationController _recordingController;
-
-  static const Color primaryBlue = Color(0xFF1E40AF);
-  static const Color accentBlue = Color(0xFF3B82F6);
-  static const Color softBlueBG = Color(0xFFF8FAFC);
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _recordingController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    )..repeat(reverse: true);
+    _initializeChat();
   }
 
   @override
   void dispose() {
-    _recordingController.dispose();
+    socket?.disconnect();
+    socket?.dispose();
     _messageController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  void _sendMessage() {
-    if (_messageController.text.trim().isEmpty) return;
-    setState(() {
-      _messages.insert(0, {
-        'text': _messageController.text,
-        'isMe': true,
-        'time': 'Just now',
-      });
+  /// 1. Initialize Chat & Fetch Metadata
+  Future<void> _initializeChat() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$serverUrl/api/chat/emergency/${widget.emergencyId}'),
+        headers: {'Authorization': 'Bearer ${widget.token}'},
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final decoded = json.decode(response.body);
+        if (decoded != null && decoded['data'] != null) {
+          setState(() {
+            _chatId = decoded['data']['id'];
+          });
+          // Connect socket ONLY after we have the chatId
+          _connectSocket();
+          _fetchHistory();
+        }
+      }
+    } catch (e) {
+      debugPrint("Init Error: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// 2. Fetch History
+  Future<void> _fetchHistory() async {
+    if (_chatId == null) return;
+    try {
+      final response = await http.get(
+        Uri.parse('$serverUrl/api/message/$_chatId'),
+        headers: {'Authorization': 'Bearer ${widget.token}'},
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        if (decoded['success'] == true) {
+          setState(() {
+            _messages.clear(); // Avoid duplicates on reconnect
+            _messages.addAll(List<Map<String, dynamic>>.from(decoded['data']));
+          });
+          _scrollToBottom();
+        }
+      }
+    } catch (e) {
+      debugPrint("History Error: $e");
+    }
+  }
+
+  /// 3. Socket Setup with Connection Verification
+  void _connectSocket() {
+    if (_chatId == null) return;
+
+    socket = IO.io(
+      serverUrl,
+      IO.OptionBuilder()
+          .setTransports(['websocket'])
+          .setAuth({'token': widget.token})
+          .enableAutoConnect()
+          .build(),
+    );
+
+    socket!.onConnect((_) {
+      debugPrint("✅ Flutter connected to Socket");
+      socket!.emit('joinChat', _chatId);
     });
+
+    socket!.on('newMessage', (data) {
+      if (mounted) {
+        setState(() => _messages.add(data));
+        _scrollToBottom();
+      }
+    });
+
+    socket!.on('userTyping', (data) {
+      if (mounted && data['chatId'] == _chatId) {
+        setState(() {
+          _isPartnerTyping = data['isTyping'];
+          _partnerName = data['user']['name'] ?? "Responder";
+        });
+      }
+    });
+
+    socket!.onConnectError((err) => debugPrint("❌ Connection Error: $err"));
+  }
+
+  void _onTypingChanged(String text) {
+    if (socket != null && socket!.connected) {
+      socket!.emit('typing', {
+        'chatId': _chatId,
+        'isTyping': text.isNotEmpty,
+      });
+    }
+  }
+
+  void _sendMessage() {
+    final text = _messageController.text.trim();
+
+    // Add logging to debug in VS Code/Android Studio console
+    debugPrint(
+        "Attempting to send message. Socket Connected: ${socket?.connected}");
+
+    if (text.isEmpty ||
+        socket == null ||
+        !socket!.connected ||
+        _chatId == null) {
+      if (socket != null && !socket!.connected) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Connecting to server... please wait")),
+        );
+      }
+      return;
+    }
+
+    final payload = {
+      'chatId': _chatId,
+      'message': text,
+    };
+
+    socket!.emit('sendMessage', payload);
+
+    socket!.emit('typing', {'chatId': _chatId, 'isTyping': false});
     _messageController.clear();
   }
 
-  void _toggleRecording() {
-    setState(() {
-      _isRecording = !_isRecording;
+  void _scrollToBottom() {
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
     });
-    // Add your audio recording logic (e.g., record_mp3 or flutter_sound) here
   }
 
   @override
   Widget build(BuildContext context) {
+    // ... (Keep the build method from your previous snippet, it was UI-perfect)
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          Expanded(
-            child: Container(
-              color: softBlueBG,
-              child: ListView.builder(
-                reverse: true,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 20,
-                ),
-                itemCount: _messages.length,
-                itemBuilder: (context, index) =>
-                    _buildMessageBubble(_messages[index]),
-              ),
-            ),
-          ),
-          _buildInputArea(),
-        ],
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      elevation: 0,
-      backgroundColor: Colors.white,
-      leading: IconButton(
-        icon: const Icon(
-          Icons.arrow_back_ios_new,
-          color: primaryBlue,
-          size: 20,
+      backgroundColor: const Color(0xFFF5F7F9),
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Emergency Response",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            if (_isPartnerTyping)
+              Text("$_partnerName is typing...",
+                  style: const TextStyle(fontSize: 12, color: Colors.green)),
+          ],
         ),
-        onPressed: () => Navigator.pop(context),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0.5,
       ),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "Crisis Response Chat",
-            style: TextStyle(
-              color: Color(0xFF0F172A),
-              fontWeight: FontWeight.w900,
-              fontSize: 17,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 20),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final msg = _messages[index];
+                      final isMe = msg['senderId'] == widget.userId;
+                      return _buildMessageBubble(msg['message'] ?? "", isMe);
+                    },
+                  ),
+                ),
+                _buildInputArea(),
+              ],
             ),
-          ),
-          Text(
-            "ID: ${widget.emergencyId.toUpperCase()}",
-            style: const TextStyle(
-              color: accentBlue,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1,
-            ),
-          ),
-        ],
-      ),
-      centerTitle: false,
     );
   }
 
-  Widget _buildMessageBubble(Map<String, dynamic> msg) {
-    bool isMe = msg['isMe'];
+  // ... (Keep _buildMessageBubble and _buildInputArea as they were)
+  Widget _buildMessageBubble(String content, bool isMe) {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        margin: const EdgeInsets.symmetric(vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        constraints:
+            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
         decoration: BoxDecoration(
-          color: isMe ? primaryBlue : Colors.white,
+          color: isMe ? const Color(0xFF1E88E5) : Colors.white,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isMe ? 16 : 4),
-            bottomRight: Radius.circular(isMe ? 4 : 16),
+            bottomLeft: Radius.circular(isMe ? 16 : 0),
+            bottomRight: Radius.circular(isMe ? 0 : 16),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 5,
+                offset: const Offset(0, 2))
           ],
         ),
         child: Text(
-          msg['text'],
+          content,
           style: TextStyle(
-            color: isMe ? Colors.white : const Color(0xFF1E293B),
-            fontSize: 15,
-          ),
+              color: isMe ? Colors.white : Colors.black87, fontSize: 15),
         ),
       ),
     );
@@ -160,82 +264,41 @@ class _ChatPageState extends State<ChatPage>
 
   Widget _buildInputArea() {
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        12,
-        16,
-        MediaQuery.of(context).padding.bottom + 12,
-      ),
-      decoration: BoxDecoration(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.blue.withOpacity(0.1))),
+        border: Border(top: BorderSide(color: Color(0xFFEEEEEE))),
       ),
-      child: Row(
-        children: [
-          // AUDIO BUTTON
-          GestureDetector(
-            onTap: _toggleRecording,
-            child: ScaleTransition(
-              scale: _isRecording
-                  ? _recordingController
-                  : const AlwaysStoppedAnimation(1.0),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _isRecording ? Colors.red.shade50 : softBlueBG,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  _isRecording ? Icons.mic : Icons.mic_none_rounded,
-                  color: _isRecording ? Colors.red : primaryBlue,
-                  size: 22,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // TEXT FIELD
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: softBlueBG,
-                borderRadius: BorderRadius.circular(24),
-              ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            Expanded(
               child: TextField(
                 controller: _messageController,
-                style: const TextStyle(fontSize: 15),
-                decoration: const InputDecoration(
-                  hintText: "Report update...",
-                  hintStyle: TextStyle(color: Colors.blueGrey, fontSize: 14),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+                onChanged: _onTypingChanged,
+                decoration: InputDecoration(
+                  hintText: "Type message...",
+                  filled: true,
+                  fillColor: const Color(0xFFF1F3F4),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide.none,
                   ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-
-          // SEND BUTTON
-          GestureDetector(
-            onTap: _sendMessage,
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: const BoxDecoration(
-                color: primaryBlue,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.send_rounded,
-                color: Colors.white,
-                size: 20,
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: _sendMessage,
+              child: const CircleAvatar(
+                backgroundColor: Color(0xFF1E88E5),
+                child: Icon(Icons.send, color: Colors.white, size: 20),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
