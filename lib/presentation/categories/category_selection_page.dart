@@ -28,27 +28,38 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
     _fetchCategories();
   }
 
-  // Sorting logic to keep "Other" at the bottom
+  // Keep "Other" at bottom
   List<Map<String, dynamic>> _sortCategories(List<Map<String, dynamic>> list) {
     List<Map<String, dynamic>> sorted = List.from(list);
+
     sorted.sort((a, b) {
       String nameA = a["name"].toString().toLowerCase();
       String nameB = b["name"].toString().toLowerCase();
+
       bool isAOther = nameA.contains("other");
       bool isBOther = nameB.contains("other");
+
       if (isAOther && !isBOther) return 1;
       if (!isAOther && isBOther) return -1;
+
       return nameA.compareTo(nameB);
     });
+
     return sorted;
   }
 
+  // ✅ FIXED FETCH (important part)
   Future<void> _fetchCategories() async {
     try {
-      final data = await CategoryService.getCategories(widget.emergencyTypeId);
+      final data = await CategoryService.getCategories(
+        widget.emergencyTypeId,
+      );
+
       if (mounted) {
         setState(() {
-          categories = _sortCategories(List<Map<String, dynamic>>.from(data));
+          categories = _sortCategories(
+            List<Map<String, dynamic>>.from(data),
+          );
           filteredCategories = categories;
           isLoading = false;
         });
@@ -63,9 +74,10 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
     setState(() {
       filteredCategories = categories
           .where(
-            (cat) => cat['name'].toString().toLowerCase().contains(
-              query.toLowerCase(),
-            ),
+            (cat) => cat['name']
+                .toString()
+                .toLowerCase()
+                .contains(query.toLowerCase()),
           )
           .toList();
     });
@@ -144,7 +156,7 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
             ),
           ),
           const SizedBox(height: 20),
-          // Integrated Search Bar
+
           Container(
             height: 45,
             decoration: BoxDecoration(
@@ -182,10 +194,7 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
           children: [
             Icon(Icons.search_off, size: 48, color: Colors.grey[300]),
             const SizedBox(height: 12),
-            const Text(
-              "No matches found",
-              style: TextStyle(color: Colors.grey),
-            ),
+            const Text("No matches found", style: TextStyle(color: Colors.grey)),
           ],
         ),
       );
