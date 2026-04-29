@@ -1,7 +1,13 @@
 import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+
+// Audio
+import 'package:record/record.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 class ChatPage extends StatefulWidget {
   final int emergencyId;
@@ -23,9 +29,19 @@ class _ChatPageState extends State<ChatPage> {
   final String serverUrl = "http://localhost:5000";
 
   IO.Socket? socket;
+
   bool _isLoading = true;
   String _status = "idle"; // idle|connecting|ready|error
   bool _isComposing = false;
+
+  // Recording / upload
+  final AudioRecorder _recorder = AudioRecorder();
+  bool _isRecording = false;
+  bool _isUploadingAudio = false;
+
+  // Audio playback (single player is enough)
+  final AudioPlayer _player = AudioPlayer();
+  int? _playingMessageId;
 
   final List<Map<String, dynamic>> _messages = [];
   final TextEditingController _messageController = TextEditingController();
@@ -36,15 +52,27 @@ class _ChatPageState extends State<ChatPage> {
     return t.startsWith("Bearer ") ? t.substring(7) : t;
   }
 
+  String _absoluteMediaUrl(String relativeOrAbsolute) {
+    if (relativeOrAbsolute.startsWith("http")) return relativeOrAbsolute;
+    return "$serverUrl$relativeOrAbsolute";
+  }
+
   @override
   void initState() {
     super.initState();
+
     _initializeChat();
+
     _messageController.addListener(() {
       final next = _messageController.text.trim().isNotEmpty;
       if (next == _isComposing) return;
       if (!mounted) return;
       setState(() => _isComposing = next);
+    });
+
+    _player.onPlayerComplete.listen((_) {
+      if (!mounted) return;
+      setState(() => _playingMessageId = null);
     });
   }
 
@@ -54,6 +82,10 @@ class _ChatPageState extends State<ChatPage> {
     socket?.dispose();
     _messageController.dispose();
     _scrollController.dispose();
+
+    _recorder.dispose();
+    _player.dispose();
+
     super.dispose();
   }
 
@@ -169,6 +201,147 @@ class _ChatPageState extends State<ChatPage> {
     _scrollToBottom();
   }
 
+  // =========================
+  // AUDIO: RECORD + UPLOAD + SEND
+  // =========================
+
+  Future<void> _toggleRecord() async {
+    if (_status != "ready") {
+      _showError("Chat not connected yet.");
+      return;
+    }
+    if (_isUploadingAudio) return;
+
+    if (_isRecording) {
+      await _stopRecordingAndSend();
+    } else {
+      await _startRecording();
+    }
+  }
+
+  Future<void> _startRecording() async {
+    final ok = await _recorder.hasPermission();
+    if (!ok) {
+      _showError("Microphone permission denied.");
+      return;
+    }
+
+    try {
+      // record package stores internally (web uses browser recording)
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
+        ),
+        path:
+            "bahirlink_${widget.emergencyId}_${DateTime.now().millisecondsSinceEpoch}.m4a",
+      );
+
+      if (!mounted) return;
+      setState(() => _isRecording = true);
+    } catch (e) {
+      _showError("Failed to start recording: $e");
+    }
+  }
+
+  Future<void> _stopRecordingAndSend() async {
+    try {
+      final path = await _recorder.stop();
+      if (!mounted) return;
+      setState(() => _isRecording = false);
+
+      // On web, `path` can be null; record supports `stop()` returning a path on mobile.
+      // We handle both by using record's `stop()` result if present, else fallback to bytes.
+      if (path != null && path.isNotEmpty) {
+        await _uploadAudioFromPath(path);
+        return;
+      }
+
+      // Web fallback: getBytes() only available if you used startStream (not used here),
+      // so we show a clear message if path is not returned.
+      _showError(
+        "Recording finished but no file path returned (Web). "
+        "If this happens, run on Android/iOS or switch to record.startStream().",
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isRecording = false);
+      _showError("Failed to stop recording: $e");
+    }
+  }
+
+  Future<void> _uploadAudioFromPath(String path) async {
+    try {
+      setState(() => _isUploadingAudio = true);
+
+      final req = http.MultipartRequest(
+        "POST",
+        Uri.parse("$serverUrl/api/message/audio"),
+      );
+
+      req.headers["Authorization"] = "Bearer $_cleanToken";
+      req.fields["emergencyId"] = widget.emergencyId.toString();
+
+      req.files.add(await http.MultipartFile.fromPath("audio", path));
+
+      final streamed = await req.send();
+      final res = await http.Response.fromStream(streamed);
+      final body = jsonDecode(res.body);
+
+      if (res.statusCode != 201 || body["success"] != true) {
+        _showError(body["message"]?.toString() ?? "Audio upload failed");
+        return;
+      }
+
+      final saved = Map<String, dynamic>.from(body["data"]);
+
+      // realtime notify responder
+      final audioUrl = saved["audioUrl"]?.toString();
+      if (audioUrl != null && socket != null && socket!.connected) {
+        socket!.emit("chat:send", {
+          "emergencyId": widget.emergencyId,
+          "audioUrl": audioUrl,
+        });
+      }
+
+      // add locally too
+      if (!mounted) return;
+      setState(() => _messages.add(saved));
+      _scrollToBottom();
+    } catch (e) {
+      _showError("Failed to upload audio: $e");
+    } finally {
+      if (mounted) setState(() => _isUploadingAudio = false);
+    }
+  }
+
+  Future<void> _togglePlay(Map<String, dynamic> msg) async {
+    final id = msg["id"];
+    final audioUrl = msg["audioUrl"]?.toString();
+    if (audioUrl == null || audioUrl.isEmpty) return;
+
+    final src = _absoluteMediaUrl(audioUrl);
+
+    try {
+      if (_playingMessageId == id) {
+        await _player.pause();
+        if (mounted) setState(() => _playingMessageId = null);
+        return;
+      }
+
+      await _player.stop();
+      await _player.play(UrlSource(src));
+      if (mounted) setState(() => _playingMessageId = id is int ? id : null);
+    } catch (e) {
+      _showError("Audio playback failed: $e");
+    }
+  }
+
+  // =========================
+  // UI helpers
+  // =========================
+
   Color _statusColor(ThemeData theme) {
     switch (_status) {
       case "ready":
@@ -200,10 +373,7 @@ class _ChatPageState extends State<ChatPage> {
         msg["createdAt"] ?? msg["created_at"] ?? msg["timestamp"] ?? msg["time"];
     if (raw == null) return null;
     if (raw is int) {
-      // Heuristic: seconds vs ms
-      if (raw > 1000000000000) {
-        return DateTime.fromMillisecondsSinceEpoch(raw);
-      }
+      if (raw > 1000000000000) return DateTime.fromMillisecondsSinceEpoch(raw);
       return DateTime.fromMillisecondsSinceEpoch(raw * 1000);
     }
     return DateTime.tryParse(raw.toString());
@@ -241,10 +411,19 @@ class _ChatPageState extends State<ChatPage> {
     return (msg["senderType"] == "user") && (msg["senderId"] == widget.userId);
   }
 
+  bool _isAudioMsg(Map<String, dynamic> msg) {
+    return (msg["messageType"]?.toString() == "audio") ||
+        (msg["audioUrl"] != null && msg["audioUrl"].toString().isNotEmpty);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final statusColor = _statusColor(theme);
+
+    final canType = _status == "ready" && !_isRecording && !_isUploadingAudio;
+    final sendEnabled = canType && _isComposing;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -284,10 +463,7 @@ class _ChatPageState extends State<ChatPage> {
                       Container(
                         width: 8,
                         height: 8,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                        ),
+                        decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -297,6 +473,17 @@ class _ChatPageState extends State<ChatPage> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      if (_isUploadingAudio)
+                        const Text(
+                          "• uploading audio…",
+                          style: TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                        ),
+                      if (_isRecording)
+                        const Text(
+                          "• recording…",
+                          style: TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.w700),
+                        ),
                       const SizedBox(width: 8),
                       Text(
                         "• #${widget.emergencyId}",
@@ -330,10 +517,7 @@ class _ChatPageState extends State<ChatPage> {
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [
-                          Color(0xFFF8FAFC),
-                          Color(0xFFF1F5F9),
-                        ],
+                        colors: [Color(0xFFF8FAFC), Color(0xFFF1F5F9)],
                       ),
                     ),
                     child: _messages.isEmpty
@@ -345,10 +529,9 @@ class _ChatPageState extends State<ChatPage> {
                             itemBuilder: (context, index) {
                               final msg = _messages[index];
                               final mine = _isMe(msg);
-                              final content = (msg["text"] ?? "").toString();
                               final sentAt = _tryParseMessageTime(msg);
                               return _buildMessageBubble(
-                                content: content,
+                                msg: msg,
                                 isMe: mine,
                                 sentAt: sentAt,
                               );
@@ -356,7 +539,10 @@ class _ChatPageState extends State<ChatPage> {
                           ),
                   ),
                 ),
-                _buildInputArea(),
+                _buildInputArea(
+                  canType: canType,
+                  sendEnabled: sendEnabled,
+                ),
               ],
             ),
     );
@@ -384,10 +570,7 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                 ],
               ),
-              child: const Icon(
-                Icons.chat_bubble_outline_rounded,
-                color: Color(0xFF334155),
-              ),
+              child: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF334155)),
             ),
             const SizedBox(height: 14),
             Text(
@@ -400,7 +583,7 @@ class _ChatPageState extends State<ChatPage> {
             const SizedBox(height: 6),
             Text(
               _status == "ready"
-                  ? "Send a message to the responder team."
+                  ? "Send a message or a voice note."
                   : "Connecting you to a responder…",
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
@@ -415,15 +598,20 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Widget _buildMessageBubble({
-    required String content,
+    required Map<String, dynamic> msg,
     required bool isMe,
     required DateTime? sentAt,
   }) {
     final theme = Theme.of(context);
     final maxWidth = MediaQuery.sizeOf(context).width * 0.78;
+
     final bubbleColor = isMe ? const Color(0xFF0F172A) : Colors.white;
     final textColor = isMe ? Colors.white : const Color(0xFF0F172A);
     final metaColor = isMe ? Colors.white70 : const Color(0xFF64748B);
+
+    final isAudio = _isAudioMsg(msg);
+    final id = msg["id"];
+    final playing = (_playingMessageId != null && _playingMessageId == id);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -459,23 +647,47 @@ class _ChatPageState extends State<ChatPage> {
                     offset: const Offset(0, 6),
                   ),
                 ],
-                border: isMe
-                    ? null
-                    : Border.all(color: const Color(0xFFE2E8F0)),
+                border: isMe ? null : Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SelectableText(
-                      content,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: textColor,
-                        height: 1.25,
-                        fontWeight: FontWeight.w500,
+                    if (isAudio) ...[
+                      Row(
+                        children: [
+                          Icon(Icons.mic_rounded, color: textColor.withOpacity(0.95), size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              "Voice message",
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: textColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => _togglePlay(msg),
+                            icon: Icon(
+                              playing ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
+                              color: isMe ? Colors.white : const Color(0xFF0F172A),
+                              size: 30,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
+                    ] else ...[
+                      SelectableText(
+                        (msg["text"] ?? "").toString(),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: textColor,
+                          height: 1.25,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 6),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
@@ -500,11 +712,7 @@ class _ChatPageState extends State<ChatPage> {
             CircleAvatar(
               radius: 14,
               backgroundColor: const Color(0xFF0F172A),
-              child: Icon(
-                Icons.person_rounded,
-                size: 16,
-                color: Colors.white.withOpacity(0.95),
-              ),
+              child: Icon(Icons.person_rounded, size: 16, color: Colors.white.withOpacity(0.95)),
             ),
           ],
         ],
@@ -512,10 +720,10 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  Widget _buildInputArea() {
-    final canType = _status == "ready";
-    final theme = Theme.of(context);
-    final sendEnabled = canType && _isComposing;
+  Widget _buildInputArea({
+    required bool canType,
+    required bool sendEnabled,
+  }) {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: BoxDecoration(
@@ -532,19 +740,28 @@ class _ChatPageState extends State<ChatPage> {
       child: SafeArea(
         child: Row(
           children: [
+            // MIC button (tap to start, tap again to stop + send)
             IconButton(
-              tooltip: "Attach",
-              onPressed: canType ? () {} : null,
-              icon: const Icon(Icons.add_circle_outline_rounded),
-              color: const Color(0xFF334155),
+              tooltip: _isRecording ? "Stop & Send" : "Record audio",
+              onPressed: (canType && !_isUploadingAudio) ? _toggleRecord : null,
+              icon: Icon(
+                _isRecording ? Icons.stop_circle_rounded : Icons.mic_rounded,
+                color: _isRecording ? Colors.red : const Color(0xFF334155),
+              ),
             ),
+
             Expanded(
               child: TextField(
                 controller: _messageController,
                 enabled: canType,
                 decoration: InputDecoration(
-                  hintText:
-                      canType ? "Send a message..." : "Connecting to responder...",
+                  hintText: canType
+                      ? (_isRecording
+                          ? "Recording… tap stop to send"
+                          : _isUploadingAudio
+                              ? "Uploading audio…"
+                              : "Send a message…")
+                      : "Connecting to responder…",
                   filled: true,
                   fillColor: const Color(0xFFF1F5F9),
                   border: OutlineInputBorder(
@@ -561,13 +778,14 @@ class _ChatPageState extends State<ChatPage> {
                 onSubmitted: (_) => _sendMessage(),
               ),
             ),
+
             const SizedBox(width: 10),
+
             SizedBox(
               width: 44,
               height: 44,
               child: Material(
-                color:
-                    sendEnabled ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+                color: sendEnabled ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
                 borderRadius: BorderRadius.circular(14),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(14),
