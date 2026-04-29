@@ -21,6 +21,11 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
   bool _isPasswordVisible = false;
 
+  String _cleanToken(String raw) {
+    final t = raw.trim();
+    return t.startsWith("Bearer ") ? t.substring(7) : t;
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -31,27 +36,41 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
+
     try {
       final result = await AuthService.login(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
+
       if (!mounted) return;
-      if (result["success"] == true && result["accessToken"] != null) {
+
+      final accessTokenRaw =
+          (result["accessToken"] ?? result["token"])?.toString();
+      final userIdRaw = result["user"]?["id"]?.toString();
+
+      if (result["success"] == true && accessTokenRaw != null && userIdRaw != null) {
+        final token = _cleanToken(accessTokenRaw);
+
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString("accessToken", result["accessToken"].toString());
-        await prefs.setString("userId", result["user"]["id"].toString());
+
+        // Keep both keys for compatibility across your app
+        await prefs.setString("accessToken", token);
+        await prefs.setString("token", token);
+
+        await prefs.setString("userId", userIdRaw);
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (_) => DashboardPage(
-              userId: result["user"]["id"].toString(),
-              token: result["accessToken"].toString(),
+              userId: userIdRaw,
+              token: token,
             ),
           ),
         );
       } else {
-        _showError(result["error"] ?? "Authentication failed");
+        _showError(result["error"]?.toString() ?? "Authentication failed");
       }
     } catch (e) {
       _showError("An error occurred. Please try again.");
@@ -110,7 +129,8 @@ class _LoginPageState extends State<LoginPage> {
                       isPassword: true,
                       obscureText: !_isPasswordVisible,
                       onSuffixPressed: () => setState(
-                          () => _isPasswordVisible = !_isPasswordVisible),
+                        () => _isPasswordVisible = !_isPasswordVisible,
+                      ),
                       validator: (value) =>
                           value!.length < 6 ? "Password too short" : null,
                     ),
@@ -200,9 +220,10 @@ class _LoginPageState extends State<LoginPage> {
         suffixIcon: isPassword
             ? IconButton(
                 icon: Icon(
-                    obscureText ? Icons.visibility_off : Icons.visibility,
-                    color: Colors.grey,
-                    size: 18),
+                  obscureText ? Icons.visibility_off : Icons.visibility,
+                  color: Colors.grey,
+                  size: 18,
+                ),
                 onPressed: onSuffixPressed,
               )
             : null,
@@ -222,12 +243,17 @@ class _LoginPageState extends State<LoginPage> {
     return Align(
       alignment: Alignment.centerRight,
       child: GestureDetector(
-        onTap: () => Navigator.push(context,
-            MaterialPageRoute(builder: (_) => const ForgotPasswordPage())),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ForgotPasswordPage()),
+        ),
         child: const Text(
           "Forget password?",
           style: TextStyle(
-              color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w500),
+            color: Colors.grey,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ),
     );
@@ -242,8 +268,7 @@ class _LoginPageState extends State<LoginPage> {
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white,
           side: const BorderSide(color: Color(0xFF4A90E2), width: 1.5),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
           elevation: 0,
         ),
         child: _isLoading
@@ -251,23 +276,35 @@ class _LoginPageState extends State<LoginPage> {
                 height: 20,
                 width: 20,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Color(0xFF4A90E2)))
-            : const Text("Login",
+                  strokeWidth: 2,
+                  color: Color(0xFF4A90E2),
+                ),
+              )
+            : const Text(
+                "Login",
                 style: TextStyle(
-                    color: Color(0xFF4A90E2),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16)),
+                  color: Color(0xFF4A90E2),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
       ),
     );
   }
 
   Widget _buildGuestButton() {
     return TextButton(
-      onPressed: () => Navigator.pushReplacement(context,
-          MaterialPageRoute(builder: (_) => const GuestDashboardPage())),
-      child: const Text("Continue as Guest",
-          style:
-              TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
+      onPressed: () => Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const GuestDashboardPage()),
+      ),
+      child: const Text(
+        "Continue as Guest",
+        style: TextStyle(
+          color: Color(0xFF64748B),
+          fontWeight: FontWeight.w500,
+        ),
+      ),
     );
   }
 
@@ -278,10 +315,16 @@ class _LoginPageState extends State<LoginPage> {
         const Text("New user? ", style: TextStyle(color: Colors.grey)),
         GestureDetector(
           onTap: () => Navigator.push(
-              context, MaterialPageRoute(builder: (_) => const SignUpPage())),
-          child: const Text("Sign Up",
-              style: TextStyle(
-                  color: Color(0xFF4A90E2), fontWeight: FontWeight.bold)),
+            context,
+            MaterialPageRoute(builder: (_) => const SignUpPage()),
+          ),
+          child: const Text(
+            "Sign Up",
+            style: TextStyle(
+              color: Color(0xFF4A90E2),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
       ],
     );
