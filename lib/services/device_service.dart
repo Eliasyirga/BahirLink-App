@@ -1,5 +1,5 @@
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'dart:io' show Platform;
 
 class DeviceService {
@@ -8,20 +8,26 @@ class DeviceService {
   static Future<String?> getDeviceId() async {
     try {
       if (kIsWeb) {
-        // Short Web identifier
-        return "web-${DateTime.now().millisecondsSinceEpoch}";
+        // ⚠️ better fallback web ID (stable per session)
+        return "web-user";
       }
+
       if (Platform.isAndroid) {
         final androidInfo = await _deviceInfo.androidInfo;
-        return androidInfo.id;
+
+        // safer fallback chain
+        return androidInfo.id ?? androidInfo.model ?? androidInfo.brand;
       }
+
       if (Platform.isIOS) {
         final iosInfo = await _deviceInfo.iosInfo;
-        return iosInfo.identifierForVendor;
+
+        return iosInfo.identifierForVendor ?? iosInfo.name ?? iosInfo.model;
       }
     } catch (e) {
-      print("Device ID Error: $e");
+      debugPrint("Device ID Error: $e");
     }
+
     return null;
   }
 }

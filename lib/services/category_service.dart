@@ -11,13 +11,15 @@
 //     );
 
 //     if (response.statusCode == 200) {
-//       return jsonDecode(response.body);
+//       final decoded = jsonDecode(response.body);
+
+//       // ✅ FIXED HERE
+//       return decoded["data"] ?? [];
 //     } else {
 //       throw Exception("Failed to load categories");
 //     }
 //   }
 // }
-
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
