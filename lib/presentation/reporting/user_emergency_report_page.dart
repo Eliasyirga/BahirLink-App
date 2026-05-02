@@ -228,59 +228,60 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   }
 
   Widget _buildHeader() => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.only(top: 60, bottom: 30, left: 20, right: 20),
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        colors: [primaryBlue, accentBlue],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-    ),
-    child: Row(
-      children: [
-        GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.arrow_back_ios_new,
-              color: Colors.white,
-              size: 20,
-            ),
+        width: double.infinity,
+        padding:
+            const EdgeInsets.only(top: 60, bottom: 30, left: 20, right: 20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [primaryBlue, accentBlue],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
         ),
-        const SizedBox(width: 20),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.emergencyTypeName,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.arrow_back_ios_new,
                   color: Colors.white,
+                  size: 20,
                 ),
               ),
-              Text(
-                widget.categoryName,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.8),
-                  letterSpacing: 1.2,
-                ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.emergencyTypeName,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    widget.categoryName,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.8),
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      );
 
   Widget _buildForm() {
     return Column(
@@ -408,53 +409,54 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   }
 
   Widget _sectionHeader(String title) => Text(
-    title.toUpperCase(),
-    style: TextStyle(
-      fontSize: 12,
-      fontWeight: FontWeight.w800,
-      color: primaryBlue.withOpacity(0.6),
-      letterSpacing: 1.5,
-    ),
-  );
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          color: primaryBlue.withOpacity(0.6),
+          letterSpacing: 1.5,
+        ),
+      );
 
   Widget _buildTextField(
     TextEditingController controller,
     String hint, {
     int maxLines = 1,
     required IconData icon,
-  }) => Container(
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(15),
-      boxShadow: [
-        BoxShadow(
-          color: primaryBlue.withOpacity(0.05),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    ),
-    child: TextField(
-      controller: controller,
-      maxLines: maxLines,
-      style: TextStyle(color: primaryBlue),
-      decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: accentBlue, size: 20),
-        hintText: hint,
-        hintStyle: TextStyle(color: Colors.blueGrey.withOpacity(0.5)),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
+  }) =>
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide.none,
+          boxShadow: [
+            BoxShadow(
+              color: primaryBlue.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
+        child: TextField(
+          controller: controller,
+          maxLines: maxLines,
+          style: TextStyle(color: primaryBlue),
+          decoration: InputDecoration(
+            prefixIcon: Icon(icon, color: accentBlue, size: 20),
+            hintText: hint,
+            hintStyle: TextStyle(color: Colors.blueGrey.withOpacity(0.5)),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(15),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 16,
+            ),
+          ),
         ),
-      ),
-    ),
-  );
+      );
 
   Widget _buildPickerRow({
     required IconData icon,
@@ -462,78 +464,81 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     required String value,
     Color? valueColor,
     required VoidCallback onTap,
-  }) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(15),
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      decoration: BoxDecoration(
-        color: Colors.white,
+  }) =>
+      InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: primaryBlue.withOpacity(0.1)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: accentBlue),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(fontWeight: FontWeight.w600, color: primaryBlue),
-            ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: primaryBlue.withOpacity(0.1)),
           ),
-          Text(
-            value,
-            style: TextStyle(
-              color: valueColor ?? accentBlue,
-              fontWeight: FontWeight.bold,
-            ),
+          child: Row(
+            children: [
+              Icon(icon, color: accentBlue),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600, color: primaryBlue),
+                ),
+              ),
+              Text(
+                value,
+                style: TextStyle(
+                  color: valueColor ?? accentBlue,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: primaryBlue.withOpacity(0.3)),
+            ],
           ),
-          const SizedBox(width: 8),
-          Icon(Icons.chevron_right, color: primaryBlue.withOpacity(0.3)),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 
   Widget _buildSubmitButton() => Container(
-    width: double.infinity,
-    height: 60,
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(15),
-      boxShadow: [
-        BoxShadow(
-          color: primaryBlue.withOpacity(0.3),
-          blurRadius: 12,
-          offset: const Offset(0, 6),
-        ),
-      ],
-    ),
-    child: ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: primaryBlue,
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        elevation: 0,
-      ),
-      onPressed: _isLoading ? null : _submitReport,
-      child: _isLoading
-          ? const SizedBox(
-              height: 24,
-              width: 24,
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2,
-              ),
-            )
-          : const Text(
-              "SUBMIT REPORT",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-              ),
+        width: double.infinity,
+        height: 60,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: primaryBlue.withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
             ),
-    ),
-  );
+          ],
+        ),
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryBlue,
+            foregroundColor: Colors.white,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+            elevation: 0,
+          ),
+          onPressed: _isLoading ? null : _submitReport,
+          child: _isLoading
+              ? const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Text(
+                  "SUBMIT REPORT",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+        ),
+      );
 }

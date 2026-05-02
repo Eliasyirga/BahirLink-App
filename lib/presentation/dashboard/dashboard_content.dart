@@ -384,30 +384,30 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   Widget _miniBadge(String txt, Color col) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      color: col,
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Text(
-      txt,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 8,
-        fontWeight: FontWeight.w900,
-      ),
-    ),
-  );
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: col,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          txt,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 8,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      );
 
   Widget _sectionLabel(String t) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
-    child: Text(
-      t,
-      style: const TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w800,
-        color: _kPrimaryBlue,
-      ),
-    ),
-  );
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+        child: Text(
+          t,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: _kPrimaryBlue,
+          ),
+        ),
+      );
 }

@@ -14,7 +14,7 @@ import '../call/call_page.dart';
 
 class ChatPage extends StatefulWidget {
   final int emergencyId;
-  final String token; // citizen/user JWT (may or may not already include Bearer)
+  final String token;
   final int userId;
 
   const ChatPage({
@@ -29,13 +29,12 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
-  // Use your LAN IP on real devices (NOT localhost)
   final String serverUrl = "http://localhost:5000";
 
   IO.Socket? socket;
 
   bool _isLoading = true;
-  String _status = "idle"; // idle|connecting|ready|error
+  String _status = "idle"; // idle | connecting | ready | error
   bool _isComposing = false;
 
   // Recording / upload
@@ -51,6 +50,7 @@ class _ChatPageState extends State<ChatPage> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
+  // ── Token helpers ──────────────────────────────────────────────────────────
   String get _cleanToken {
     final t = widget.token.trim();
     return t.startsWith("Bearer ") ? t.substring(7) : t;
@@ -61,11 +61,11 @@ class _ChatPageState extends State<ChatPage> {
     return "$serverUrl$relativeOrAbsolute";
   }
 
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
 
-    // Call socket should be online so incoming call can pop ANYWHERE
     CallService.I.connect(apiBaseUrl: serverUrl, token: _cleanToken);
     CallService.I.ensureConnected();
 
@@ -90,13 +90,12 @@ class _ChatPageState extends State<ChatPage> {
     socket?.dispose();
     _messageController.dispose();
     _scrollController.dispose();
-
     _recorder.dispose();
     _player.dispose();
-
     super.dispose();
   }
 
+  // ── Init ───────────────────────────────────────────────────────────────────
   Future<void> _initializeChat() async {
     try {
       setState(() {
@@ -123,7 +122,8 @@ class _ChatPageState extends State<ChatPage> {
       }
 
       final list = (body["data"] as List<dynamic>? ?? []);
-      final mapped = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final mapped =
+          list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
       if (!mounted) return;
       setState(() {
@@ -144,6 +144,7 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  // ── Socket ─────────────────────────────────────────────────────────────────
   void _connectSocket() {
     socket?.disconnect();
     socket?.dispose();
@@ -160,7 +161,6 @@ class _ChatPageState extends State<ChatPage> {
     socket!.onConnect((_) {
       if (!mounted) return;
       setState(() => _status = "ready");
-
       socket!.emit("chat:join", {"emergencyId": widget.emergencyId});
       socket!.emit("join_emergency", widget.emergencyId); // legacy
     });
@@ -195,6 +195,7 @@ class _ChatPageState extends State<ChatPage> {
     socket!.connect();
   }
 
+  // ── Send text ──────────────────────────────────────────────────────────────
   void _sendMessage() {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
@@ -210,10 +211,7 @@ class _ChatPageState extends State<ChatPage> {
     _scrollToBottom();
   }
 
-  // =========================
-  // VIDEO ICON: open current ringing call for this emergency
-  // (responder initiates; user only answers)
-  // =========================
+  // ── Video call ─────────────────────────────────────────────────────────────
   void _openPendingCallOrExplain() {
     final invite = CallService.I.pendingInvite;
     if (invite != null && invite.emergencyId == widget.emergencyId) {
@@ -225,16 +223,12 @@ class _ChatPageState extends State<ChatPage> {
       );
       return;
     }
-
     _showError(
       "No incoming call right now. Wait for the responder to start the call.",
     );
   }
 
-  // =========================
-  // AUDIO: RECORD + UPLOAD + SEND
-  // =========================
-
+  // ── Audio recording ────────────────────────────────────────────────────────
   Future<void> _toggleRecord() async {
     if (_status != "ready") {
       _showError("Chat not connected yet.");
@@ -266,7 +260,6 @@ class _ChatPageState extends State<ChatPage> {
         path:
             "bahirlink_${widget.emergencyId}_${DateTime.now().millisecondsSinceEpoch}.m4a",
       );
-
       if (!mounted) return;
       setState(() => _isRecording = true);
     } catch (e) {
@@ -286,7 +279,7 @@ class _ChatPageState extends State<ChatPage> {
       }
 
       _showError(
-        "Recording finished but no file path returned (Web). "
+        "Recording finished but no file path returned. "
         "Run on Android/iOS or switch to record.startStream().",
       );
     } catch (e) {
@@ -304,7 +297,6 @@ class _ChatPageState extends State<ChatPage> {
         "POST",
         Uri.parse("$serverUrl/api/message/audio"),
       );
-
       req.headers["Authorization"] = "Bearer $_cleanToken";
       req.fields["emergencyId"] = widget.emergencyId.toString();
       req.files.add(await http.MultipartFile.fromPath("audio", path));
@@ -319,8 +311,8 @@ class _ChatPageState extends State<ChatPage> {
       }
 
       final saved = Map<String, dynamic>.from(body["data"]);
-
       final audioUrl = saved["audioUrl"]?.toString();
+
       if (audioUrl != null && socket != null && socket!.connected) {
         socket!.emit("chat:send", {
           "emergencyId": widget.emergencyId,
@@ -338,6 +330,7 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  // ── Audio playback ─────────────────────────────────────────────────────────
   Future<void> _togglePlay(Map<String, dynamic> msg, dynamic key) async {
     final audioUrl = msg["audioUrl"]?.toString();
     if (audioUrl == null || audioUrl.isEmpty) return;
@@ -350,7 +343,6 @@ class _ChatPageState extends State<ChatPage> {
         if (mounted) setState(() => _playingKey = null);
         return;
       }
-
       await _player.stop();
       await _player.play(UrlSource(src));
       if (mounted) setState(() => _playingKey = key);
@@ -359,10 +351,7 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  // =========================
-  // UI helpers (Telegram-ish)
-  // =========================
-
+  // ── UI helpers ─────────────────────────────────────────────────────────────
   Color _statusColor() {
     switch (_status) {
       case "ready":
@@ -390,7 +379,10 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   DateTime? _tryParseMessageTime(Map<String, dynamic> msg) {
-    final raw = msg["createdAt"] ?? msg["created_at"] ?? msg["timestamp"] ?? msg["time"];
+    final raw = msg["createdAt"] ??
+        msg["created_at"] ??
+        msg["timestamp"] ??
+        msg["time"];
     if (raw == null) return null;
     if (raw is int) {
       if (raw > 1000000000000) return DateTime.fromMillisecondsSinceEpoch(raw);
@@ -453,6 +445,7 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final statusColor = _statusColor();
@@ -502,9 +495,12 @@ class _ChatPageState extends State<ChatPage> {
                   Row(
                     children: [
                       Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          shape: BoxShape.circle,
+                        ),
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -520,9 +516,9 @@ class _ChatPageState extends State<ChatPage> {
                         const Text(
                           "• uploading audio…",
                           style: TextStyle(
-                            color: Color(0xFF64748B),
                             fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -531,9 +527,9 @@ class _ChatPageState extends State<ChatPage> {
                         const Text(
                           "• recording…",
                           style: TextStyle(
-                            color: Colors.red,
                             fontSize: 11,
-                            fontWeight: FontWeight.w800,
+                            color: Colors.red,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],
@@ -570,15 +566,17 @@ class _ChatPageState extends State<ChatPage> {
                           ? _emptyState()
                           : ListView.builder(
                               controller: _scrollController,
-                              padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+                              padding:
+                                  const EdgeInsets.fromLTRB(12, 14, 12, 14),
                               itemCount: _messages.length,
                               itemBuilder: (context, index) {
                                 final msg = _messages[index];
                                 final mine = _isMe(msg);
                                 final isAudio = _isAudioMsg(msg);
                                 final sentAt = _tryParseMessageTime(msg);
-                                final time = sentAt == null ? "" : _formatTime(sentAt.toLocal());
-
+                                final time = sentAt == null
+                                    ? ""
+                                    : _formatTime(sentAt.toLocal());
                                 final key = msg["id"] ?? index;
                                 final playing = _playingKey == key;
 
@@ -588,7 +586,9 @@ class _ChatPageState extends State<ChatPage> {
                                   isAudio: isAudio,
                                   text: (msg["text"] ?? "").toString(),
                                   isPlaying: playing,
-                                  onPlayToggle: isAudio ? () => _togglePlay(msg, key) : null,
+                                  onPlayToggle: isAudio
+                                      ? () => _togglePlay(msg, key)
+                                      : null,
                                 );
                               },
                             ),
@@ -596,16 +596,17 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                 ),
                 if (_isUploadingAudio)
-                  const LinearProgressIndicator(minHeight: 2, color: Color(0xFF24A1DE)),
-                _inputBar(
-                  canType: canType,
-                  sendEnabled: sendEnabled,
-                ),
+                  const LinearProgressIndicator(
+                    minHeight: 2,
+                    color: Color(0xFF24A1DE),
+                  ),
+                _inputBar(canType: canType, sendEnabled: sendEnabled),
               ],
             ),
     );
   }
 
+  // ── Empty state ────────────────────────────────────────────────────────────
   Widget _emptyState() {
     return Center(
       child: Padding(
@@ -622,12 +623,16 @@ class _ChatPageState extends State<ChatPage> {
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.06),
-                    blurRadius: 16,
+                    blurRadius: 18,
                     offset: const Offset(0, 10),
                   ),
                 ],
               ),
-              child: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF334155), size: 28),
+              child: const Icon(
+                Icons.chat_bubble_outline_rounded,
+                color: Color(0xFF334155),
+                size: 28,
+              ),
             ),
             const SizedBox(height: 14),
             const Text(
@@ -640,7 +645,9 @@ class _ChatPageState extends State<ChatPage> {
             ),
             const SizedBox(height: 6),
             Text(
-              _status == "ready" ? "Send a message or voice note." : "Connecting…",
+              _status == "ready"
+                  ? "Send a message or voice note."
+                  : "Connecting…",
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: Color(0xFF64748B),
@@ -653,16 +660,20 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  // ── Input bar ──────────────────────────────────────────────────────────────
   Widget _inputBar({required bool canType, required bool sendEnabled}) {
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.black.withOpacity(0.06))),
+        border: Border(
+          top: BorderSide(color: Colors.black.withOpacity(0.06)),
+        ),
       ),
       child: SafeArea(
         child: Row(
           children: [
+            // Mic / stop button
             InkWell(
               borderRadius: BorderRadius.circular(999),
               onTap: (canType && !_isUploadingAudio) ? _toggleRecord : null,
@@ -676,14 +687,18 @@ class _ChatPageState extends State<ChatPage> {
                 ),
                 child: Icon(
                   _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
-                  color: _isRecording ? Colors.white : const Color(0xFF334155),
+                  color:
+                      _isRecording ? Colors.white : const Color(0xFF334155),
                 ),
               ),
             ),
             const SizedBox(width: 10),
+
+            // Text field
             Expanded(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(26),
@@ -710,6 +725,8 @@ class _ChatPageState extends State<ChatPage> {
               ),
             ),
             const SizedBox(width: 10),
+
+            // Send button
             InkWell(
               borderRadius: BorderRadius.circular(999),
               onTap: sendEnabled ? _sendMessage : null,
@@ -717,20 +734,25 @@ class _ChatPageState extends State<ChatPage> {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: sendEnabled ? const Color(0xFF24A1DE) : const Color(0xFFE2E8F0),
+                  color: sendEnabled
+                      ? const Color(0xFF24A1DE)
+                      : const Color(0xFFE2E8F0),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: (sendEnabled ? const Color(0xFF24A1DE) : const Color(0xFFE2E8F0))
+                      color: (sendEnabled
+                              ? const Color(0xFF24A1DE)
+                              : const Color(0xFFE2E8F0))
                           .withOpacity(sendEnabled ? 0.35 : 0.0),
                       blurRadius: 14,
                       offset: const Offset(0, 6),
-                    )
+                    ),
                   ],
                 ),
                 child: Icon(
                   Icons.send_rounded,
-                  color: sendEnabled ? Colors.white : const Color(0xFF94A3B8),
+                  color:
+                      sendEnabled ? Colors.white : const Color(0xFF94A3B8),
                   size: 20,
                 ),
               ),
@@ -742,6 +764,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 }
 
+// ── _TelegramBubble ────────────────────────────────────────────────────────
 class _TelegramBubble extends StatelessWidget {
   final bool isMe;
   final String time;
@@ -770,7 +793,9 @@ class _TelegramBubble extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 5),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.78,
+        ),
         decoration: BoxDecoration(
           color: bubbleColor,
           borderRadius: BorderRadius.only(
@@ -802,12 +827,19 @@ class _TelegramBubble extends StatelessWidget {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: (isMe ? Colors.white : const Color(0xFF24A1DE)).withOpacity(isMe ? 0.18 : 0.12),
+                        color: (isMe
+                                ? Colors.white
+                                : const Color(0xFF24A1DE))
+                            .withOpacity(isMe ? 0.18 : 0.12),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                        color: isMe ? Colors.white : const Color(0xFF24A1DE),
+                        isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        color: isMe
+                            ? Colors.white
+                            : const Color(0xFF24A1DE),
                         size: 24,
                       ),
                     ),
@@ -817,7 +849,11 @@ class _TelegramBubble extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _WaveformBars(color: isMe ? Colors.white : const Color(0xFF24A1DE)),
+                        _WaveformBars(
+                          color: isMe
+                              ? Colors.white
+                              : const Color(0xFF24A1DE),
+                        ),
                         const SizedBox(height: 4),
                         Text(
                           "Voice message",
@@ -857,8 +893,12 @@ class _TelegramBubble extends StatelessWidget {
                   ),
                 if (isMe) ...[
                   const SizedBox(width: 6),
-                  Icon(Icons.done_all_rounded, size: 14, color: Colors.white.withOpacity(0.85)),
-                ]
+                  Icon(
+                    Icons.done_all_rounded,
+                    size: 14,
+                    color: Colors.white.withOpacity(0.85),
+                  ),
+                ],
               ],
             ),
           ],
@@ -868,6 +908,7 @@ class _TelegramBubble extends StatelessWidget {
   }
 }
 
+// ── _WaveformBars ──────────────────────────────────────────────────────────
 class _WaveformBars extends StatelessWidget {
   final Color color;
   final int bars;
@@ -900,6 +941,7 @@ class _WaveformBars extends StatelessWidget {
   }
 }
 
+// ── _TelegramBgPainter ─────────────────────────────────────────────────────
 class _TelegramBgPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -911,8 +953,15 @@ class _TelegramBgPainter extends CustomPainter {
     const spacing = 46.0;
     for (double y = -spacing; y < size.height + spacing; y += spacing) {
       for (double x = -spacing; x < size.width + spacing; x += spacing) {
-        final r = Rect.fromCenter(center: Offset(x, y), width: 16, height: 16);
-        canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(5)), paint);
+        final r = Rect.fromCenter(
+          center: Offset(x, y),
+          width: 16,
+          height: 16,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(r, const Radius.circular(5)),
+          paint,
+        );
       }
     }
   }
