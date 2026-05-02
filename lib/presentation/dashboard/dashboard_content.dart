@@ -8,7 +8,6 @@ import 'package:first_app/services/user_service.dart';
 import 'package:first_app/services/case_service.dart';
 import 'package:first_app/services/emergency_type_service.dart';
 
-// Models & Pages
 import 'package:first_app/model/emergency_type.dart';
 import 'package:first_app/model/service_type.dart';
 import 'package:first_app/presentation/categories/user_category_selection_page.dart';
