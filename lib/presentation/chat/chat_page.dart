@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -8,6 +7,10 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 // Audio
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
+
+// Call
+import '../../services/call_services.dart';
+import '../call/call_page.dart';
 
 class ChatPage extends StatefulWidget {
   final int emergencyId;
@@ -26,6 +29,7 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
+  // Use your LAN IP on real devices (NOT localhost)
   final String serverUrl = "http://localhost:5000";
 
   IO.Socket? socket;
@@ -39,9 +43,9 @@ class _ChatPageState extends State<ChatPage> {
   bool _isRecording = false;
   bool _isUploadingAudio = false;
 
-  // Audio playback (single player is enough)
+  // Audio playback
   final AudioPlayer _player = AudioPlayer();
-  int? _playingMessageId;
+  dynamic _playingKey; // msg id if present, else list index
 
   final List<Map<String, dynamic>> _messages = [];
   final TextEditingController _messageController = TextEditingController();
@@ -61,6 +65,10 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
 
+    // Call socket should be online so incoming call can pop ANYWHERE
+    CallService.I.connect(apiBaseUrl: serverUrl, token: _cleanToken);
+    CallService.I.ensureConnected();
+
     _initializeChat();
 
     _messageController.addListener(() {
@@ -72,7 +80,7 @@ class _ChatPageState extends State<ChatPage> {
 
     _player.onPlayerComplete.listen((_) {
       if (!mounted) return;
-      setState(() => _playingMessageId = null);
+      setState(() => _playingKey = null);
     });
   }
 
@@ -107,14 +115,15 @@ class _ChatPageState extends State<ChatPage> {
       final body = jsonDecode(res.body);
 
       if (res.statusCode != 200 || body["success"] != true) {
-        _showError(body["message"]?.toString() ?? "Failed to load chat history");
+        _showError(
+          body["message"]?.toString() ?? "Failed to load chat history",
+        );
         setState(() => _status = "error");
         return;
       }
 
       final list = (body["data"] as List<dynamic>? ?? []);
-      final mapped =
-          list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final mapped = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
       if (!mounted) return;
       setState(() {
@@ -202,6 +211,27 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   // =========================
+  // VIDEO ICON: open current ringing call for this emergency
+  // (responder initiates; user only answers)
+  // =========================
+  void _openPendingCallOrExplain() {
+    final invite = CallService.I.pendingInvite;
+    if (invite != null && invite.emergencyId == widget.emergencyId) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) => CallPage(invite: invite),
+        ),
+      );
+      return;
+    }
+
+    _showError(
+      "No incoming call right now. Wait for the responder to start the call.",
+    );
+  }
+
+  // =========================
   // AUDIO: RECORD + UPLOAD + SEND
   // =========================
 
@@ -227,7 +257,6 @@ class _ChatPageState extends State<ChatPage> {
     }
 
     try {
-      // record package stores internally (web uses browser recording)
       await _recorder.start(
         const RecordConfig(
           encoder: AudioEncoder.aacLc,
@@ -251,18 +280,14 @@ class _ChatPageState extends State<ChatPage> {
       if (!mounted) return;
       setState(() => _isRecording = false);
 
-      // On web, `path` can be null; record supports `stop()` returning a path on mobile.
-      // We handle both by using record's `stop()` result if present, else fallback to bytes.
       if (path != null && path.isNotEmpty) {
         await _uploadAudioFromPath(path);
         return;
       }
 
-      // Web fallback: getBytes() only available if you used startStream (not used here),
-      // so we show a clear message if path is not returned.
       _showError(
         "Recording finished but no file path returned (Web). "
-        "If this happens, run on Android/iOS or switch to record.startStream().",
+        "Run on Android/iOS or switch to record.startStream().",
       );
     } catch (e) {
       if (!mounted) return;
@@ -282,7 +307,6 @@ class _ChatPageState extends State<ChatPage> {
 
       req.headers["Authorization"] = "Bearer $_cleanToken";
       req.fields["emergencyId"] = widget.emergencyId.toString();
-
       req.files.add(await http.MultipartFile.fromPath("audio", path));
 
       final streamed = await req.send();
@@ -296,7 +320,6 @@ class _ChatPageState extends State<ChatPage> {
 
       final saved = Map<String, dynamic>.from(body["data"]);
 
-      // realtime notify responder
       final audioUrl = saved["audioUrl"]?.toString();
       if (audioUrl != null && socket != null && socket!.connected) {
         socket!.emit("chat:send", {
@@ -305,7 +328,6 @@ class _ChatPageState extends State<ChatPage> {
         });
       }
 
-      // add locally too
       if (!mounted) return;
       setState(() => _messages.add(saved));
       _scrollToBottom();
@@ -316,61 +338,59 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _togglePlay(Map<String, dynamic> msg) async {
-    final id = msg["id"];
+  Future<void> _togglePlay(Map<String, dynamic> msg, dynamic key) async {
     final audioUrl = msg["audioUrl"]?.toString();
     if (audioUrl == null || audioUrl.isEmpty) return;
 
     final src = _absoluteMediaUrl(audioUrl);
 
     try {
-      if (_playingMessageId == id) {
+      if (_playingKey == key) {
         await _player.pause();
-        if (mounted) setState(() => _playingMessageId = null);
+        if (mounted) setState(() => _playingKey = null);
         return;
       }
 
       await _player.stop();
       await _player.play(UrlSource(src));
-      if (mounted) setState(() => _playingMessageId = id is int ? id : null);
+      if (mounted) setState(() => _playingKey = key);
     } catch (e) {
       _showError("Audio playback failed: $e");
     }
   }
 
   // =========================
-  // UI helpers
+  // UI helpers (Telegram-ish)
   // =========================
 
-  Color _statusColor(ThemeData theme) {
+  Color _statusColor() {
     switch (_status) {
       case "ready":
-        return const Color(0xFF16A34A);
+        return const Color(0xFF22C55E);
       case "connecting":
-        return const Color(0xFF2563EB);
+        return const Color(0xFFFB923C);
       case "error":
-        return theme.colorScheme.error;
+        return const Color(0xFFEF4444);
       default:
-        return theme.colorScheme.outline;
+        return const Color(0xFF94A3B8);
     }
   }
 
   String _statusLabel() {
     switch (_status) {
       case "ready":
-        return "Connected";
+        return "online";
       case "connecting":
-        return "Connecting…";
+        return "connecting…";
       case "error":
-        return "Connection issue";
+        return "offline";
       default:
-        return "Idle";
+        return "idle";
     }
   }
 
   DateTime? _tryParseMessageTime(Map<String, dynamic> msg) {
-    final raw =
-        msg["createdAt"] ?? msg["created_at"] ?? msg["timestamp"] ?? msg["time"];
+    final raw = msg["createdAt"] ?? msg["created_at"] ?? msg["timestamp"] ?? msg["time"];
     if (raw == null) return null;
     if (raw is int) {
       if (raw > 1000000000000) return DateTime.fromMillisecondsSinceEpoch(raw);
@@ -389,11 +409,16 @@ class _ChatPageState extends State<ChatPage> {
 
   void _showError(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _scrollToBottom({bool force = false}) {
-    Future.delayed(const Duration(milliseconds: 250), () {
+    Future.delayed(const Duration(milliseconds: 180), () {
       if (!_scrollController.hasClients) return;
       if (force) {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -401,7 +426,7 @@ class _ChatPageState extends State<ChatPage> {
       }
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 250),
+        duration: const Duration(milliseconds: 260),
         curve: Curves.easeOut,
       );
     });
@@ -416,31 +441,46 @@ class _ChatPageState extends State<ChatPage> {
         (msg["audioUrl"] != null && msg["audioUrl"].toString().isNotEmpty);
   }
 
+  Widget _bgPattern() {
+    return IgnorePointer(
+      child: Opacity(
+        opacity: 0.06,
+        child: CustomPaint(
+          painter: _TelegramBgPainter(),
+          size: Size.infinite,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final statusColor = _statusColor(theme);
-
+    final statusColor = _statusColor();
     final canType = _status == "ready" && !_isRecording && !_isUploadingAudio;
     final sendEnabled = canType && _isComposing;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFEAF2F8),
       appBar: AppBar(
         backgroundColor: Colors.white,
-        elevation: 0,
+        elevation: 0.6,
         surfaceTintColor: Colors.white,
-        iconTheme: const IconThemeData(color: Colors.black87),
-        titleSpacing: 0,
+        titleSpacing: 12,
         title: Row(
           children: [
-            const SizedBox(width: 8),
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: const Color(0xFFE2E8F0),
-              child: Icon(
-                Icons.support_agent_rounded,
-                color: const Color(0xFF0F172A).withOpacity(0.85),
+            Container(
+              width: 38,
+              height: 38,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [Color(0xFF24A1DE), Color(0xFF2B9DF0)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: const Center(
+                child: Icon(Icons.shield_rounded, size: 18, color: Colors.white),
               ),
             ),
             const SizedBox(width: 12),
@@ -449,49 +489,54 @@ class _ChatPageState extends State<ChatPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Incident Support",
+                    "Case #${widget.emergencyId}",
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF0F172A),
+                    style: const TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Row(
                     children: [
                       Container(
-                        width: 8,
-                        height: 8,
+                        width: 7,
+                        height: 7,
                         decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
                       ),
                       const SizedBox(width: 6),
                       Text(
                         _statusLabel(),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: const Color(0xFF475569),
-                          fontWeight: FontWeight.w600,
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      if (_isUploadingAudio)
+                      if (_isUploadingAudio) ...[
+                        const SizedBox(width: 8),
                         const Text(
                           "• uploading audio…",
-                          style: TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      if (_isRecording)
+                      ],
+                      if (_isRecording) ...[
+                        const SizedBox(width: 8),
                         const Text(
                           "• recording…",
-                          style: TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                      const SizedBox(width: 8),
-                      Text(
-                        "• #${widget.emergencyId}",
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: const Color(0xFF94A3B8),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      ],
                     ],
                   ),
                 ],
@@ -501,10 +546,16 @@ class _ChatPageState extends State<ChatPage> {
         ),
         actions: [
           IconButton(
+            tooltip: "Video call",
+            onPressed: _openPendingCallOrExplain,
+            icon: const Icon(Icons.videocam_rounded, color: Color(0xFF24A1DE)),
+          ),
+          IconButton(
             tooltip: "Reconnect",
             onPressed: _connectSocket,
-            icon: const Icon(Icons.refresh, color: Colors.black87),
+            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF475569)),
           ),
+          const SizedBox(width: 6),
         ],
       ),
       body: _isLoading
@@ -512,34 +563,41 @@ class _ChatPageState extends State<ChatPage> {
           : Column(
               children: [
                 Expanded(
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0xFFF8FAFC), Color(0xFFF1F5F9)],
-                      ),
-                    ),
-                    child: _messages.isEmpty
-                        ? _buildEmptyState()
-                        : ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                            itemCount: _messages.length,
-                            itemBuilder: (context, index) {
-                              final msg = _messages[index];
-                              final mine = _isMe(msg);
-                              final sentAt = _tryParseMessageTime(msg);
-                              return _buildMessageBubble(
-                                msg: msg,
-                                isMe: mine,
-                                sentAt: sentAt,
-                              );
-                            },
-                          ),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(child: _bgPattern()),
+                      _messages.isEmpty
+                          ? _emptyState()
+                          : ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+                              itemCount: _messages.length,
+                              itemBuilder: (context, index) {
+                                final msg = _messages[index];
+                                final mine = _isMe(msg);
+                                final isAudio = _isAudioMsg(msg);
+                                final sentAt = _tryParseMessageTime(msg);
+                                final time = sentAt == null ? "" : _formatTime(sentAt.toLocal());
+
+                                final key = msg["id"] ?? index;
+                                final playing = _playingKey == key;
+
+                                return _TelegramBubble(
+                                  isMe: mine,
+                                  time: time,
+                                  isAudio: isAudio,
+                                  text: (msg["text"] ?? "").toString(),
+                                  isPlaying: playing,
+                                  onPlayToggle: isAudio ? () => _togglePlay(msg, key) : null,
+                                );
+                              },
+                            ),
+                    ],
                   ),
                 ),
-                _buildInputArea(
+                if (_isUploadingAudio)
+                  const LinearProgressIndicator(minHeight: 2, color: Color(0xFF24A1DE)),
+                _inputBar(
                   canType: canType,
                   sendEnabled: sendEnabled,
                 ),
@@ -548,8 +606,7 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  Widget _buildEmptyState() {
-    final theme = Theme.of(context);
+  Widget _emptyState() {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -557,244 +614,124 @@ class _ChatPageState extends State<ChatPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 64,
-              height: 64,
+              width: 68,
+              height: 68,
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 18,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF334155)),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              "Start the conversation",
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: const Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _status == "ready"
-                  ? "Send a message or a voice note."
-                  : "Connecting you to a responder…",
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF64748B),
-                height: 1.3,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMessageBubble({
-    required Map<String, dynamic> msg,
-    required bool isMe,
-    required DateTime? sentAt,
-  }) {
-    final theme = Theme.of(context);
-    final maxWidth = MediaQuery.sizeOf(context).width * 0.78;
-
-    final bubbleColor = isMe ? const Color(0xFF0F172A) : Colors.white;
-    final textColor = isMe ? Colors.white : const Color(0xFF0F172A);
-    final metaColor = isMe ? Colors.white70 : const Color(0xFF64748B);
-
-    final isAudio = _isAudioMsg(msg);
-    final id = msg["id"];
-    final playing = (_playingMessageId != null && _playingMessageId == id);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!isMe) ...[
-            CircleAvatar(
-              radius: 14,
-              backgroundColor: const Color(0xFFE2E8F0),
-              child: Icon(
-                Icons.shield_rounded,
-                size: 16,
-                color: const Color(0xFF0F172A).withOpacity(0.75),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxWidth),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: bubbleColor,
-                borderRadius: BorderRadius.circular(18).copyWith(
-                  bottomRight: isMe ? const Radius.circular(6) : null,
-                  bottomLeft: !isMe ? const Radius.circular(6) : null,
-                ),
+                borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.06),
                     blurRadius: 16,
-                    offset: const Offset(0, 6),
+                    offset: const Offset(0, 10),
                   ),
                 ],
-                border: isMe ? null : Border.all(color: const Color(0xFFE2E8F0)),
               ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (isAudio) ...[
-                      Row(
-                        children: [
-                          Icon(Icons.mic_rounded, color: textColor.withOpacity(0.95), size: 18),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              "Voice message",
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: textColor,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => _togglePlay(msg),
-                            icon: Icon(
-                              playing ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
-                              color: isMe ? Colors.white : const Color(0xFF0F172A),
-                              size: 30,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ] else ...[
-                      SelectableText(
-                        (msg["text"] ?? "").toString(),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: textColor,
-                          height: 1.25,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text(
-                          sentAt == null ? "" : _formatTime(sentAt.toLocal()),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: metaColor,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+              child: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF334155), size: 28),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              "No messages yet",
+              style: TextStyle(
+                color: Color(0xFF0F172A),
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
               ),
             ),
-          ),
-          if (isMe) ...[
-            const SizedBox(width: 8),
-            CircleAvatar(
-              radius: 14,
-              backgroundColor: const Color(0xFF0F172A),
-              child: Icon(Icons.person_rounded, size: 16, color: Colors.white.withOpacity(0.95)),
+            const SizedBox(height: 6),
+            Text(
+              _status == "ready" ? "Send a message or voice note." : "Connecting…",
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildInputArea({
-    required bool canType,
-    required bool sendEnabled,
-  }) {
+  Widget _inputBar({required bool canType, required bool sendEnabled}) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: const Border(top: BorderSide(color: Color(0xFFE2E8F0))),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 18,
-            offset: const Offset(0, -8),
-          ),
-        ],
+        border: Border(top: BorderSide(color: Colors.black.withOpacity(0.06))),
       ),
       child: SafeArea(
         child: Row(
           children: [
-            // MIC button (tap to start, tap again to stop + send)
-            IconButton(
-              tooltip: _isRecording ? "Stop & Send" : "Record audio",
-              onPressed: (canType && !_isUploadingAudio) ? _toggleRecord : null,
-              icon: Icon(
-                _isRecording ? Icons.stop_circle_rounded : Icons.mic_rounded,
-                color: _isRecording ? Colors.red : const Color(0xFF334155),
-              ),
-            ),
-
-            Expanded(
-              child: TextField(
-                controller: _messageController,
-                enabled: canType,
-                decoration: InputDecoration(
-                  hintText: canType
-                      ? (_isRecording
-                          ? "Recording… tap stop to send"
-                          : _isUploadingAudio
-                              ? "Uploading audio…"
-                              : "Send a message…")
-                      : "Connecting to responder…",
-                  filled: true,
-                  fillColor: const Color(0xFFF1F5F9),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(30),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 10,
-                  ),
+            InkWell(
+              borderRadius: BorderRadius.circular(999),
+              onTap: (canType && !_isUploadingAudio) ? _toggleRecord : null,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: _isRecording ? Colors.red : const Color(0xFFF1F5F9),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.black.withOpacity(0.06)),
                 ),
-                minLines: 1,
-                maxLines: 5,
-                onSubmitted: (_) => _sendMessage(),
+                child: Icon(
+                  _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+                  color: _isRecording ? Colors.white : const Color(0xFF334155),
+                ),
               ),
             ),
-
             const SizedBox(width: 10),
-
-            SizedBox(
-              width: 44,
-              height: 44,
-              child: Material(
-                color: sendEnabled ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
-                borderRadius: BorderRadius.circular(14),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: sendEnabled ? _sendMessage : null,
-                  child: Icon(
-                    Icons.send_rounded,
-                    color: sendEnabled ? Colors.white : const Color(0xFF94A3B8),
-                    size: 20,
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(26),
+                  border: Border.all(color: Colors.black.withOpacity(0.06)),
+                ),
+                child: TextField(
+                  controller: _messageController,
+                  enabled: canType,
+                  minLines: 1,
+                  maxLines: 5,
+                  decoration: InputDecoration(
+                    hintText: canType
+                        ? (_isRecording
+                            ? "Recording… tap stop to send"
+                            : _isUploadingAudio
+                                ? "Uploading audio…"
+                                : "Message")
+                        : "Connecting…",
+                    border: InputBorder.none,
+                    isDense: true,
                   ),
+                  onSubmitted: (_) => _sendMessage(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            InkWell(
+              borderRadius: BorderRadius.circular(999),
+              onTap: sendEnabled ? _sendMessage : null,
+              child: Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: sendEnabled ? const Color(0xFF24A1DE) : const Color(0xFFE2E8F0),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: (sendEnabled ? const Color(0xFF24A1DE) : const Color(0xFFE2E8F0))
+                          .withOpacity(sendEnabled ? 0.35 : 0.0),
+                      blurRadius: 14,
+                      offset: const Offset(0, 6),
+                    )
+                  ],
+                ),
+                child: Icon(
+                  Icons.send_rounded,
+                  color: sendEnabled ? Colors.white : const Color(0xFF94A3B8),
+                  size: 20,
                 ),
               ),
             ),
@@ -803,4 +740,183 @@ class _ChatPageState extends State<ChatPage> {
       ),
     );
   }
+}
+
+class _TelegramBubble extends StatelessWidget {
+  final bool isMe;
+  final String time;
+  final bool isAudio;
+  final String text;
+  final bool isPlaying;
+  final VoidCallback? onPlayToggle;
+
+  const _TelegramBubble({
+    required this.isMe,
+    required this.time,
+    required this.isAudio,
+    required this.text,
+    required this.isPlaying,
+    required this.onPlayToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bubbleColor = isMe ? const Color(0xFF0F172A) : Colors.white;
+    final textColor = isMe ? Colors.white : const Color(0xFF0F172A);
+    final metaColor = isMe ? Colors.white70 : const Color(0xFF64748B);
+
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+        decoration: BoxDecoration(
+          color: bubbleColor,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(isMe ? 18 : 6),
+            bottomRight: Radius.circular(isMe ? 6 : 18),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+          border: isMe ? null : Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isAudio)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(999),
+                    onTap: onPlayToggle,
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: (isMe ? Colors.white : const Color(0xFF24A1DE)).withOpacity(isMe ? 0.18 : 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        color: isMe ? Colors.white : const Color(0xFF24A1DE),
+                        size: 24,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _WaveformBars(color: isMe ? Colors.white : const Color(0xFF24A1DE)),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Voice message",
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: isMe ? Colors.white70 : Colors.black54,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            else
+              Text(
+                text,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 15,
+                  height: 1.25,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (time.isNotEmpty)
+                  Text(
+                    time,
+                    style: TextStyle(
+                      color: metaColor,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                if (isMe) ...[
+                  const SizedBox(width: 6),
+                  Icon(Icons.done_all_rounded, size: 14, color: Colors.white.withOpacity(0.85)),
+                ]
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WaveformBars extends StatelessWidget {
+  final Color color;
+  final int bars;
+
+  const _WaveformBars({required this.color, this.bars = 22});
+
+  @override
+  Widget build(BuildContext context) {
+    final heights = List<double>.generate(
+      bars,
+      (i) => (i % 5 == 0) ? 0.85 : (i % 3 == 0) ? 0.65 : 0.45,
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final h in heights)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: Container(
+              width: 3,
+              height: 18 * h,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.85),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _TelegramBgPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF24A1DE)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    const spacing = 46.0;
+    for (double y = -spacing; y < size.height + spacing; y += spacing) {
+      for (double x = -spacing; x < size.width + spacing; x += spacing) {
+        final r = Rect.fromCenter(center: Offset(x, y), width: 16, height: 16);
+        canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(5)), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

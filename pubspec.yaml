@@ -11,10 +11,14 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # --- Video call (WebRTC) ---
+  flutter_webrtc: ^0.12.12
+  
+
   # --- Real-time & Networking ---
-  socket_io_client: ^2.0.3 # CRITICAL: For the chat feature
+  socket_io_client: ^2.0.3
   http: ^1.1.0
-  intl: ^0.19.0 # CRITICAL: For formatting chat timestamps
+  intl: ^0.19.0
 
   # --- Audio & Recording ---
   record: ^5.1.2
@@ -48,13 +52,11 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # --- App Assets ---
   assets:
     - assets/images/bg.jpg
     - assets/images/logo.webp
     - assets/images/avatar.jpg
 
-# --- Flutter Launcher Icons Configuration ---
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
