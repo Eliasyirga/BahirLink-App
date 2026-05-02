@@ -11,7 +11,8 @@ import 'package:audioplayers/audioplayers.dart';
 
 class ChatPage extends StatefulWidget {
   final int emergencyId;
-  final String token; // citizen/user JWT (may or may not already include Bearer)
+  final String
+      token; // citizen/user JWT (may or may not already include Bearer)
   final int userId;
 
   const ChatPage({
@@ -107,7 +108,8 @@ class _ChatPageState extends State<ChatPage> {
       final body = jsonDecode(res.body);
 
       if (res.statusCode != 200 || body["success"] != true) {
-        _showError(body["message"]?.toString() ?? "Failed to load chat history");
+        _showError(
+            body["message"]?.toString() ?? "Failed to load chat history");
         setState(() => _status = "error");
         return;
       }
@@ -369,8 +371,10 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   DateTime? _tryParseMessageTime(Map<String, dynamic> msg) {
-    final raw =
-        msg["createdAt"] ?? msg["created_at"] ?? msg["timestamp"] ?? msg["time"];
+    final raw = msg["createdAt"] ??
+        msg["created_at"] ??
+        msg["timestamp"] ??
+        msg["time"];
     if (raw == null) return null;
     if (raw is int) {
       if (raw > 1000000000000) return DateTime.fromMillisecondsSinceEpoch(raw);
@@ -463,7 +467,8 @@ class _ChatPageState extends State<ChatPage> {
                       Container(
                         width: 8,
                         height: 8,
-                        decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                        decoration: BoxDecoration(
+                            color: statusColor, shape: BoxShape.circle),
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -477,12 +482,18 @@ class _ChatPageState extends State<ChatPage> {
                       if (_isUploadingAudio)
                         const Text(
                           "• uploading audio…",
-                          style: TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF64748B),
+                              fontWeight: FontWeight.w600),
                         ),
                       if (_isRecording)
                         const Text(
                           "• recording…",
-                          style: TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.red,
+                              fontWeight: FontWeight.w700),
                         ),
                       const SizedBox(width: 8),
                       Text(
@@ -570,7 +581,8 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                 ],
               ),
-              child: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF334155)),
+              child: const Icon(Icons.chat_bubble_outline_rounded,
+                  color: Color(0xFF334155)),
             ),
             const SizedBox(height: 14),
             Text(
@@ -616,7 +628,8 @@ class _ChatPageState extends State<ChatPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment:
+            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMe) ...[
@@ -647,7 +660,8 @@ class _ChatPageState extends State<ChatPage> {
                     offset: const Offset(0, 6),
                   ),
                 ],
-                border: isMe ? null : Border.all(color: const Color(0xFFE2E8F0)),
+                border:
+                    isMe ? null : Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
@@ -657,7 +671,8 @@ class _ChatPageState extends State<ChatPage> {
                     if (isAudio) ...[
                       Row(
                         children: [
-                          Icon(Icons.mic_rounded, color: textColor.withOpacity(0.95), size: 18),
+                          Icon(Icons.mic_rounded,
+                              color: textColor.withOpacity(0.95), size: 18),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
@@ -671,8 +686,11 @@ class _ChatPageState extends State<ChatPage> {
                           IconButton(
                             onPressed: () => _togglePlay(msg),
                             icon: Icon(
-                              playing ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
-                              color: isMe ? Colors.white : const Color(0xFF0F172A),
+                              playing
+                                  ? Icons.pause_circle_filled_rounded
+                                  : Icons.play_circle_fill_rounded,
+                              color:
+                                  isMe ? Colors.white : const Color(0xFF0F172A),
                               size: 30,
                             ),
                           ),
@@ -712,7 +730,8 @@ class _ChatPageState extends State<ChatPage> {
             CircleAvatar(
               radius: 14,
               backgroundColor: const Color(0xFF0F172A),
-              child: Icon(Icons.person_rounded, size: 16, color: Colors.white.withOpacity(0.95)),
+              child: Icon(Icons.person_rounded,
+                  size: 16, color: Colors.white.withOpacity(0.95)),
             ),
           ],
         ],
@@ -785,7 +804,9 @@ class _ChatPageState extends State<ChatPage> {
               width: 44,
               height: 44,
               child: Material(
-                color: sendEnabled ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+                color: sendEnabled
+                    ? const Color(0xFF0F172A)
+                    : const Color(0xFFE2E8F0),
                 borderRadius: BorderRadius.circular(14),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(14),

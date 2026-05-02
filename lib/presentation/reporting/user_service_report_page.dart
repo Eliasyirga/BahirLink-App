@@ -229,58 +229,58 @@ class _UserServiceReportPageState extends State<UserServiceReportPage> {
   }
 
   Widget _buildHeader() => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        colors: [primaryBlue, accentBlue],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-    ),
-    child: Row(
-      children: [
-        GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.arrow_back_ios_new,
-              color: Colors.white,
-              size: 16,
-            ),
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [primaryBlue, accentBlue],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
         ),
-        const SizedBox(width: 20),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Service Request",
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.arrow_back_ios_new,
                   color: Colors.white,
+                  size: 16,
                 ),
               ),
-              Text(
-                widget.categoryName,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withOpacity(0.8),
-                ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Service Request",
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    widget.categoryName,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withOpacity(0.8),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      );
 
   Widget _buildForm() {
     return Column(
@@ -297,7 +297,6 @@ class _UserServiceReportPageState extends State<UserServiceReportPage> {
         const SizedBox(height: 24),
         _sectionHeader("Location Details"),
         const SizedBox(height: 10),
-
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
@@ -341,7 +340,6 @@ class _UserServiceReportPageState extends State<UserServiceReportPage> {
                   onChanged: (val) => setState(() => _selectedKebeleId = val),
                 ),
         ),
-
         const SizedBox(height: 12),
         _buildTextField(
           _subdivisionController,
@@ -399,44 +397,45 @@ class _UserServiceReportPageState extends State<UserServiceReportPage> {
   }
 
   Widget _sectionHeader(String title) => Text(
-    title.toUpperCase(),
-    style: TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.bold,
-      color: primaryBlue.withOpacity(0.5),
-      letterSpacing: 1.1,
-    ),
-  );
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: primaryBlue.withOpacity(0.5),
+          letterSpacing: 1.1,
+        ),
+      );
 
   Widget _buildTextField(
     TextEditingController controller,
     String hint, {
     int maxLines = 1,
     required IconData icon,
-  }) => Container(
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(15),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.05),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
+  }) =>
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-      ],
-    ),
-    child: TextField(
-      controller: controller,
-      maxLines: maxLines,
-      decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: primaryBlue, size: 20),
-        hintText: hint,
-        hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-        border: InputBorder.none,
-        contentPadding: const EdgeInsets.all(16),
-      ),
-    ),
-  );
+        child: TextField(
+          controller: controller,
+          maxLines: maxLines,
+          decoration: InputDecoration(
+            prefixIcon: Icon(icon, color: primaryBlue, size: 20),
+            hintText: hint,
+            hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.all(16),
+          ),
+        ),
+      );
 
   Widget _buildPickerRow({
     required IconData icon,
@@ -444,63 +443,66 @@ class _UserServiceReportPageState extends State<UserServiceReportPage> {
     required String value,
     Color? valueColor,
     required VoidCallback onTap,
-  }) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(15),
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      decoration: BoxDecoration(
-        color: Colors.white,
+  }) =>
+      InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: primaryBlue.withOpacity(0.1)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: primaryBlue, size: 20),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: primaryBlue.withOpacity(0.1)),
           ),
-          Text(
-            value,
-            style: TextStyle(
-              color: valueColor ?? primaryBlue,
-              fontWeight: FontWeight.bold,
-            ),
+          child: Row(
+            children: [
+              Icon(icon, color: primaryBlue, size: 20),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              Text(
+                value,
+                style: TextStyle(
+                  color: valueColor ?? primaryBlue,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.grey),
+            ],
           ),
-          const Icon(Icons.chevron_right, color: Colors.grey),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 
   Widget _buildSubmitButton() => SizedBox(
-    width: double.infinity,
-    height: 55,
-    child: ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: primaryBlue,
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        elevation: 2,
-      ),
-      onPressed: _isLoading ? null : _submitReport,
-      child: _isLoading
-          ? const SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2,
-              ),
-            )
-          : const Text(
-              "SUBMIT REQUEST",
-              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.1),
-            ),
-    ),
-  );
+        width: double.infinity,
+        height: 55,
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryBlue,
+            foregroundColor: Colors.white,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+            elevation: 2,
+          ),
+          onPressed: _isLoading ? null : _submitReport,
+          child: _isLoading
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Text(
+                  "SUBMIT REQUEST",
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                ),
+        ),
+      );
 }

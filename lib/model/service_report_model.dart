@@ -68,9 +68,8 @@ class ServiceReportModel {
       longitude: json['longitude'] != null
           ? double.tryParse(json['longitude'].toString())
           : null,
-      time: json['time'] != null
-          ? DateTime.parse(json['time'])
-          : DateTime.now(),
+      time:
+          json['time'] != null ? DateTime.parse(json['time']) : DateTime.now(),
       status: json['status'],
       mediaUrl: json['mediaUrl'],
     );
