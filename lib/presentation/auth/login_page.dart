@@ -6,6 +6,16 @@ import '../dashboard/guest_dashboard_page.dart';
 import '../../services/auth_service.dart';
 import 'forgot_password_page.dart';
 
+// ─── Dashboard Color Tokens ───────────────────────────────────────────────────
+class _T {
+  static const primary    = Color(0xFF1A3BAA);
+  static const primaryMid = Color(0xFF2252CC);
+  static const accent     = Color(0xFF4B83F0);
+  static const accentSoft = Color(0xFFD6E4FF);
+  static const textMid    = Color(0xFF5569A0);
+  static const divider    = Color(0xFFE5ECFF);
+}
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -51,22 +61,15 @@ class _LoginPageState extends State<LoginPage> {
 
       if (result["success"] == true && accessTokenRaw != null && userIdRaw != null) {
         final token = _cleanToken(accessTokenRaw);
-
         final prefs = await SharedPreferences.getInstance();
-
-        // Keep both keys for compatibility across your app
         await prefs.setString("accessToken", token);
         await prefs.setString("token", token);
-
         await prefs.setString("userId", userIdRaw);
 
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => DashboardPage(
-              userId: userIdRaw,
-              token: token,
-            ),
+            builder: (_) => DashboardPage(userId: userIdRaw, token: token),
           ),
         );
       } else {
@@ -84,7 +87,7 @@ class _LoginPageState extends State<LoginPage> {
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.redAccent,
+        backgroundColor: const Color(0xFFEF4444),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
@@ -110,7 +113,7 @@ class _LoginPageState extends State<LoginPage> {
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF444444),
+                        color: Color(0xFF0C1A45),
                       ),
                     ),
                     const SizedBox(height: 30),
@@ -163,9 +166,10 @@ class _LoginPageState extends State<LoginPage> {
             width: double.infinity,
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+                colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
+                stops: [0.0, 0.5, 1.0],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
             ),
           ),
@@ -215,25 +219,29 @@ class _LoginPageState extends State<LoginPage> {
       validator: validator,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-        prefixIcon: Icon(icon, color: const Color(0xFF4A90E2), size: 20),
+        hintStyle: const TextStyle(color: _T.textMid, fontSize: 14),
+        prefixIcon: Icon(icon, color: _T.primary, size: 20),
         suffixIcon: isPassword
             ? IconButton(
                 icon: Icon(
                   obscureText ? Icons.visibility_off : Icons.visibility,
-                  color: Colors.grey,
+                  color: _T.textMid,
                   size: 18,
                 ),
                 onPressed: onSuffixPressed,
               )
             : null,
         filled: true,
-        fillColor: const Color(0xFFF1F7FF),
+        fillColor: _T.accentSoft.withOpacity(0.35),
         contentPadding:
             const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(30),
           borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: const BorderSide(color: _T.accent, width: 1.5),
         ),
       ),
     );
@@ -250,7 +258,7 @@ class _LoginPageState extends State<LoginPage> {
         child: const Text(
           "Forget password?",
           style: TextStyle(
-            color: Colors.grey,
+            color: _T.accent,
             fontSize: 13,
             fontWeight: FontWeight.w500,
           ),
@@ -266,9 +274,11 @@ class _LoginPageState extends State<LoginPage> {
       child: ElevatedButton(
         onPressed: _isLoading ? null : _handleLogin,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          side: const BorderSide(color: Color(0xFF4A90E2), width: 1.5),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          backgroundColor: _T.primary,
+          foregroundColor: Colors.white,
+          side: const BorderSide(color: _T.primary, width: 1.5),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30)),
           elevation: 0,
         ),
         child: _isLoading
@@ -277,13 +287,13 @@ class _LoginPageState extends State<LoginPage> {
                 width: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Color(0xFF4A90E2),
+                  color: Colors.white,
                 ),
               )
             : const Text(
                 "Login",
                 style: TextStyle(
-                  color: Color(0xFF4A90E2),
+                  color: Colors.white,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
@@ -301,7 +311,7 @@ class _LoginPageState extends State<LoginPage> {
       child: const Text(
         "Continue as Guest",
         style: TextStyle(
-          color: Color(0xFF64748B),
+          color: _T.textMid,
           fontWeight: FontWeight.w500,
         ),
       ),
@@ -312,7 +322,7 @@ class _LoginPageState extends State<LoginPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text("New user? ", style: TextStyle(color: Colors.grey)),
+        const Text("New user? ", style: TextStyle(color: _T.textMid)),
         GestureDetector(
           onTap: () => Navigator.push(
             context,
@@ -321,7 +331,7 @@ class _LoginPageState extends State<LoginPage> {
           child: const Text(
             "Sign Up",
             style: TextStyle(
-              color: Color(0xFF4A90E2),
+              color: _T.primary,
               fontWeight: FontWeight.bold,
             ),
           ),

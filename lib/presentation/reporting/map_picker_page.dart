@@ -2,6 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+// ─── Dashboard Color Tokens ───────────────────────────────────────────────────
+class _T {
+  static const primary    = Color(0xFF1A3BAA);
+  static const primaryMid = Color(0xFF2252CC);
+  static const accent     = Color(0xFF4B83F0);
+  static const bg         = Color(0xFFF2F6FF);
+}
+
 class MapPickerPage extends StatefulWidget {
   const MapPickerPage({super.key});
 
@@ -12,19 +20,18 @@ class MapPickerPage extends StatefulWidget {
 class _MapPickerPageState extends State<MapPickerPage> {
   LatLng? _pickedLocation;
 
-  // Default location: Bahir Dar
   final LatLng _defaultLocation = LatLng(11.5937, 37.3891);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xffF4F8FF),
+      backgroundColor: _T.bg,
       appBar: AppBar(
         title: const Text(
           "Select Emergency Location",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: const Color(0xff1976D2),
+        backgroundColor: _T.primary,
         elevation: 4,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
@@ -48,7 +55,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
         children: [
           FlutterMap(
             options: MapOptions(
-              center: _defaultLocation, // Start map at Bahir Dar
+              center: _defaultLocation,
               zoom: 14,
               onTap: (tapPosition, point) {
                 setState(() {
@@ -58,7 +65,8 @@ class _MapPickerPageState extends State<MapPickerPage> {
             ),
             children: [
               TileLayer(
-                urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                urlTemplate:
+                    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
               ),
               if (_pickedLocation != null)
                 MarkerLayer(
@@ -69,7 +77,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
                       height: 60,
                       child: const Icon(
                         Icons.location_pin,
-                        color: Color(0xff0D47A1),
+                        color: _T.primary,
                         size: 60,
                       ),
                     ),
@@ -84,7 +92,8 @@ class _MapPickerPageState extends State<MapPickerPage> {
             child: Container(
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xff1976D2), Color(0xff42A5F5)],
+                  colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
+                  stops: [0.0, 0.5, 1.0],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -97,9 +106,10 @@ class _MapPickerPageState extends State<MapPickerPage> {
                   ),
                 ],
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
-                children: const [
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: const Row(
+                children: [
                   Icon(Icons.info_outline, color: Colors.white),
                   SizedBox(width: 10),
                   Expanded(
@@ -134,7 +144,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         icon: const Icon(Icons.check),
-        backgroundColor: const Color(0xff1976D2),
+        backgroundColor: _T.primary,
         elevation: 6,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,

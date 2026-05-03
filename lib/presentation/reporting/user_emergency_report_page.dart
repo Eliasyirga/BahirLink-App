@@ -9,6 +9,18 @@ import '../../services/user_emergency_service.dart';
 import '../../services/kebele_service.dart';
 import 'media_picker_bottom_sheet.dart';
 
+// ─── Dashboard Color Tokens ───────────────────────────────────────────────────
+class _T {
+  static const primary    = Color(0xFF1A3BAA);
+  static const primaryMid = Color(0xFF2252CC);
+  static const accent     = Color(0xFF4B83F0);
+  static const accentSoft = Color(0xFFD6E4FF);
+  static const bg         = Color(0xFFF2F6FF);
+  static const textDark   = Color(0xFF0C1A45);
+  static const textMid    = Color(0xFF5569A0);
+  static const green      = Color(0xFF0DB87A);
+}
+
 class UserEmergencyReportPage extends StatefulWidget {
   final String emergencyTypeId;
   final String emergencyTypeName;
@@ -34,7 +46,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   final TextEditingController _streetController = TextEditingController();
   final KebeleService _kebeleService = KebeleService();
 
-  // Kebele Selection State
   List<Map<String, dynamic>> _kebeles = [];
   int? _selectedKebeleId;
   bool _isLoadingKebeles = true;
@@ -50,16 +61,11 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   bool _isLoading = false;
   int? _userId;
 
-  // Modern Blue Color Palette
-  final Color primaryBlue = const Color(0xff0D47A1);
-  final Color accentBlue = const Color(0xff1976D2);
-  final Color lightBlueBg = const Color(0xffF0F7FF);
-
   @override
   void initState() {
     super.initState();
     _fetchUserId();
-    _fetchKebeles(); // Fetch Kebeles on initialization
+    _fetchKebeles();
   }
 
   Future<void> _fetchUserId() async {
@@ -93,7 +99,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
       SnackBar(
         content: Text(message, style: const TextStyle(color: Colors.white)),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: isError ? Colors.redAccent : Colors.green,
+        backgroundColor: isError ? const Color(0xFFEF4444) : _T.green,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
@@ -113,16 +119,10 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
       context: context,
       initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
     );
-
     if (picked != null) {
       setState(() {
         _selectedTime = DateTime(
-          now.year,
-          now.month,
-          now.day,
-          picked.hour,
-          picked.minute,
-        );
+            now.year, now.month, now.day, picked.hour, picked.minute);
       });
     }
   }
@@ -154,7 +154,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
 
   Future<void> _submitReport() async {
     if (_descriptionController.text.isEmpty ||
-        _selectedKebeleId == null || // Validation for selected ID
+        _selectedKebeleId == null ||
         _subdivisionController.text.isEmpty) {
       _showSnack("Please fill description, select a kebele, and subdivision");
       return;
@@ -171,7 +171,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
       categoryId: widget.categoryId,
       description: _descriptionController.text,
       userId: _userId!,
-      kebele: _selectedKebeleId.toString(), // Sending the Kebele ID as String
+      kebele: _selectedKebeleId.toString(),
       subdivision: _subdivisionController.text,
       street: _streetController.text,
       latitude: _latitude,
@@ -209,7 +209,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: lightBlueBg.withOpacity(0.5),
+                color: _T.bg,
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(30),
                   topRight: Radius.circular(30),
@@ -229,11 +229,12 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
 
   Widget _buildHeader() => Container(
         width: double.infinity,
-        padding:
-            const EdgeInsets.only(top: 60, bottom: 30, left: 20, right: 20),
-        decoration: BoxDecoration(
+        padding: const EdgeInsets.only(
+            top: 60, bottom: 30, left: 20, right: 20),
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [primaryBlue, accentBlue],
+            colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
+            stops: [0.0, 0.5, 1.0],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -248,11 +249,8 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
                   color: Colors.white.withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.arrow_back_ios_new,
-                  color: Colors.white,
-                  size: 20,
-                ),
+                child: const Icon(Icons.arrow_back_ios_new,
+                    color: Colors.white, size: 20),
               ),
             ),
             const SizedBox(width: 20),
@@ -263,18 +261,16 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
                   Text(
                     widget.emergencyTypeName,
                     style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white),
                   ),
                   Text(
                     widget.categoryName,
                     style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white.withOpacity(0.8),
-                      letterSpacing: 1.2,
-                    ),
+                        fontSize: 14,
+                        color: Colors.white.withOpacity(0.8),
+                        letterSpacing: 1.2),
                   ),
                 ],
               ),
@@ -298,8 +294,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
         const SizedBox(height: 24),
         _sectionHeader("Location Details"),
         const SizedBox(height: 10),
-
-        // --- FETCHED KEBELE DROPDOWN ---
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
@@ -307,7 +301,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
             borderRadius: BorderRadius.circular(15),
             boxShadow: [
               BoxShadow(
-                color: primaryBlue.withOpacity(0.05),
+                color: _T.primary.withOpacity(0.05),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -317,22 +311,20 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
               ? const Padding(
                   padding: EdgeInsets.all(16.0),
                   child: Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: _T.primary),
                   ),
                 )
               : DropdownButtonFormField<int>(
                   value: _selectedKebeleId,
                   hint: Text(
                     "Select Kebele",
-                    style: TextStyle(color: Colors.blueGrey.withOpacity(0.5)),
+                    style: TextStyle(color: _T.textMid.withOpacity(0.6)),
                   ),
-                  icon: Icon(Icons.arrow_drop_down, color: accentBlue),
-                  decoration: InputDecoration(
-                    prefixIcon: Icon(
-                      Icons.maps_home_work,
-                      color: accentBlue,
-                      size: 20,
-                    ),
+                  icon: const Icon(Icons.arrow_drop_down, color: _T.accent),
+                  decoration: const InputDecoration(
+                    prefixIcon:
+                        Icon(Icons.maps_home_work, color: _T.accent, size: 20),
                     border: InputBorder.none,
                   ),
                   items: _kebeles.map((kebele) {
@@ -340,28 +332,20 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
                       value: kebele['id'],
                       child: Text(
                         kebele['name'] ?? "Unknown",
-                        style: TextStyle(color: primaryBlue),
+                        style: const TextStyle(color: _T.textDark),
                       ),
                     );
                   }).toList(),
-                  onChanged: (value) {
-                    setState(() => _selectedKebeleId = value);
-                  },
+                  onChanged: (value) =>
+                      setState(() => _selectedKebeleId = value),
                 ),
         ),
-
         const SizedBox(height: 12),
-        _buildTextField(
-          _subdivisionController,
-          "Subdivision",
-          icon: Icons.business,
-        ),
+        _buildTextField(_subdivisionController, "Subdivision",
+            icon: Icons.business),
         const SizedBox(height: 12),
-        _buildTextField(
-          _streetController,
-          "Street (Optional)",
-          icon: Icons.add_road,
-        ),
+        _buildTextField(_streetController, "Street (Optional)",
+            icon: Icons.add_road),
         const SizedBox(height: 24),
         _sectionHeader("Time & GPS"),
         const SizedBox(height: 10),
@@ -378,6 +362,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
           icon: Icons.my_location,
           label: "Pin Location",
           value: _latitude != null ? "Location Pinned" : "Tap to open map",
+          valueColor: _latitude != null ? _T.green : null,
           onTap: () async {
             final pickedLocation = await Navigator.push(
               context,
@@ -398,7 +383,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
           icon: Icons.cloud_upload,
           label: "Media Attachment",
           value: _selectedFileName ?? "Upload Photo/Video",
-          valueColor: _selectedFileName != null ? Colors.green : accentBlue,
+          valueColor: _selectedFileName != null ? _T.green : null,
           onTap: _pickMedia,
         ),
         const SizedBox(height: 40),
@@ -413,7 +398,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w800,
-          color: primaryBlue.withOpacity(0.6),
+          color: _T.primary.withOpacity(0.6),
           letterSpacing: 1.5,
         ),
       );
@@ -430,7 +415,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
           borderRadius: BorderRadius.circular(15),
           boxShadow: [
             BoxShadow(
-              color: primaryBlue.withOpacity(0.05),
+              color: _T.primary.withOpacity(0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -439,11 +424,11 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
         child: TextField(
           controller: controller,
           maxLines: maxLines,
-          style: TextStyle(color: primaryBlue),
+          style: const TextStyle(color: _T.textDark),
           decoration: InputDecoration(
-            prefixIcon: Icon(icon, color: accentBlue, size: 20),
+            prefixIcon: const Icon(Icons.edit_note, color: _T.accent, size: 20),
             hintText: hint,
-            hintStyle: TextStyle(color: Colors.blueGrey.withOpacity(0.5)),
+            hintStyle: TextStyle(color: _T.textMid.withOpacity(0.6)),
             filled: true,
             fillColor: Colors.white,
             border: OutlineInputBorder(
@@ -451,9 +436,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
               borderSide: BorderSide.none,
             ),
             contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
-            ),
+                horizontal: 16, vertical: 16),
           ),
         ),
       );
@@ -469,32 +452,34 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(15),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: primaryBlue.withOpacity(0.1)),
+            border: Border.all(color: _T.primary.withOpacity(0.1)),
           ),
           child: Row(
             children: [
-              Icon(icon, color: accentBlue),
+              Icon(icon, color: _T.accent),
               const SizedBox(width: 15),
               Expanded(
                 child: Text(
                   label,
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600, color: primaryBlue),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, color: _T.textDark),
                 ),
               ),
               Text(
                 value,
                 style: TextStyle(
-                  color: valueColor ?? accentBlue,
+                  color: valueColor ?? _T.accent,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(Icons.chevron_right, color: primaryBlue.withOpacity(0.3)),
+              Icon(Icons.chevron_right,
+                  color: _T.primary.withOpacity(0.3)),
             ],
           ),
         ),
@@ -507,7 +492,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
           borderRadius: BorderRadius.circular(15),
           boxShadow: [
             BoxShadow(
-              color: primaryBlue.withOpacity(0.3),
+              color: _T.primary.withOpacity(0.3),
               blurRadius: 12,
               offset: const Offset(0, 6),
             ),
@@ -515,10 +500,10 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
         ),
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: primaryBlue,
+            backgroundColor: _T.primary,
             foregroundColor: Colors.white,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15)),
             elevation: 0,
           ),
           onPressed: _isLoading ? null : _submitReport,
@@ -527,17 +512,14 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
                   height: 24,
                   width: 24,
                   child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
+                      color: Colors.white, strokeWidth: 2),
                 )
               : const Text(
                   "SUBMIT REPORT",
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2),
                 ),
         ),
       );

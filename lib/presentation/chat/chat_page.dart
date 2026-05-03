@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
@@ -12,6 +13,28 @@ import 'package:audioplayers/audioplayers.dart';
 import '../../services/call_services.dart';
 import '../call/call_page.dart';
 
+// ─── Design Tokens ────────────────────────────────────────────────────────────
+class _T {
+  static const primary    = Color(0xFF1A3BAA);
+  static const primaryMid = Color(0xFF2252CC);
+  static const accent     = Color(0xFF4B83F0);
+  static const accentSoft = Color(0xFFD6E4FF);
+  static const surface    = Color(0xFFFFFFFF);
+  static const bg         = Color(0xFFF2F6FF);
+  static const textDark   = Color(0xFF0C1A45);
+  static const textMid    = Color(0xFF5569A0);
+  static const divider    = Color(0xFFE5ECFF);
+  static const green      = Color(0xFF0DB87A);
+  static const orange     = Color(0xFFF59E0B);
+  static const red        = Color(0xFFEF4444);
+
+  // Chat-specific
+  static const bubbleMe   = Color(0xFF1A3BAA);
+  static const bubbleThem = Color(0xFFFFFFFF);
+  static const chatBg     = Color(0xFFF0F5FF);
+}
+
+// ─── Widget ───────────────────────────────────────────────────────────────────
 class ChatPage extends StatefulWidget {
   final int emergencyId;
   final String token;
@@ -28,53 +51,51 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> {
+class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   final String serverUrl = "http://localhost:5000";
 
   IO.Socket? socket;
 
   bool _isLoading = true;
-  String _status = "idle"; // idle | connecting | ready | error
+  String _status = "idle";
   bool _isComposing = false;
 
-  // Recording / upload
   final AudioRecorder _recorder = AudioRecorder();
   bool _isRecording = false;
   bool _isUploadingAudio = false;
 
-  // Audio playback
   final AudioPlayer _player = AudioPlayer();
-  dynamic _playingKey; // msg id if present, else list index
+  dynamic _playingKey;
 
   final List<Map<String, dynamic>> _messages = [];
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  // ── Token helpers ──────────────────────────────────────────────────────────
+  late final AnimationController _fadeCtrl =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
+  late final Animation<double> _fadeAnim =
+      CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+
+  // ── Token ─────────────────────────────────────────────────────────────────
   String get _cleanToken {
     final t = widget.token.trim();
     return t.startsWith("Bearer ") ? t.substring(7) : t;
   }
 
-  String _absoluteMediaUrl(String relativeOrAbsolute) {
-    if (relativeOrAbsolute.startsWith("http")) return relativeOrAbsolute;
-    return "$serverUrl$relativeOrAbsolute";
-  }
+  String _absoluteMediaUrl(String url) =>
+      url.startsWith("http") ? url : "$serverUrl$url";
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
-
     CallService.I.connect(apiBaseUrl: serverUrl, token: _cleanToken);
     CallService.I.ensureConnected();
-
     _initializeChat();
 
     _messageController.addListener(() {
       final next = _messageController.text.trim().isNotEmpty;
-      if (next == _isComposing) return;
-      if (!mounted) return;
+      if (next == _isComposing || !mounted) return;
       setState(() => _isComposing = next);
     });
 
@@ -92,16 +113,14 @@ class _ChatPageState extends State<ChatPage> {
     _scrollController.dispose();
     _recorder.dispose();
     _player.dispose();
+    _fadeCtrl.dispose();
     super.dispose();
   }
 
-  // ── Init ───────────────────────────────────────────────────────────────────
+  // ── Init ──────────────────────────────────────────────────────────────────
   Future<void> _initializeChat() async {
     try {
-      setState(() {
-        _isLoading = true;
-        _status = "connecting";
-      });
+      setState(() { _isLoading = true; _status = "connecting"; });
 
       final res = await http.get(
         Uri.parse("$serverUrl/api/message/${widget.emergencyId}"),
@@ -112,39 +131,31 @@ class _ChatPageState extends State<ChatPage> {
       );
 
       final body = jsonDecode(res.body);
-
       if (res.statusCode != 200 || body["success"] != true) {
-        _showError(
-          body["message"]?.toString() ?? "Failed to load chat history",
-        );
+        _showError(body["message"]?.toString() ?? "Failed to load chat history");
         setState(() => _status = "error");
         return;
       }
 
       final list = (body["data"] as List<dynamic>? ?? []);
-      final mapped =
-          list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final mapped = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
       if (!mounted) return;
-      setState(() {
-        _messages
-          ..clear()
-          ..addAll(mapped);
-      });
-
+      setState(() { _messages..clear()..addAll(mapped); });
       _connectSocket();
       _scrollToBottom(force: true);
+      _fadeCtrl.forward();
     } catch (e) {
       debugPrint("Init Error: $e");
       if (!mounted) return;
       setState(() => _status = "error");
-      _showError("Could not reach server. Check backend and CORS settings.");
+      _showError("Could not reach server.");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // ── Socket ─────────────────────────────────────────────────────────────────
+  // ── Socket ────────────────────────────────────────────────────────────────
   void _connectSocket() {
     socket?.disconnect();
     socket?.dispose();
@@ -162,7 +173,7 @@ class _ChatPageState extends State<ChatPage> {
       if (!mounted) return;
       setState(() => _status = "ready");
       socket!.emit("chat:join", {"emergencyId": widget.emergencyId});
-      socket!.emit("join_emergency", widget.emergencyId); // legacy
+      socket!.emit("join_emergency", widget.emergencyId);
     });
 
     void onIncoming(dynamic data) {
@@ -178,34 +189,30 @@ class _ChatPageState extends State<ChatPage> {
 
     socket!.on("chat:new", onIncoming);
     socket!.on("receive_message", onIncoming);
-
     socket!.on("error_alert", (e) {
       final msg = (e is Map && e["message"] != null)
           ? e["message"].toString()
           : e.toString();
       _showError(msg);
     });
-
-    socket!.onConnectError((err) {
+    socket!.onConnectError((_) {
       if (!mounted) return;
       setState(() => _status = "error");
-      _showError("Socket connection failed. Please login again.");
+      _showError("Socket connection failed.");
     });
 
     socket!.connect();
   }
 
-  // ── Send text ──────────────────────────────────────────────────────────────
+  // ── Send ──────────────────────────────────────────────────────────────────
   void _sendMessage() {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
-
     final s = socket;
     if (s == null || !s.connected) {
       _showError("Not connected to chat.");
       return;
     }
-
     s.emit("chat:send", {"emergencyId": widget.emergencyId, "text": text});
     _messageController.clear();
     _scrollToBottom();
@@ -215,53 +222,31 @@ class _ChatPageState extends State<ChatPage> {
   void _openPendingCallOrExplain() {
     final invite = CallService.I.pendingInvite;
     if (invite != null && invite.emergencyId == widget.emergencyId) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          fullscreenDialog: true,
-          builder: (_) => CallPage(invite: invite),
-        ),
-      );
+      Navigator.of(context).push(MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => CallPage(invite: invite),
+      ));
       return;
     }
-    _showError(
-      "No incoming call right now. Wait for the responder to start the call.",
-    );
+    _showError("No incoming call right now. Wait for the responder.");
   }
 
   // ── Audio recording ────────────────────────────────────────────────────────
   Future<void> _toggleRecord() async {
-    if (_status != "ready") {
-      _showError("Chat not connected yet.");
-      return;
-    }
+    if (_status != "ready") { _showError("Chat not connected yet."); return; }
     if (_isUploadingAudio) return;
-
-    if (_isRecording) {
-      await _stopRecordingAndSend();
-    } else {
-      await _startRecording();
-    }
+    _isRecording ? await _stopRecordingAndSend() : await _startRecording();
   }
 
   Future<void> _startRecording() async {
     final ok = await _recorder.hasPermission();
-    if (!ok) {
-      _showError("Microphone permission denied.");
-      return;
-    }
-
+    if (!ok) { _showError("Microphone permission denied."); return; }
     try {
       await _recorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          bitRate: 128000,
-          sampleRate: 44100,
-        ),
-        path:
-            "bahirlink_${widget.emergencyId}_${DateTime.now().millisecondsSinceEpoch}.m4a",
+        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000, sampleRate: 44100),
+        path: "bahirlink_${widget.emergencyId}_${DateTime.now().millisecondsSinceEpoch}.m4a",
       );
-      if (!mounted) return;
-      setState(() => _isRecording = true);
+      if (mounted) setState(() => _isRecording = true);
     } catch (e) {
       _showError("Failed to start recording: $e");
     }
@@ -270,21 +255,14 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _stopRecordingAndSend() async {
     try {
       final path = await _recorder.stop();
-      if (!mounted) return;
-      setState(() => _isRecording = false);
-
+      if (mounted) setState(() => _isRecording = false);
       if (path != null && path.isNotEmpty) {
         await _uploadAudioFromPath(path);
-        return;
+      } else {
+        _showError("Recording finished but no file path returned.");
       }
-
-      _showError(
-        "Recording finished but no file path returned. "
-        "Run on Android/iOS or switch to record.startStream().",
-      );
     } catch (e) {
-      if (!mounted) return;
-      setState(() => _isRecording = false);
+      if (mounted) setState(() => _isRecording = false);
       _showError("Failed to stop recording: $e");
     }
   }
@@ -292,11 +270,8 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _uploadAudioFromPath(String path) async {
     try {
       setState(() => _isUploadingAudio = true);
-
-      final req = http.MultipartRequest(
-        "POST",
-        Uri.parse("$serverUrl/api/message/audio"),
-      );
+      final req = http.MultipartRequest("POST",
+          Uri.parse("$serverUrl/api/message/audio"));
       req.headers["Authorization"] = "Bearer $_cleanToken";
       req.fields["emergencyId"] = widget.emergencyId.toString();
       req.files.add(await http.MultipartFile.fromPath("audio", path));
@@ -312,16 +287,13 @@ class _ChatPageState extends State<ChatPage> {
 
       final saved = Map<String, dynamic>.from(body["data"]);
       final audioUrl = saved["audioUrl"]?.toString();
-
       if (audioUrl != null && socket != null && socket!.connected) {
         socket!.emit("chat:send", {
           "emergencyId": widget.emergencyId,
           "audioUrl": audioUrl,
         });
       }
-
-      if (!mounted) return;
-      setState(() => _messages.add(saved));
+      if (mounted) setState(() => _messages.add(saved));
       _scrollToBottom();
     } catch (e) {
       _showError("Failed to upload audio: $e");
@@ -334,9 +306,7 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _togglePlay(Map<String, dynamic> msg, dynamic key) async {
     final audioUrl = msg["audioUrl"]?.toString();
     if (audioUrl == null || audioUrl.isEmpty) return;
-
     final src = _absoluteMediaUrl(audioUrl);
-
     try {
       if (_playingKey == key) {
         await _player.pause();
@@ -351,42 +321,33 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  // ── UI helpers ─────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
   Color _statusColor() {
     switch (_status) {
-      case "ready":
-        return const Color(0xFF22C55E);
-      case "connecting":
-        return const Color(0xFFFB923C);
-      case "error":
-        return const Color(0xFFEF4444);
-      default:
-        return const Color(0xFF94A3B8);
+      case "ready":     return _T.green;
+      case "connecting":return _T.orange;
+      case "error":     return _T.red;
+      default:          return _T.textMid;
     }
   }
 
   String _statusLabel() {
     switch (_status) {
-      case "ready":
-        return "online";
-      case "connecting":
-        return "connecting…";
-      case "error":
-        return "offline";
-      default:
-        return "idle";
+      case "ready":     return "Online";
+      case "connecting":return "Connecting…";
+      case "error":     return "Offline";
+      default:          return "Idle";
     }
   }
 
   DateTime? _tryParseMessageTime(Map<String, dynamic> msg) {
-    final raw = msg["createdAt"] ??
-        msg["created_at"] ??
-        msg["timestamp"] ??
-        msg["time"];
+    final raw = msg["createdAt"] ?? msg["created_at"] ??
+        msg["timestamp"] ?? msg["time"];
     if (raw == null) return null;
     if (raw is int) {
-      if (raw > 1000000000000) return DateTime.fromMillisecondsSinceEpoch(raw);
-      return DateTime.fromMillisecondsSinceEpoch(raw * 1000);
+      return raw > 1000000000000
+          ? DateTime.fromMillisecondsSinceEpoch(raw)
+          : DateTime.fromMillisecondsSinceEpoch(raw * 1000);
     }
     return DateTime.tryParse(raw.toString());
   }
@@ -395,179 +356,69 @@ class _ChatPageState extends State<ChatPage> {
     final h = dt.hour;
     final hh = ((h + 11) % 12) + 1;
     final mm = dt.minute.toString().padLeft(2, "0");
-    final ap = h >= 12 ? "PM" : "AM";
-    return "$hh:$mm $ap";
+    return "$hh:$mm ${h >= 12 ? 'PM' : 'AM'}";
   }
 
   void _showError(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w600)),
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: _T.textDark,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.all(16),
+    ));
   }
 
   void _scrollToBottom({bool force = false}) {
     Future.delayed(const Duration(milliseconds: 180), () {
       if (!_scrollController.hasClients) return;
-      if (force) {
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-        return;
-      }
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOut,
-      );
+      force
+          ? _scrollController.jumpTo(_scrollController.position.maxScrollExtent)
+          : _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOut);
     });
   }
 
-  bool _isMe(Map<String, dynamic> msg) {
-    return (msg["senderType"] == "user") && (msg["senderId"] == widget.userId);
-  }
+  bool _isMe(Map<String, dynamic> msg) =>
+      msg["senderType"] == "user" && msg["senderId"] == widget.userId;
 
-  bool _isAudioMsg(Map<String, dynamic> msg) {
-    return (msg["messageType"]?.toString() == "audio") ||
-        (msg["audioUrl"] != null && msg["audioUrl"].toString().isNotEmpty);
-  }
+  bool _isAudioMsg(Map<String, dynamic> msg) =>
+      msg["messageType"]?.toString() == "audio" ||
+      (msg["audioUrl"] != null && msg["audioUrl"].toString().isNotEmpty);
 
-  Widget _bgPattern() {
-    return IgnorePointer(
-      child: Opacity(
-        opacity: 0.06,
-        child: CustomPaint(
-          painter: _TelegramBgPainter(),
-          size: Size.infinite,
-        ),
-      ),
-    );
-  }
-
-  // ── Build ──────────────────────────────────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final statusColor = _statusColor();
     final canType = _status == "ready" && !_isRecording && !_isUploadingAudio;
     final sendEnabled = canType && _isComposing;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFEAF2F8),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0.6,
-        surfaceTintColor: Colors.white,
-        titleSpacing: 12,
-        title: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [Color(0xFF24A1DE), Color(0xFF2B9DF0)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: const Center(
-                child: Icon(Icons.shield_rounded, size: 18, color: Colors.white),
-              ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: _T.chatBg,
+        body: Column(children: [
+          _buildHeader(context),
+          if (_isUploadingAudio)
+            LinearProgressIndicator(
+              minHeight: 2,
+              color: _T.accent,
+              backgroundColor: _T.accentSoft,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Case #${widget.emergencyId}",
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF0F172A),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _statusLabel(),
-                        style: const TextStyle(
-                          color: Color(0xFF64748B),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      if (_isUploadingAudio) ...[
-                        const SizedBox(width: 8),
-                        const Text(
-                          "• uploading audio…",
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF64748B),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                      if (_isRecording) ...[
-                        const SizedBox(width: 8),
-                        const Text(
-                          "• recording…",
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.red,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: "Video call",
-            onPressed: _openPendingCallOrExplain,
-            icon: const Icon(Icons.videocam_rounded, color: Color(0xFF24A1DE)),
-          ),
-          IconButton(
-            tooltip: "Reconnect",
-            onPressed: _connectSocket,
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF475569)),
-          ),
-          const SizedBox(width: 6),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Expanded(
-                  child: Stack(
-                    children: [
-                      Positioned.fill(child: _bgPattern()),
+          Expanded(
+            child: _isLoading
+                ? _buildSplash()
+                : FadeTransition(
+                    opacity: _fadeAnim,
+                    child: Stack(children: [
+                      Positioned.fill(child: _buildBgPattern()),
                       _messages.isEmpty
-                          ? _emptyState()
+                          ? _buildEmptyState()
                           : ListView.builder(
                               controller: _scrollController,
-                              padding:
-                                  const EdgeInsets.fromLTRB(12, 14, 12, 14),
+                              padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
                               itemCount: _messages.length,
                               itemBuilder: (context, index) {
                                 final msg = _messages[index];
@@ -578,194 +429,333 @@ class _ChatPageState extends State<ChatPage> {
                                     ? ""
                                     : _formatTime(sentAt.toLocal());
                                 final key = msg["id"] ?? index;
-                                final playing = _playingKey == key;
-
-                                return _TelegramBubble(
+                                return _ChatBubble(
                                   isMe: mine,
                                   time: time,
                                   isAudio: isAudio,
                                   text: (msg["text"] ?? "").toString(),
-                                  isPlaying: playing,
-                                  onPlayToggle: isAudio
-                                      ? () => _togglePlay(msg, key)
-                                      : null,
+                                  isPlaying: _playingKey == key,
+                                  onPlayToggle:
+                                      isAudio ? () => _togglePlay(msg, key) : null,
                                 );
                               },
                             ),
-                    ],
+                    ]),
                   ),
-                ),
-                if (_isUploadingAudio)
-                  const LinearProgressIndicator(
-                    minHeight: 2,
-                    color: Color(0xFF24A1DE),
-                  ),
-                _inputBar(canType: canType, sendEnabled: sendEnabled),
-              ],
-            ),
+          ),
+          _buildInputBar(canType: canType, sendEnabled: sendEnabled),
+        ]),
+      ),
     );
   }
 
-  // ── Empty state ────────────────────────────────────────────────────────────
-  Widget _emptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 68,
-              height: 68,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 18,
-                    offset: const Offset(0, 10),
+  // ── Header ────────────────────────────────────────────────────────────────
+  Widget _buildHeader(BuildContext context) {
+    final sColor = _statusColor();
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
+          stops: [0.0, 0.5, 1.0],
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(26),
+          bottomRight: Radius.circular(26),
+        ),
+      ),
+      child: Stack(children: [
+        Positioned(top: -30, right: -20, child: _blob(110, Colors.white, 0.05)),
+        Positioned(bottom: -14, left: -20, child: _blob(80, _T.accent, 0.12)),
+        SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+            child: Row(children: [
+              // Back
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: 38, height: 38,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.11),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: Colors.white.withOpacity(0.2), width: 1),
                   ),
-                ],
+                  child: const Icon(Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white, size: 16),
+                ),
               ),
-              child: const Icon(
-                Icons.chat_bubble_outline_rounded,
-                color: Color(0xFF334155),
-                size: 28,
+              const SizedBox(width: 12),
+
+              // Avatar
+              Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.18),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: Colors.white.withOpacity(0.35), width: 1.5),
+                ),
+                child: const Icon(Icons.shield_rounded,
+                    color: Colors.white, size: 20),
               ),
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              "No messages yet",
-              style: TextStyle(
-                color: Color(0xFF0F172A),
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
+              const SizedBox(width: 12),
+
+              // Title + status
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text("Case #${widget.emergencyId}",
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2)),
+                  const SizedBox(height: 3),
+                  Row(children: [
+                    Container(
+                        width: 7, height: 7,
+                        decoration: BoxDecoration(
+                            color: sColor, shape: BoxShape.circle)),
+                    const SizedBox(width: 5),
+                    Text(_statusLabel(),
+                        style: TextStyle(
+                            color: Colors.white.withOpacity(0.75),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600)),
+                    if (_isRecording) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: _T.red.withOpacity(0.22),
+                            borderRadius: BorderRadius.circular(6)),
+                        child: const Text("● REC",
+                            style: TextStyle(
+                                color: _T.red,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800)),
+                      ),
+                    ],
+                    if (_isUploadingAudio) ...[
+                      const SizedBox(width: 8),
+                      Text("Uploading…",
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.6),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ]),
+                ]),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _status == "ready"
-                  ? "Send a message or voice note."
-                  : "Connecting…",
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF64748B),
-                fontWeight: FontWeight.w600,
+
+              // Actions
+              GestureDetector(
+                onTap: _openPendingCallOrExplain,
+                child: Container(
+                  width: 38, height: 38,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.11),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: Colors.white.withOpacity(0.2), width: 1),
+                  ),
+                  child: const Icon(Icons.videocam_rounded,
+                      color: Colors.white, size: 18),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: _connectSocket,
+                child: Container(
+                  width: 38, height: 38,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.11),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: Colors.white.withOpacity(0.2), width: 1),
+                  ),
+                  child: const Icon(Icons.refresh_rounded,
+                      color: Colors.white, size: 18),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _blob(double size, Color color, double opacity) => Container(
+        width: size, height: size,
+        decoration: BoxDecoration(
+            shape: BoxShape.circle, color: color.withOpacity(opacity)));
+
+  // ── Splash ────────────────────────────────────────────────────────────────
+  Widget _buildSplash() {
+    return const Center(
+      child: CircularProgressIndicator(color: _T.primary, strokeWidth: 2.5),
+    );
+  }
+
+  // ── Background pattern ────────────────────────────────────────────────────
+  Widget _buildBgPattern() {
+    return IgnorePointer(
+      child: Opacity(
+        opacity: 0.04,
+        child: CustomPaint(
+          painter: _BgPatternPainter(),
+          size: Size.infinite,
         ),
       ),
     );
   }
 
-  // ── Input bar ──────────────────────────────────────────────────────────────
-  Widget _inputBar({required bool canType, required bool sendEnabled}) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Colors.black.withOpacity(0.06)),
+  // ── Empty state ───────────────────────────────────────────────────────────
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 72, height: 72,
+          decoration: BoxDecoration(
+              color: _T.accentSoft,
+              borderRadius: BorderRadius.circular(22)),
+          child: const Icon(Icons.chat_bubble_outline_rounded,
+              color: _T.primary, size: 30),
         ),
+        const SizedBox(height: 16),
+        const Text("No messages yet",
+            style: TextStyle(
+                color: _T.textDark,
+                fontWeight: FontWeight.w800,
+                fontSize: 16)),
+        const SizedBox(height: 6),
+        Text(
+          _status == "ready"
+              ? "Send a message or voice note."
+              : "Connecting to chat…",
+          style: const TextStyle(color: _T.textMid, fontSize: 13),
+        ),
+      ]),
+    );
+  }
+
+  // ── Input bar ─────────────────────────────────────────────────────────────
+  Widget _buildInputBar({required bool canType, required bool sendEnabled}) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: _T.surface,
+        border: Border(top: BorderSide(color: _T.divider, width: 1)),
+        boxShadow: [
+          BoxShadow(
+              color: _T.primary.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, -3)),
+        ],
       ),
       child: SafeArea(
-        child: Row(
-          children: [
-            // Mic / stop button
-            InkWell(
-              borderRadius: BorderRadius.circular(999),
-              onTap: (canType && !_isUploadingAudio) ? _toggleRecord : null,
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: _isRecording ? Colors.red : const Color(0xFFF1F5F9),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black.withOpacity(0.06)),
-                ),
-                child: Icon(
-                  _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
-                  color:
-                      _isRecording ? Colors.white : const Color(0xFF334155),
-                ),
+        top: false,
+        child: Row(children: [
+          // Mic
+          GestureDetector(
+            onTap: (canType && !_isUploadingAudio) ? _toggleRecord : null,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                color: _isRecording
+                    ? _T.red
+                    : _T.accentSoft,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+                color: _isRecording ? Colors.white : _T.primary,
+                size: 20,
               ),
             ),
-            const SizedBox(width: 10),
+          ),
+          const SizedBox(width: 10),
 
-            // Text field
-            Expanded(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(26),
-                  border: Border.all(color: Colors.black.withOpacity(0.06)),
+          // Text field
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: _T.bg,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: _T.divider, width: 1),
+              ),
+              child: TextField(
+                controller: _messageController,
+                enabled: canType,
+                minLines: 1,
+                maxLines: 5,
+                style: const TextStyle(
+                    color: _T.textDark, fontSize: 14, height: 1.4),
+                decoration: InputDecoration(
+                  hintText: _isRecording
+                      ? "Recording… tap stop to send"
+                      : _isUploadingAudio
+                          ? "Uploading audio…"
+                          : canType
+                              ? "Type a message…"
+                              : "Connecting…",
+                  hintStyle: const TextStyle(
+                      color: _T.textMid, fontSize: 14),
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
                 ),
-                child: TextField(
-                  controller: _messageController,
-                  enabled: canType,
-                  minLines: 1,
-                  maxLines: 5,
-                  decoration: InputDecoration(
-                    hintText: canType
-                        ? (_isRecording
-                            ? "Recording… tap stop to send"
-                            : _isUploadingAudio
-                                ? "Uploading audio…"
-                                : "Message")
-                        : "Connecting…",
-                    border: InputBorder.none,
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _sendMessage(),
-                ),
+                onSubmitted: (_) => _sendMessage(),
               ),
             ),
-            const SizedBox(width: 10),
+          ),
+          const SizedBox(width: 10),
 
-            // Send button
-            InkWell(
-              borderRadius: BorderRadius.circular(999),
-              onTap: sendEnabled ? _sendMessage : null,
-              child: Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: sendEnabled
-                      ? const Color(0xFF24A1DE)
-                      : const Color(0xFFE2E8F0),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: (sendEnabled
-                              ? const Color(0xFF24A1DE)
-                              : const Color(0xFFE2E8F0))
-                          .withOpacity(sendEnabled ? 0.35 : 0.0),
-                      blurRadius: 14,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  Icons.send_rounded,
-                  color:
-                      sendEnabled ? Colors.white : const Color(0xFF94A3B8),
-                  size: 20,
-                ),
+          // Send
+          GestureDetector(
+            onTap: sendEnabled ? _sendMessage : null,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              width: 46, height: 46,
+              decoration: BoxDecoration(
+                gradient: sendEnabled
+                    ? const LinearGradient(
+                        colors: [_T.primary, _T.primaryMid],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight)
+                    : null,
+                color: sendEnabled ? null : _T.divider,
+                shape: BoxShape.circle,
+                boxShadow: sendEnabled
+                    ? [
+                        BoxShadow(
+                            color: _T.primary.withOpacity(0.30),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4)),
+                      ]
+                    : [],
               ),
+              child: Icon(Icons.send_rounded,
+                  color: sendEnabled ? Colors.white : _T.textMid,
+                  size: 20),
             ),
-          ],
-        ),
+          ),
+        ]),
       ),
     );
   }
 }
 
-// ── _TelegramBubble ────────────────────────────────────────────────────────
-class _TelegramBubble extends StatelessWidget {
+// ─── Chat Bubble ──────────────────────────────────────────────────────────────
+class _ChatBubble extends StatelessWidget {
   final bool isMe;
   final String time;
   final bool isAudio;
@@ -773,7 +763,7 @@ class _TelegramBubble extends StatelessWidget {
   final bool isPlaying;
   final VoidCallback? onPlayToggle;
 
-  const _TelegramBubble({
+  const _ChatBubble({
     required this.isMe,
     required this.time,
     required this.isAudio,
@@ -784,131 +774,98 @@ class _TelegramBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bubbleColor = isMe ? const Color(0xFF0F172A) : Colors.white;
-    final textColor = isMe ? Colors.white : const Color(0xFF0F172A);
-    final metaColor = isMe ? Colors.white70 : const Color(0xFF64748B);
+    final bubbleColor = isMe ? _T.bubbleMe : _T.bubbleThem;
+    final textColor   = isMe ? Colors.white : _T.textDark;
+    final metaColor   = isMe ? Colors.white60 : _T.textMid;
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 5),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.78,
-        ),
+            maxWidth: MediaQuery.of(context).size.width * 0.76),
         decoration: BoxDecoration(
           color: bubbleColor,
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(isMe ? 18 : 6),
-            bottomRight: Radius.circular(isMe ? 6 : 18),
+            topLeft: const Radius.circular(20),
+            topRight: const Radius.circular(20),
+            bottomLeft: Radius.circular(isMe ? 20 : 5),
+            bottomRight: Radius.circular(isMe ? 5 : 20),
           ),
+          border: isMe ? null : Border.all(color: _T.divider, width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 14,
-              offset: const Offset(0, 6),
-            ),
+                color: _T.primary.withOpacity(isMe ? 0.22 : 0.05),
+                blurRadius: 12,
+                offset: const Offset(0, 4)),
           ],
-          border: isMe ? null : Border.all(color: const Color(0xFFE2E8F0)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (isAudio)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  InkWell(
-                    borderRadius: BorderRadius.circular(999),
-                    onTap: onPlayToggle,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: (isMe
-                                ? Colors.white
-                                : const Color(0xFF24A1DE))
-                            .withOpacity(isMe ? 0.18 : 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        isPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        color: isMe
-                            ? Colors.white
-                            : const Color(0xFF24A1DE),
-                        size: 24,
-                      ),
-                    ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (isAudio)
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              GestureDetector(
+                onTap: onPlayToggle,
+                child: Container(
+                  width: 38, height: 38,
+                  decoration: BoxDecoration(
+                    color: isMe
+                        ? Colors.white.withOpacity(0.18)
+                        : _T.accentSoft,
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _WaveformBars(
-                          color: isMe
-                              ? Colors.white
-                              : const Color(0xFF24A1DE),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "Voice message",
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: isMe ? Colors.white70 : Colors.black54,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
+                  child: Icon(
+                    isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    color: isMe ? Colors.white : _T.primary,
+                    size: 22,
                   ),
-                ],
-              )
-            else
-              Text(
-                text,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 15,
-                  height: 1.25,
-                  fontWeight: FontWeight.w500,
                 ),
               ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (time.isNotEmpty)
-                  Text(
-                    time,
-                    style: TextStyle(
+              const SizedBox(width: 10),
+              Flexible(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  _WaveformBars(
+                      color: isMe ? Colors.white : _T.accent),
+                  const SizedBox(height: 4),
+                  Text("Voice message",
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: metaColor,
+                          fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            ])
+          else
+            Text(text,
+                style: TextStyle(
+                    color: textColor,
+                    fontSize: 15,
+                    height: 1.35,
+                    fontWeight: FontWeight.w500)),
+
+          const SizedBox(height: 5),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            if (time.isNotEmpty)
+              Text(time,
+                  style: TextStyle(
                       color: metaColor,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                if (isMe) ...[
-                  const SizedBox(width: 6),
-                  Icon(
-                    Icons.done_all_rounded,
-                    size: 14,
-                    color: Colors.white.withOpacity(0.85),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600)),
+            if (isMe) ...[
+              const SizedBox(width: 5),
+              Icon(Icons.done_all_rounded,
+                  size: 13, color: Colors.white.withOpacity(0.8)),
+            ],
+          ]),
+        ]),
       ),
     );
   }
 }
 
-// ── _WaveformBars ──────────────────────────────────────────────────────────
+// ─── Waveform Bars ────────────────────────────────────────────────────────────
 class _WaveformBars extends StatelessWidget {
   final Color color;
   final int bars;
@@ -918,9 +875,7 @@ class _WaveformBars extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final heights = List<double>.generate(
-      bars,
-      (i) => (i % 5 == 0) ? 0.85 : (i % 3 == 0) ? 0.65 : 0.45,
-    );
+        bars, (i) => (i % 5 == 0) ? 0.85 : (i % 3 == 0) ? 0.65 : 0.45);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -931,7 +886,7 @@ class _WaveformBars extends StatelessWidget {
               width: 3,
               height: 18 * h,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.85),
+                color: color.withOpacity(0.8),
                 borderRadius: BorderRadius.circular(999),
               ),
             ),
@@ -941,31 +896,26 @@ class _WaveformBars extends StatelessWidget {
   }
 }
 
-// ── _TelegramBgPainter ─────────────────────────────────────────────────────
-class _TelegramBgPainter extends CustomPainter {
+// ─── Background Pattern Painter ───────────────────────────────────────────────
+class _BgPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF24A1DE)
+      ..color = _T.primary
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
-    const spacing = 46.0;
+    const spacing = 48.0;
     for (double y = -spacing; y < size.height + spacing; y += spacing) {
       for (double x = -spacing; x < size.width + spacing; x += spacing) {
         final r = Rect.fromCenter(
-          center: Offset(x, y),
-          width: 16,
-          height: 16,
-        );
+            center: Offset(x, y), width: 14, height: 14);
         canvas.drawRRect(
-          RRect.fromRectAndRadius(r, const Radius.circular(5)),
-          paint,
-        );
+            RRect.fromRectAndRadius(r, const Radius.circular(4)), paint);
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant CustomPainter _) => false;
 }

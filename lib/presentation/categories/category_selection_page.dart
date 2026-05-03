@@ -2,6 +2,16 @@ import 'package:flutter/material.dart';
 import '../../services/category_service.dart';
 import '../reporting/guest_emergency_report_page.dart';
 
+// ─── Dashboard Color Tokens ───────────────────────────────────────────────────
+class _T {
+  static const primary    = Color(0xFF1A3BAA);
+  static const primaryMid = Color(0xFF2252CC);
+  static const accentSoft = Color(0xFFD6E4FF);
+  static const bg         = Color(0xFFF2F6FF);
+  static const textDark   = Color(0xFF0C1A45);
+  static const textMid    = Color(0xFF5569A0);
+}
+
 class CategorySelectionPage extends StatefulWidget {
   final String emergencyTypeId;
   final String emergencyTypeName;
@@ -28,7 +38,6 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
     _fetchCategories();
   }
 
-  // ✅ Search logic for the TextField
   void _filterCategories(String query) {
     setState(() {
       if (query.isEmpty) {
@@ -46,33 +55,23 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
 
   List<Map<String, dynamic>> _sortCategories(List<Map<String, dynamic>> list) {
     List<Map<String, dynamic>> sorted = List.from(list);
-
     sorted.sort((a, b) {
       String nameA = (a["name"] ?? "").toString().toLowerCase();
       String nameB = (b["name"] ?? "").toString().toLowerCase();
-
       bool isAOther = nameA.contains("other");
       bool isBOther = nameB.contains("other");
-
       if (isAOther && !isBOther) return 1;
       if (!isAOther && isBOther) return -1;
-
       return nameA.compareTo(nameB);
     });
-
     return sorted;
   }
 
   Future<void> _fetchCategories() async {
     try {
-      final data = await CategoryService.getCategories(
-        widget.emergencyTypeId,
-      );
-
-      // ✅ FIX: safely convert List<dynamic> → List<Map<String, dynamic>>
+      final data = await CategoryService.getCategories(widget.emergencyTypeId);
       final List<Map<String, dynamic>> parsedData =
           (data as List).map((e) => Map<String, dynamic>.from(e)).toList();
-
       if (mounted) {
         setState(() {
           categories = _sortCategories(parsedData);
@@ -89,7 +88,7 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: _T.bg,
       body: Column(
         children: [
           _buildHeader(),
@@ -97,7 +96,7 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
             child: isLoading
                 ? const Center(
                     child: CircularProgressIndicator(
-                      color: Color(0xFF2563EB),
+                      color: _T.primary,
                       strokeWidth: 2,
                     ),
                   )
@@ -116,7 +115,8 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1D4ED8), Color(0xFF3B82F6)],
+          colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
+          stops: [0.0, 0.5, 1.0],
         ),
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(30),
@@ -194,10 +194,10 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off, size: 48, color: Colors.grey[300]),
+            Icon(Icons.search_off, size: 48, color: _T.textMid.withOpacity(0.4)),
             const SizedBox(height: 12),
             const Text("No matches found",
-                style: TextStyle(color: Colors.grey)),
+                style: TextStyle(color: _T.textMid)),
           ],
         ),
       );
@@ -215,10 +215,8 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
       itemCount: filteredCategories.length,
       itemBuilder: (context, index) {
         final cat = filteredCategories[index];
-        final String name = cat["name"].toString();
-        final String id = cat["id"].toString();
-
-        return _buildCategoryCard(name, id);
+        return _buildCategoryCard(
+            cat["name"].toString(), cat["id"].toString());
       },
     );
   }
@@ -232,7 +230,7 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF3B82F6).withOpacity(0.06),
+            color: _T.primary.withOpacity(0.06),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -266,12 +264,12 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
                   decoration: BoxDecoration(
                     color: isOther
                         ? const Color(0xFFF1F5F9)
-                        : const Color(0xFFEFF6FF),
+                        : _T.accentSoft,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     isOther ? Icons.more_horiz : Icons.category_outlined,
-                    color: isOther ? Colors.blueGrey : const Color(0xFF3B82F6),
+                    color: isOther ? _T.textMid : _T.primary,
                     size: 18,
                   ),
                 ),
@@ -282,7 +280,7 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF1E293B),
+                    color: _T.textDark,
                     height: 1.1,
                   ),
                 ),

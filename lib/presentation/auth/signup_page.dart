@@ -3,6 +3,16 @@ import '../../services/auth_service.dart';
 import 'verify_email_page.dart';
 import 'login_page.dart';
 
+// ─── Dashboard Color Tokens ───────────────────────────────────────────────────
+class _T {
+  static const primary    = Color(0xFF1A3BAA);
+  static const primaryMid = Color(0xFF2252CC);
+  static const accent     = Color(0xFF4B83F0);
+  static const accentSoft = Color(0xFFD6E4FF);
+  static const textMid    = Color(0xFF5569A0);
+  static const divider    = Color(0xFFE5ECFF);
+}
+
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
 
@@ -78,7 +88,7 @@ class _SignUpPageState extends State<SignUpPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.redAccent,
+        backgroundColor: const Color(0xFFEF4444),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -104,7 +114,7 @@ class _SignUpPageState extends State<SignUpPage> {
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF444444),
+                        color: Color(0xFF0C1A45),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -167,9 +177,10 @@ class _SignUpPageState extends State<SignUpPage> {
             width: double.infinity,
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+                colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
+                stops: [0.0, 0.5, 1.0],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
             ),
           ),
@@ -221,24 +232,28 @@ class _SignUpPageState extends State<SignUpPage> {
       keyboardType: keyboardType,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-        prefixIcon: Icon(icon, color: const Color(0xFF4A90E2), size: 20),
+        hintStyle: const TextStyle(color: _T.textMid, fontSize: 14),
+        prefixIcon: Icon(icon, color: _T.primary, size: 20),
         suffixIcon: isPassword
             ? IconButton(
                 icon: Icon(
                     obscureText ? Icons.visibility_off : Icons.visibility,
-                    color: Colors.grey,
+                    color: _T.textMid,
                     size: 18),
                 onPressed: onSuffixPressed,
               )
             : null,
         filled: true,
-        fillColor: const Color(0xFFF1F7FF),
+        fillColor: _T.accentSoft.withOpacity(0.35),
         contentPadding:
             const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(30),
           borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: const BorderSide(color: _T.accent, width: 1.5),
         ),
       ),
     );
@@ -251,10 +266,11 @@ class _SignUpPageState extends State<SignUpPage> {
       child: ElevatedButton(
         onPressed: _isLoading ? null : _signUp,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          side: const BorderSide(color: Color(0xFF4A90E2), width: 1.5),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          backgroundColor: _T.primary,
+          foregroundColor: Colors.white,
+          side: const BorderSide(color: _T.primary, width: 1.5),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30)),
           elevation: 0,
         ),
         child: _isLoading
@@ -262,10 +278,10 @@ class _SignUpPageState extends State<SignUpPage> {
                 height: 20,
                 width: 20,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Color(0xFF4A90E2)))
+                    strokeWidth: 2, color: Colors.white))
             : const Text("Create Account",
                 style: TextStyle(
-                    color: Color(0xFF4A90E2),
+                    color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 16)),
       ),
@@ -277,7 +293,7 @@ class _SignUpPageState extends State<SignUpPage> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         const Text("Already have an account? ",
-            style: TextStyle(color: Colors.grey)),
+            style: TextStyle(color: _T.textMid)),
         GestureDetector(
           onTap: () => Navigator.pushReplacement(
             context,
@@ -286,7 +302,7 @@ class _SignUpPageState extends State<SignUpPage> {
           child: const Text(
             "Login",
             style: TextStyle(
-                color: Color(0xFF4A90E2), fontWeight: FontWeight.bold),
+                color: _T.primary, fontWeight: FontWeight.bold),
           ),
         ),
       ],
@@ -294,7 +310,6 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 }
 
-// Re-using the same clipper for design consistency
 class CustomWaveClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {

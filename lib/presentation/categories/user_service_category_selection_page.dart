@@ -2,6 +2,17 @@ import 'package:flutter/material.dart';
 import '../../services/service_category_service.dart';
 import '../reporting/user_service_report_page.dart';
 
+// ─── Dashboard Color Tokens ───────────────────────────────────────────────────
+class _T {
+  static const primary    = Color(0xFF1A3BAA);
+  static const primaryMid = Color(0xFF2252CC);
+  static const accent     = Color(0xFF4B83F0);
+  static const accentSoft = Color(0xFFD6E4FF);
+  static const bg         = Color(0xFFF2F6FF);
+  static const textDark   = Color(0xFF0C1A45);
+  static const textMid    = Color(0xFF5569A0);
+}
+
 class UserServiceCategorySelectionPage extends StatefulWidget {
   final String serviceTypeId;
   final String serviceTypeName;
@@ -28,7 +39,8 @@ class _UserServiceCategorySelectionPageState
     fetchCategories();
   }
 
-  List<Map<String, dynamic>> _sortCategories(List<Map<String, dynamic>> list) {
+  List<Map<String, dynamic>> _sortCategories(
+      List<Map<String, dynamic>> list) {
     List<Map<String, dynamic>> sorted = List.from(list);
     sorted.sort((a, b) {
       String nameA = a["name"].toString().toLowerCase();
@@ -44,12 +56,14 @@ class _UserServiceCategorySelectionPageState
 
   Future<void> fetchCategories() async {
     try {
-      final response = await ServiceCategoryService.getCategoriesByServiceType(
+      final response =
+          await ServiceCategoryService.getCategoriesByServiceType(
         widget.serviceTypeId,
       );
       if (!mounted) return;
       setState(() {
-        categories = _sortCategories(List<Map<String, dynamic>>.from(response));
+        categories =
+            _sortCategories(List<Map<String, dynamic>>.from(response));
         isLoading = false;
       });
     } catch (e) {
@@ -62,7 +76,7 @@ class _UserServiceCategorySelectionPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC), // Light background
+      backgroundColor: _T.bg,
       body: Column(
         children: [
           _buildHeader(),
@@ -70,7 +84,7 @@ class _UserServiceCategorySelectionPageState
             child: isLoading
                 ? const Center(
                     child: CircularProgressIndicator(
-                      color: Color(0xFF2563EB),
+                      color: _T.primary,
                       strokeWidth: 2,
                     ),
                   )
@@ -89,7 +103,8 @@ class _UserServiceCategorySelectionPageState
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1D4ED8), Color(0xFF3B82F6)], // Vibrant Blue
+          colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
+          stops: [0.0, 0.5, 1.0],
         ),
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(30),
@@ -140,7 +155,7 @@ class _UserServiceCategorySelectionPageState
       return const Center(
         child: Text(
           "No categories available",
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: _T.textMid),
         ),
       );
     }
@@ -157,7 +172,8 @@ class _UserServiceCategorySelectionPageState
       itemCount: categories.length,
       itemBuilder: (context, index) {
         final cat = categories[index];
-        return _buildCategoryCard(cat["name"].toString(), cat["id"].toString());
+        return _buildCategoryCard(
+            cat["name"].toString(), cat["id"].toString());
       },
     );
   }
@@ -171,7 +187,7 @@ class _UserServiceCategorySelectionPageState
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF3B82F6).withOpacity(0.06),
+            color: _T.primary.withOpacity(0.06),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -204,14 +220,14 @@ class _UserServiceCategorySelectionPageState
                   decoration: BoxDecoration(
                     color: isOther
                         ? const Color(0xFFF1F5F9)
-                        : const Color(0xFFEFF6FF),
+                        : _T.accentSoft,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     isOther
                         ? Icons.more_horiz
                         : Icons.settings_suggest_outlined,
-                    color: isOther ? Colors.blueGrey : const Color(0xFF3B82F6),
+                    color: isOther ? _T.textMid : _T.primary,
                     size: 18,
                   ),
                 ),
@@ -222,7 +238,7 @@ class _UserServiceCategorySelectionPageState
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF1E293B),
+                    color: _T.textDark,
                     height: 1.1,
                   ),
                 ),
