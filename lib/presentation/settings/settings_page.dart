@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:first_app/l10n/app_localizations.dart';
+import '../../main.dart'; // Ensure this points to your main.dart file
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -9,171 +11,137 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  bool notificationsEnabled = true;
-  bool darkMode = false;
+  String _selectedLanguage = 'en';
 
   @override
   void initState() {
     super.initState();
-    _loadPreferences();
+    _loadLanguage();
   }
 
-  void _loadPreferences() async {
+  void _loadLanguage() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      darkMode = prefs.getBool("darkMode") ?? false;
-      notificationsEnabled = prefs.getBool("notificationsEnabled") ?? true;
+      _selectedLanguage = prefs.getString("language_code") ?? 'en';
     });
   }
 
-  void _toggleDarkMode(bool value) async {
+  void _changeLanguage(String? langCode) async {
+    if (langCode == null) return;
+    
+    // 1. Save to local storage for persistence
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool("darkMode", value);
-    setState(() => darkMode = value);
+    await prefs.setString("language_code", langCode);
+    
+    setState(() {
+      _selectedLanguage = langCode;
+    });
+
+    // 2. Trigger global rebuild of the app with the new Locale
+    // This talks to the method we added in main.dart
+    if (mounted) {
+      MyApp.of(context)?.setLocale(Locale(langCode));
+    }
   }
 
-  void _toggleNotifications(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool("notificationsEnabled", value);
-    setState(() => notificationsEnabled = value);
-  }
-
-  Color get backgroundColor => Colors.white;
+  // --- Theme Colors ---
+  Color get backgroundColor => const Color(0xFFF2F6FF);
   Color get cardColor => Colors.white;
-  Color get textColor => Colors.black87;
-  Color get iconColor => Colors.blue.shade800;
-  Color get switchActiveColor => Colors.blue.shade800;
-  Color get appBarColor => Colors.blue.shade800;
+  Color get textColor => const Color(0xFF0C1A45);
+  Color get iconColor => const Color(0xFF1A3BAA);
 
   @override
   Widget build(BuildContext context) {
+    // This allows us to use l10n.key instead of manual ternary strings
+    final l10n = AppLocalizations.of(context)!;
+
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: appBarColor,
+        backgroundColor: iconColor,
         foregroundColor: Colors.white,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          "Settings",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+        elevation: 0,
+        // Using the localization key if available, otherwise fallback
+        title: Text(
+          _selectedLanguage == 'en' ? "Settings" : "መቼቶች",
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
-        elevation: 0,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           const SizedBox(height: 10),
           Text(
-            "Preferences",
+            _selectedLanguage == 'en' ? "Language Preference" : "የቋንቋ ምርጫ",
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
               color: textColor,
             ),
           ),
           const SizedBox(height: 12),
-          _buildSwitchCard(
-            icon: Icons.notifications,
-            title: "Enable Notifications",
-            value: notificationsEnabled,
-            onChanged: _toggleNotifications,
-          ),
-          _buildSwitchCard(
-            icon: Icons.dark_mode,
-            title: "Dark Mode",
-            value: darkMode,
-            onChanged: _toggleDarkMode,
-          ),
-          const SizedBox(height: 24),
-          Text(
-            "Account",
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: textColor,
+          Container(
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: iconColor.withOpacity(0.1)),
+              boxShadow: [
+                BoxShadow(
+                  color: iconColor.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                _buildLanguageOption(
+                  title: "English",
+                  subtitle: "Default Language",
+                  value: 'en',
+                  icon: Icons.language,
+                ),
+                Divider(height: 1, color: iconColor.withOpacity(0.1)),
+                _buildLanguageOption(
+                  title: "አማርኛ",
+                  subtitle: "Amharic",
+                  value: 'am',
+                  icon: Icons.translate,
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          _buildCardTile(icon: Icons.person, title: "Profile", onTap: () {}),
-          _buildCardTile(icon: Icons.logout, title: "Logout", onTap: () {}),
         ],
       ),
     );
   }
 
-  Widget _buildSwitchCard({
-    required IconData icon,
+  Widget _buildLanguageOption({
     required String title,
-    required bool value,
-    required Function(bool) onChanged,
-  }) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: iconColor.withOpacity(0.15)),
-        boxShadow: [
-          BoxShadow(
-            color: iconColor.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: SwitchListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        secondary: Icon(icon, color: iconColor),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: textColor,
-          ),
-        ),
-        value: value,
-        onChanged: onChanged,
-        activeColor: switchActiveColor,
-      ),
-    );
-  }
-
-  Widget _buildCardTile({
+    required String subtitle,
+    required String value,
     required IconData icon,
-    required String title,
-    required VoidCallback onTap,
   }) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: iconColor.withOpacity(0.15)),
-        boxShadow: [
-          BoxShadow(
-            color: iconColor.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: iconColor),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: textColor,
-          ),
+    return RadioListTile<String>(
+      activeColor: iconColor,
+      value: value,
+      groupValue: _selectedLanguage,
+      onChanged: _changeLanguage,
+      secondary: Icon(icon, color: iconColor),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: textColor,
         ),
-        trailing: Icon(Icons.arrow_forward_ios, size: 16, color: textColor),
-        onTap: onTap,
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          color: textColor.withOpacity(0.6), 
+          fontSize: 12,
+        ),
       ),
     );
   }

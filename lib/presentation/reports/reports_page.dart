@@ -2,10 +2,11 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:first_app/l10n/app_localizations.dart';
 import '../../services/reports_service.dart';
 import './report_detail_page.dart';
 
-// ─── Design Tokens (mirrored from Dashboard) ──────────────────────────────────
+// ─── Design Tokens ────────────────────────────────────────────────────────────
 class _T {
   static const primary    = Color(0xFF1A3BAA);
   static const primaryMid = Color(0xFF2252CC);
@@ -33,6 +34,9 @@ class ReportsPage extends StatefulWidget {
 
 class _ReportsPageState extends State<ReportsPage>
     with TickerProviderStateMixin {
+
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   List<Map<String, dynamic>> emergencies = [];
   bool loading = true;
 
@@ -61,12 +65,12 @@ class _ReportsPageState extends State<ReportsPage>
   }
 
   String _formatDate(dynamic dateStr) {
-    if (dateStr == null) return "Recently";
+    if (dateStr == null) return l10n.recently;
     try {
       final dt = DateTime.parse(dateStr.toString());
       return DateFormat('MMM dd, hh:mm a').format(dt);
     } catch (_) {
-      return "Recently";
+      return l10n.recently;
     }
   }
 
@@ -84,7 +88,7 @@ class _ReportsPageState extends State<ReportsPage>
       final Map<String, String> typeMap = {
         for (var c in categories)
           c['id'].toString():
-              c['emergencyType']?['name']?.toString() ?? "General",
+              c['emergencyType']?['name']?.toString() ?? l10n.general,
       };
 
       final enriched = emergenciesResponse.map((e) {
@@ -94,13 +98,13 @@ class _ReportsPageState extends State<ReportsPage>
           ...e,
           'id': _extractId(e['id']) ?? _extractId(e['_id']),
           'categoryName': categoryId != null
-              ? (categoryMap[categoryId] ?? "Uncategorized")
-              : "Uncategorized",
+              ? (categoryMap[categoryId] ?? l10n.uncategorized)
+              : l10n.uncategorized,
           'typeName': categoryId != null
-              ? (typeMap[categoryId] ?? "General")
-              : "General",
+              ? (typeMap[categoryId] ?? l10n.general)
+              : l10n.general,
           'description':
-              e['description']?.toString() ?? "No description provided.",
+              e['description']?.toString() ?? l10n.noDescription,
           'createdAt':
               e['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
         };
@@ -154,7 +158,7 @@ class _ReportsPageState extends State<ReportsPage>
     );
   }
 
-  // ── Splash ───────────────────────────────────────────────────────────────
+  // ── Splash ────────────────────────────────────────────────────────────────
   Widget _buildSplash() {
     return Container(
       decoration: const BoxDecoration(
@@ -166,15 +170,12 @@ class _ReportsPageState extends State<ReportsPage>
         ),
       ),
       child: const Center(
-        child: CircularProgressIndicator(
-          color: Colors.white,
-          strokeWidth: 2.5,
-        ),
+        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
       ),
     );
   }
 
-  // ── Header ───────────────────────────────────────────────────────────────
+  // ── Header ────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Container(
       decoration: const BoxDecoration(
@@ -199,7 +200,6 @@ class _ReportsPageState extends State<ReportsPage>
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 26),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                // Back button
                 GestureDetector(
                   onTap: () => Navigator.pop(context),
                   child: Container(
@@ -207,14 +207,14 @@ class _ReportsPageState extends State<ReportsPage>
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.11),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.2), width: 1),
                     ),
                     child: const Icon(Icons.arrow_back_ios_new_rounded,
                         color: Colors.white, size: 16),
                   ),
                 ),
                 const Spacer(),
-                // Refresh button
                 GestureDetector(
                   onTap: fetchInitialData,
                   child: Container(
@@ -222,7 +222,8 @@ class _ReportsPageState extends State<ReportsPage>
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.11),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.2), width: 1),
                     ),
                     child: const Icon(Icons.refresh_rounded,
                         color: Colors.white, size: 18),
@@ -232,29 +233,33 @@ class _ReportsPageState extends State<ReportsPage>
               const SizedBox(height: 22),
               Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
                 Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text("My Emergency",
-                        style: TextStyle(
-                            color: Colors.white.withOpacity(0.62),
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 3),
-                    const Text("Reports",
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.4,
-                            height: 1.1)),
-                  ]),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(l10n.myEmergency,
+                            style: TextStyle(
+                                color: Colors.white.withOpacity(0.62),
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 3),
+                        Text(l10n.reports,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.4,
+                                height: 1.1)),
+                      ]),
                 ),
                 if (!loading)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.11),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.2), width: 1),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       Container(
@@ -262,11 +267,13 @@ class _ReportsPageState extends State<ReportsPage>
                           decoration: const BoxDecoration(
                               color: _T.green, shape: BoxShape.circle)),
                       const SizedBox(width: 5),
-                      Text("${emergencies.length} Reports",
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600)),
+                      Text(
+                        l10n.reportsCountLabel(emergencies.length.toString()),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600),
+                      ),
                     ]),
                   ),
               ]),
@@ -284,8 +291,8 @@ class _ReportsPageState extends State<ReportsPage>
 
   // ── Card ──────────────────────────────────────────────────────────────────
   Widget _buildCard(Map<String, dynamic> report, int index) {
-    final String typeName = report['typeName'] ?? "General";
-    final String categoryName = report['categoryName'] ?? "Uncategorized";
+    final String typeName = report['typeName'] ?? l10n.general;
+    final String categoryName = report['categoryName'] ?? l10n.uncategorized;
     final String description = report['description'] ?? "";
     final String date = _formatDate(report['createdAt']);
 
@@ -318,7 +325,8 @@ class _ReportsPageState extends State<ReportsPage>
           if (result is String) {
             setState(() {
               emergencies.removeWhere(
-                (item) => (item['id'] ?? item['_id']).toString() == result,
+                (item) =>
+                    (item['id'] ?? item['_id']).toString() == result,
               );
             });
           } else if (result == true) {
@@ -340,59 +348,63 @@ class _ReportsPageState extends State<ReportsPage>
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              // Top row: type badge + date
-              Row(children: [
-                _typeBadge(typeName, typeColor),
-                const Spacer(),
-                Row(children: [
-                  Icon(Icons.access_time_rounded, size: 11, color: _T.textMid),
-                  const SizedBox(width: 4),
-                  Text(date,
-                      style: const TextStyle(
-                          color: _T.textMid, fontSize: 11, fontWeight: FontWeight.w500)),
-                ]),
-              ]),
-              const SizedBox(height: 14),
-              // Category name
-              Text(categoryName,
-                  style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: _T.textDark,
-                      letterSpacing: -0.2)),
-              const SizedBox(height: 5),
-              // Description
-              Text(description,
-                  style: const TextStyle(
-                      fontSize: 13, color: _T.textMid, height: 1.45),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 14),
-              Container(height: 1, color: _T.divider),
-              const SizedBox(height: 12),
-              // Footer
-              Row(children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                      color: _T.accentSoft,
-                      borderRadius: BorderRadius.circular(7)),
-                  child: const Row(children: [
-                    Icon(Icons.open_in_new_rounded, size: 11, color: _T.accent),
-                    SizedBox(width: 5),
-                    Text("View details",
-                        style: TextStyle(
-                            color: _T.accent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700)),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    _typeBadge(typeName, typeColor),
+                    const Spacer(),
+                    Row(children: [
+                      const Icon(Icons.access_time_rounded,
+                          size: 11, color: _T.textMid),
+                      const SizedBox(width: 4),
+                      Text(date,
+                          style: const TextStyle(
+                              color: _T.textMid,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500)),
+                    ]),
                   ]),
-                ),
-                const Spacer(),
-                Icon(Icons.arrow_forward_ios_rounded,
-                    size: 12, color: _T.textMid.withOpacity(0.5)),
-              ]),
-            ]),
+                  const SizedBox(height: 14),
+                  Text(categoryName,
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: _T.textDark,
+                          letterSpacing: -0.2)),
+                  const SizedBox(height: 5),
+                  Text(description,
+                      style: const TextStyle(
+                          fontSize: 13, color: _T.textMid, height: 1.45),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 14),
+                  Container(height: 1, color: _T.divider),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                          color: _T.accentSoft,
+                          borderRadius: BorderRadius.circular(7)),
+                      child: Row(children: [
+                        const Icon(Icons.open_in_new_rounded,
+                            size: 11, color: _T.accent),
+                        const SizedBox(width: 5),
+                        Text(l10n.viewDetails,
+                            style: const TextStyle(
+                                color: _T.accent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700)),
+                      ]),
+                    ),
+                    const Spacer(),
+                    Icon(Icons.arrow_forward_ios_rounded,
+                        size: 12,
+                        color: _T.textMid.withOpacity(0.5)),
+                  ]),
+                ]),
           ),
         ),
       ),
@@ -407,7 +419,9 @@ class _ReportsPageState extends State<ReportsPage>
           borderRadius: BorderRadius.circular(8)),
       child: Text(label.toUpperCase(),
           style: TextStyle(
-              color: color, fontSize: 9, fontWeight: FontWeight.w800,
+              color: color,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
               letterSpacing: 0.4)),
     );
   }
@@ -419,19 +433,20 @@ class _ReportsPageState extends State<ReportsPage>
         Container(
           width: 80, height: 80,
           decoration: BoxDecoration(
-              color: _T.accentSoft, borderRadius: BorderRadius.circular(24)),
+              color: _T.accentSoft,
+              borderRadius: BorderRadius.circular(24)),
           child: const Icon(Icons.assignment_late_outlined,
               size: 36, color: _T.primary),
         ),
         const SizedBox(height: 18),
-        const Text("No Reports Yet",
-            style: TextStyle(
+        Text(l10n.noReportsYetEmergency,
+            style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: _T.textDark)),
         const SizedBox(height: 6),
-        const Text("Your submitted reports will appear here.",
-            style: TextStyle(fontSize: 13, color: _T.textMid)),
+        Text(l10n.noReportsSubtitleEmergency,
+            style: const TextStyle(fontSize: 13, color: _T.textMid)),
       ]),
     );
   }

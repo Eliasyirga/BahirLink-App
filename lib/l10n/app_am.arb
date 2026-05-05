@@ -1,0 +1,82 @@
+{
+  "@@locale": "am",
+  "appTitle": "ባህር ሊንክ",
+  "tagline": "ከተማዎ። ተገናኝቷል።",
+  "goodMorning": "እንደምን አደሩ 👋",
+  "welcomeBack": "እንኳን ደህና መጡ",
+  "locationCity": "ባህር ዳር",
+  "liveReports": "የቀጥታ ሪፖርቶች",
+  "activeBadge": "{count} ንቁ",
+  "@activeBadge": {
+    "placeholders": {
+      "count": { "type": "String" }
+    }
+  },
+  "emergencyAssist": "የአደጋ ጊዜ እርዳታ",
+  "publicServices": "የመንግስት አገልግሎቶች",
+  "seeAll": "ሁሉንም ይመልከቱ",
+  "incidentReported": "አደጋ ተመዝግቧል",
+  "rewardLabel": "{amount} ብር",
+  "@rewardLabel": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "statusPending": "በጥበቃ ላይ",
+  "statusInProgress": "በሂደት ላይ",
+  "myPublic": "የእኔ",
+  "serviceReports": "የአገልግሎት ሪፖርቶች",
+  "reportsCount": "{count} ሪፖርቶች",
+  "@reportsCount": {
+    "placeholders": {
+      "count": { "type": "String" }
+    }
+  },
+  "generalService": "አጠቃላይ አገልግሎት",
+  "publicService": "የህዝብ አገልግሎት",
+  "statusCompleted": "ተጠናቋል",
+  "statusRejected": "ተቀባይነት አላገኘም",
+  "viewDetails": "ዝርዝር ይመልከቱ",
+  "noReportsYet": "ምንም ሪፖርት የለም",
+  "noReportsSubtitle": "የአገልግሎት ሪፖርቶችዎ እዚህ ይታያሉ።",
+  "failedToLoad": "መጫን አልተሳካም",
+  "tryAgain": "እንደገና ሞክር",
+  "profile": "መገለጫ",
+  "logout": "ውጣ",
+  "logoutConfirmTitle": "ውጣ",
+  "logoutConfirmMessage": "እርግጠኛ ነዎት መውጣት ይፈልጋሉ?",
+  "cancel": "ሰርዝ",
+  "editProfile": "መገለጫ አርትዕ",
+  "verifyAccount": "መለያ አረጋግጥ",
+  "personalInfo": "የግል መረጃ",
+  "contactInfo": "የእውቂያ መረጃ",
+  "accountInfo": "የመለያ መረጃ",
+  "firstName": "የመጀመሪያ ስም",
+  "lastName": "የአባት ስም",
+  "dateOfBirth": "የልደት ቀን",
+  "gender": "ጾታ",
+  "email": "ኢሜይል",
+  "phone": "ስልክ",
+  "city": "ከተማ",
+  "country": "አገር",
+  "address": "አድራሻ",
+  "accountType": "የመለያ አይነት",
+  "memberSince": "አባል የሆኑበት ቀን",
+  "statusActive": "ንቁ",
+  "failedToLoadProfile": "መገለጫ መጫን አልተሳካም",
+  "retry": "እንደገና ሞክር",
+  "myEmergency": "የእኔ አደጋ",
+  "reports": "ሪፖርቶች",
+  "reportsCountLabel": "{count} ሪፖርቶች",
+  "@reportsCountLabel": {
+    "placeholders": {
+      "count": { "type": "String" }
+    }
+  },
+  "noReportsYetEmergency": "ምንም ሪፖርት የለም",
+  "noReportsSubtitleEmergency": "የተላኩ ሪፖርቶችዎ እዚህ ይታያሉ።",
+  "uncategorized": "ምድብ የለም",
+  "general": "አጠቃላይ",
+  "recently": "በቅርቡ",
+  "noDescription": "መግለጫ አልተሰጠም።"
+}

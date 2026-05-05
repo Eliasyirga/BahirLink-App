@@ -1,7 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../services/kebele_service.dart';
 import '../../services/case_report_service.dart';
+
+// ─── Design Tokens (mirrored from DashboardContent) ──────────────────────────
+class _T {
+  static const primary    = Color(0xFF1A3BAA);
+  static const primaryMid = Color(0xFF2252CC);
+  static const accent     = Color(0xFF4B83F0);
+  static const accentSoft = Color(0xFFD6E4FF);
+  static const surface    = Color(0xFFFFFFFF);
+  static const bg         = Color(0xFFF2F6FF);
+  static const textDark   = Color(0xFF0C1A45);
+  static const textMid    = Color(0xFF5569A0);
+  static const divider    = Color(0xFFE5ECFF);
+  static const green      = Color(0xFF0DB87A);
+  static const red        = Color(0xFFEF4444);
+}
 
 class CaseReportPage extends StatefulWidget {
   final dynamic caseData;
@@ -11,12 +27,8 @@ class CaseReportPage extends StatefulWidget {
   State<CaseReportPage> createState() => _CaseReportPageState();
 }
 
-class _CaseReportPageState extends State<CaseReportPage> {
-  // Static constants fix the "withOpacity on undefined" JS error
-  static const Color _primaryBlue = Color(0xFF2B7CFF);
-  static const Color _darkSlate = Color(0xFF0F172A);
-  static const Color _bgSlate = Color(0xFFF8FAFC);
-  static const Color _borderGray = Color(0xFFE2E8F0);
+class _CaseReportPageState extends State<CaseReportPage>
+    with TickerProviderStateMixin {
 
   final _descriptionController = TextEditingController();
   final KebeleService _kebeleService = KebeleService();
@@ -29,6 +41,12 @@ class _CaseReportPageState extends State<CaseReportPage> {
   DateTime? _selectedDateTime;
   int? _selectedKebeleId;
 
+  late final AnimationController _fadeCtrl =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 700))
+        ..forward();
+  late final Animation<double> _fadeAnim =
+      CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+
   @override
   void initState() {
     super.initState();
@@ -38,22 +56,19 @@ class _CaseReportPageState extends State<CaseReportPage> {
   @override
   void dispose() {
     _descriptionController.dispose();
+    _fadeCtrl.dispose();
     super.dispose();
   }
 
+  // ── Data ──────────────────────────────────────────────────────────────────
   Future<void> _loadKebeles() async {
     try {
       final data = await _kebeleService.getAllKebeles();
-      if (mounted) {
-        setState(() {
-          _kebeles = data;
-          _isLoadingKebeles = false;
-        });
-      }
+      if (mounted) setState(() { _kebeles = data; _isLoadingKebeles = false; });
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingKebeles = false);
-        _triggerNotification("Failed to fetch location data", isError: true);
+        _notify("Failed to fetch location data", isError: true);
       }
     }
   }
@@ -65,37 +80,33 @@ class _CaseReportPageState extends State<CaseReportPage> {
       firstDate: DateTime(2025),
       lastDate: DateTime.now(),
       builder: (context, child) => Theme(
-        data: Theme.of(
-          context,
-        ).copyWith(colorScheme: const ColorScheme.light(primary: _primaryBlue)),
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(primary: _T.primary),
+        ),
         child: child!,
       ),
     );
     if (date == null) return;
-
     final TimeOfDay? time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(primary: _T.primary),
+        ),
+        child: child!,
+      ),
     );
     if (time == null) return;
-
-    setState(() {
-      _selectedDateTime = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        time.hour,
-        time.minute,
-      );
-    });
+    setState(() => _selectedDateTime = DateTime(
+        date.year, date.month, date.day, time.hour, time.minute));
   }
 
   Future<void> _handleSubmission() async {
     if (_selectedKebeleId == null || _selectedDateTime == null) {
-      _triggerNotification("Please select both location and time");
+      _notify("Please select both location and time");
       return;
     }
-
     setState(() => _isSubmitting = true);
 
     final payload = {
@@ -104,296 +115,406 @@ class _CaseReportPageState extends State<CaseReportPage> {
       "kebeleId": _selectedKebeleId,
       "spottedAt": _selectedDateTime!.toIso8601String(),
       "description": _descriptionController.text,
-      "reporterId": null, // Anonymous or profile-linked
+      "reporterId": null,
     };
 
     final bool success = await _reportService.createReport(payload);
 
     if (mounted) {
       setState(() => _isSubmitting = false);
-
       if (success) {
-        // 1. Capture the messenger state before the widget is disposed by pop()
         final messenger = ScaffoldMessenger.of(context);
-
-        // 2. Unfocus keyboard to prevent layout flicker
         FocusScope.of(context).unfocus();
-
-        // 3. Pop the current page
         Navigator.pop(context);
-
-        // 4. Delay the notification slightly so the animation runs on the NEW stable tree
         Future.delayed(const Duration(milliseconds: 100), () {
-          messenger.showSnackBar(
-            SnackBar(
-              content: const Text("Sighting submitted successfully"),
-              behavior: SnackBarBehavior.floating,
-              backgroundColor: Colors.green.shade800,
-              margin: const EdgeInsets.all(20),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
+          messenger.showSnackBar(SnackBar(
+            content: const Text("Sighting submitted successfully"),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: _T.green,
+            margin: const EdgeInsets.all(20),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+          ));
         });
       } else {
-        _triggerNotification("Submission failed. Please check connection.");
+        _notify("Submission failed. Please check connection.");
       }
     }
   }
 
-  void _triggerNotification(String message, {bool isError = true}) {
+  void _notify(String message, {bool isError = true}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: isError ? Colors.redAccent : _primaryBlue,
+        backgroundColor: isError ? _T.red : _T.green,
         margin: const EdgeInsets.all(20),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+      ));
   }
 
+  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bgSlate,
-      appBar: AppBar(
-        title: const Text(
-          "INTEL REPORT",
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 13,
-            letterSpacing: 1.2,
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        foregroundColor: _darkSlate,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: _isLoadingKebeles
-          ? const Center(
-              child: CircularProgressIndicator(
-                color: _primaryBlue,
-                strokeWidth: 2,
-              ),
-            )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(),
-                  const SizedBox(height: 32),
-
-                  _label("GEOGRAPHIC PRECISION"),
-                  const SizedBox(height: 10),
-                  _cardWrapper(
-                    child: DropdownButtonFormField<int>(
-                      value: _selectedKebeleId,
-                      items: _kebeles
-                          .map(
-                            (k) => DropdownMenuItem<int>(
-                              value: k['id'],
-                              child: Text(
-                                k['name'] ?? "Unknown Kebele",
-                                style: const TextStyle(fontSize: 14),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: _T.bg,
+        body: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: _isLoadingKebeles
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                          color: _T.primary, strokeWidth: 2))
+                  : FadeTransition(
+                      opacity: _fadeAnim,
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildTargetCard(),
+                            const SizedBox(height: 28),
+                            _sectionLabel("Geographic Precision",
+                                Icons.share_location_rounded),
+                            const SizedBox(height: 10),
+                            _buildCard(child: DropdownButtonFormField<int>(
+                              value: _selectedKebeleId,
+                              dropdownColor: _T.surface,
+                              style: const TextStyle(
+                                  color: _T.textDark, fontSize: 14),
+                              items: _kebeles
+                                  .map((k) => DropdownMenuItem<int>(
+                                        value: k['id'],
+                                        child: Text(k['name'] ?? "Unknown",
+                                            style: const TextStyle(
+                                                fontSize: 14,
+                                                color: _T.textDark)),
+                                      ))
+                                  .toList(),
+                              onChanged: (val) =>
+                                  setState(() => _selectedKebeleId = val),
+                              decoration: _inputDeco(
+                                  "Select current Kebele",
+                                  Icons.location_on_rounded),
+                            )),
+                            const SizedBox(height: 20),
+                            _sectionLabel(
+                                "Time of Sighting", Icons.timer_outlined),
+                            const SizedBox(height: 10),
+                            _buildCard(
+                              child: ListTile(
+                                onTap: _pickDateTime,
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 4),
+                                leading: Container(
+                                  width: 38, height: 38,
+                                  decoration: BoxDecoration(
+                                    color: _T.accentSoft,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(Icons.calendar_month_rounded,
+                                      color: _T.primary, size: 18),
+                                ),
+                                title: Text(
+                                  _selectedDateTime == null
+                                      ? "Select date & time"
+                                      : DateFormat('MMMM dd, yyyy • hh:mm a')
+                                          .format(_selectedDateTime!),
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: _selectedDateTime == null
+                                        ? FontWeight.w400
+                                        : FontWeight.w700,
+                                    color: _selectedDateTime == null
+                                        ? _T.textMid
+                                        : _T.textDark,
+                                  ),
+                                ),
+                                trailing: const Icon(
+                                    Icons.chevron_right_rounded,
+                                    color: _T.textMid, size: 20),
                               ),
                             ),
-                          )
-                          .toList(),
-                      onChanged: (val) =>
-                          setState(() => _selectedKebeleId = val),
-                      decoration: _inputStyle(
-                        "Select current Kebele",
-                        Icons.share_location_rounded,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-                  _label("TIMESTAMPS"),
-                  const SizedBox(height: 10),
-                  _cardWrapper(
-                    child: ListTile(
-                      onTap: _pickDateTime,
-                      leading: const Icon(
-                        Icons.timer_outlined,
-                        color: _primaryBlue,
-                      ),
-                      title: Text(
-                        _selectedDateTime == null
-                            ? "Select time of sighting"
-                            : DateFormat(
-                                'MMMM dd, yyyy • hh:mm a',
-                              ).format(_selectedDateTime!),
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: _selectedDateTime == null
-                              ? Colors.grey
-                              : _darkSlate,
-                          fontWeight: _selectedDateTime == null
-                              ? FontWeight.normal
-                              : FontWeight.w600,
+                            const SizedBox(height: 20),
+                            _sectionLabel(
+                                "Visual Description", Icons.visibility_outlined),
+                            const SizedBox(height: 10),
+                            _buildCard(
+                              child: TextField(
+                                controller: _descriptionController,
+                                maxLines: 4,
+                                style: const TextStyle(
+                                    fontSize: 14, color: _T.textDark),
+                                decoration: _inputDeco(
+                                  "Clothing, companions, vehicle details...",
+                                  Icons.edit_note_rounded,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 36),
+                            _buildSubmitButton(),
+                          ],
                         ),
                       ),
-                      trailing: const Icon(
-                        Icons.calendar_month,
-                        size: 18,
-                        color: Colors.grey,
-                      ),
                     ),
-                  ),
-
-                  const SizedBox(height: 24),
-                  _label("VISUAL DESCRIPTION / CLUES"),
-                  const SizedBox(height: 10),
-                  _cardWrapper(
-                    child: TextField(
-                      controller: _descriptionController,
-                      maxLines: 4,
-                      style: const TextStyle(fontSize: 14),
-                      decoration: _inputStyle(
-                        "Clothing, companions, or vehicle details...",
-                        Icons.visibility_outlined,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 48),
-                  _buildSubmitButton(),
-                ],
-              ),
             ),
+          ],
+        ),
+      ),
     );
   }
 
+  // ── Custom Header (matches dashboard header style) ─────────────────────────
   Widget _buildHeader() {
     return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
+          stops: [0.0, 0.5, 1.0],
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(28),
+          bottomRight: Radius.circular(28),
+        ),
+      ),
+      child: Stack(children: [
+        Positioned(top: -30, right: -20, child: _blob(120, Colors.white, 0.05)),
+        Positioned(bottom: -20, left: -20, child: _blob(90, _T.accent, 0.13)),
+        SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 10, 20, 22),
+            child: Row(children: [
+              // Back button
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white, size: 18),
+                onPressed: () => Navigator.pop(context),
+              ),
+              // Icon + title
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: Colors.white.withOpacity(0.25), width: 1),
+                ),
+                child: const Icon(Icons.file_copy_rounded,
+                    color: Colors.white, size: 17),
+              ),
+              const SizedBox(width: 12),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Intel Report",
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3)),
+                  Text("Submit a sighting",
+                      style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500)),
+                ],
+              ),
+            ]),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  // ── Target Card ────────────────────────────────────────────────────────────
+  Widget _buildTargetCard() {
+    return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: _darkSlate,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
+          stops: [0.0, 0.5, 1.0],
+        ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: _darkSlate.withOpacity(0.1),
+            color: _T.primary.withOpacity(0.30),
             blurRadius: 20,
-            offset: const Offset(0, 10),
+            offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "REPORTING TARGET",
-            style: TextStyle(
-              color: Colors.white54,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.0,
+      child: Stack(children: [
+        Positioned(top: -18, right: -18, child: _blob(90, Colors.white, 0.06)),
+        Row(children: [
+          Container(
+            width: 46, height: 46,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              shape: BoxShape.circle,
+              border: Border.all(
+                  color: Colors.white.withOpacity(0.25), width: 1.5),
             ),
+            child: const Icon(Icons.person_search_rounded,
+                color: Colors.white, size: 22),
           ),
-          const SizedBox(height: 8),
-          Text(
-            widget.caseData['fullName']?.toString().toUpperCase() ??
-                "UNKNOWN ENTITY",
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSubmitButton() {
-    return Column(
-      children: [
-        SizedBox(
-          width: double.infinity,
-          height: 58,
-          child: ElevatedButton(
-            onPressed: _isSubmitting ? null : _handleSubmission,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _primaryBlue,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 0,
-            ),
-            child: _isSubmitting
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const Text(
-                    "SECURE TRANSMISSION",
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Opacity(
-          opacity: 0.5,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.verified_user_outlined, size: 14),
-              SizedBox(width: 8),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text("Reporting Target",
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.55),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.0)),
+              const SizedBox(height: 4),
               Text(
-                "Encrypted Service Protocol",
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                widget.caseData['fullName']?.toString() ?? "Unknown Entity",
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.3),
               ),
-            ],
+            ]),
           ),
-        ),
-      ],
+          // Status badge reused from dashboard
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                  color: Colors.white.withOpacity(0.25), width: 1),
+            ),
+            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.circle, color: Color(0xFFFFD700), size: 7),
+              SizedBox(width: 5),
+              Text("Active",
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700)),
+            ]),
+          ),
+        ]),
+      ]),
     );
   }
 
-  Widget _label(String text) => Text(
-    text,
-    style: const TextStyle(
-      fontSize: 10,
-      fontWeight: FontWeight.w900,
-      color: Colors.grey,
-      letterSpacing: 1.2,
-    ),
-  );
+  // ── Submit Button ──────────────────────────────────────────────────────────
+  Widget _buildSubmitButton() {
+    return Column(children: [
+      SizedBox(
+        width: double.infinity,
+        height: 56,
+        child: ElevatedButton(
+          onPressed: _isSubmitting ? null : _handleSubmission,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _T.primary,
+            disabledBackgroundColor: _T.primary.withOpacity(0.5),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16)),
+            elevation: 0,
+          ),
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 20, height: 20,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
+              : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.send_rounded, color: Colors.white, size: 16),
+                    SizedBox(width: 10),
+                    Text("Submit Report",
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            letterSpacing: 0.3)),
+                  ],
+                ),
+        ),
+      ),
+      const SizedBox(height: 14),
+      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(Icons.verified_user_outlined,
+            size: 13, color: _T.textMid),
+        const SizedBox(width: 6),
+        Text("Encrypted Service Protocol",
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: _T.textMid)),
+      ]),
+    ]);
+  }
 
-  Widget _cardWrapper({required Widget child}) => Container(
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _borderGray),
-    ),
-    child: child,
-  );
+  // ── Section Label (matches dashboard _sectionLabel) ───────────────────────
+  Widget _sectionLabel(String title, IconData icon) {
+    return Row(children: [
+      Container(
+        width: 30, height: 30,
+        decoration: BoxDecoration(
+            color: _T.accentSoft,
+            borderRadius: BorderRadius.circular(8)),
+        child: Icon(icon, color: _T.primary, size: 15),
+      ),
+      const SizedBox(width: 9),
+      Text(title,
+          style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: _T.textDark,
+              letterSpacing: -0.2)),
+    ]);
+  }
 
-  InputDecoration _inputStyle(String hint, IconData icon) => InputDecoration(
-    hintText: hint,
-    prefixIcon: Icon(icon, color: _primaryBlue, size: 20),
-    hintStyle: const TextStyle(color: Colors.grey, fontSize: 13),
-    border: InputBorder.none,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-  );
+  // ── Card wrapper ───────────────────────────────────────────────────────────
+  Widget _buildCard({required Widget child}) => Container(
+        decoration: BoxDecoration(
+          color: _T.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _T.divider),
+          boxShadow: [
+            BoxShadow(
+                color: _T.primary.withOpacity(0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 4)),
+          ],
+        ),
+        child: child,
+      );
+
+  // ── Input decoration ───────────────────────────────────────────────────────
+  InputDecoration _inputDeco(String hint, IconData icon) => InputDecoration(
+        hintText: hint,
+        hintStyle:
+            const TextStyle(color: _T.textMid, fontSize: 13),
+        prefixIcon: Icon(icon, color: _T.primary, size: 20),
+        border: InputBorder.none,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      );
+
+  // ── Blob (identical to dashboard) ─────────────────────────────────────────
+  Widget _blob(double size, Color color, double opacity) => Container(
+        width: size, height: size,
+        decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color.withOpacity(opacity)));
 }

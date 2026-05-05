@@ -1,11 +1,10 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
+import 'package:first_app/l10n/app_localizations.dart';
 import '../../services/service_report_service.dart';
 import 'service_report_detail_page.dart';
 
-// ─── Design Tokens (mirrored from Dashboard) ──────────────────────────────────
+// ─── Design Tokens ────────────────────────────────────────────────────────────
 class _T {
   static const primary    = Color(0xFF1A3BAA);
   static const primaryMid = Color(0xFF2252CC);
@@ -34,6 +33,9 @@ class ServiceReportPage extends StatefulWidget {
 
 class _ServiceReportPageState extends State<ServiceReportPage>
     with TickerProviderStateMixin {
+
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   final ServiceReportService _apiService = ServiceReportService();
   List<dynamic> _services = [];
   bool _loading = true;
@@ -82,7 +84,6 @@ class _ServiceReportPageState extends State<ServiceReportPage>
     }
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -124,7 +125,6 @@ class _ServiceReportPageState extends State<ServiceReportPage>
     );
   }
 
-  // ── Splash ───────────────────────────────────────────────────────────────
   Widget _buildSplash() {
     return Container(
       decoration: const BoxDecoration(
@@ -141,7 +141,6 @@ class _ServiceReportPageState extends State<ServiceReportPage>
     );
   }
 
-  // ── Header ───────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Container(
       decoration: const BoxDecoration(
@@ -158,84 +157,96 @@ class _ServiceReportPageState extends State<ServiceReportPage>
       ),
       child: Stack(children: [
         Positioned(top: -40, right: -25, child: _blob(140, Colors.white, 0.055)),
-        Positioned(top: 14, right: 85, child: _blob(55, Colors.white, 0.045)),
+        Positioned(top: 14, right: 85,   child: _blob(55,  Colors.white, 0.045)),
         Positioned(bottom: -18, left: -28, child: _blob(105, _T.accent, 0.14)),
         SafeArea(
           bottom: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 26),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    width: 38, height: 38,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.11),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      width: 38, height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.11),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: Colors.white.withOpacity(0.2), width: 1),
+                      ),
+                      child: const Icon(Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white, size: 16),
                     ),
-                    child: const Icon(Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white, size: 16),
                   ),
-                ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: _loadData,
-                  child: Container(
-                    width: 38, height: 38,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.11),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: _loadData,
+                    child: Container(
+                      width: 38, height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.11),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: Colors.white.withOpacity(0.2), width: 1),
+                      ),
+                      child: const Icon(Icons.refresh_rounded,
+                          color: Colors.white, size: 18),
                     ),
-                    child: const Icon(Icons.refresh_rounded,
-                        color: Colors.white, size: 18),
                   ),
-                ),
-              ]),
-              const SizedBox(height: 22),
-              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text("My Public",
-                        style: TextStyle(
-                            color: Colors.white.withOpacity(0.62),
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 3),
-                    const Text("Service Reports",
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.4,
-                            height: 1.1)),
-                  ]),
-                ),
-                if (!_loading && _error == null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.11),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+                ]),
+                const SizedBox(height: 22),
+                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(l10n.myPublic,
+                            style: TextStyle(
+                                color: Colors.white.withOpacity(0.62),
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 3),
+                        Text(l10n.serviceReports,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.4,
+                                height: 1.1)),
+                      ],
                     ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Container(
-                          width: 6, height: 6,
-                          decoration: const BoxDecoration(
-                              color: _T.green, shape: BoxShape.circle)),
-                      const SizedBox(width: 5),
-                      Text("${_services.length} Reports",
+                  ),
+                  if (!_loading && _error == null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.11),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: Colors.white.withOpacity(0.2), width: 1),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Container(
+                            width: 6, height: 6,
+                            decoration: const BoxDecoration(
+                                color: _T.green, shape: BoxShape.circle)),
+                        const SizedBox(width: 5),
+                        Text(
+                          l10n.reportsCount(_services.length.toString()),
                           style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,
-                              fontWeight: FontWeight.w600)),
-                    ]),
-                  ),
-              ]),
-            ]),
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ]),
+                    ),
+                ]),
+              ],
+            ),
           ),
         ),
       ]),
@@ -247,24 +258,28 @@ class _ServiceReportPageState extends State<ServiceReportPage>
         decoration: BoxDecoration(
             shape: BoxShape.circle, color: color.withOpacity(opacity)));
 
-  // ── Card ──────────────────────────────────────────────────────────────────
   Widget _buildCard(dynamic service, int index) {
-    final typeName = service['serviceType']?['name'] ?? "General Service";
-    final categoryName = service['serviceCategory']?['name'] ?? "Public Service";
-    final rawStatus = (service['status'] ?? 'Pending').toString().toUpperCase();
-    final date = _formatDate(service['createdAt']);
+    final typeName     = service['serviceType']?['name']     ?? l10n.generalService;
+    final categoryName = service['serviceCategory']?['name'] ?? l10n.publicService;
+    final rawStatus    = (service['status'] ?? 'Pending').toString().toUpperCase();
+    final date         = _formatDate(service['createdAt']);
 
     Color statusColor;
     IconData statusIcon;
+    String statusLabel;
+
     if (rawStatus == 'COMPLETED') {
       statusColor = _T.green;
-      statusIcon = Icons.check_circle_outline_rounded;
+      statusIcon  = Icons.check_circle_outline_rounded;
+      statusLabel = l10n.statusCompleted;
     } else if (rawStatus == 'REJECTED') {
       statusColor = _T.red;
-      statusIcon = Icons.cancel_outlined;
+      statusIcon  = Icons.cancel_outlined;
+      statusLabel = l10n.statusRejected;
     } else {
       statusColor = _T.orange;
-      statusIcon = Icons.hourglass_top_rounded;
+      statusIcon  = Icons.hourglass_top_rounded;
+      statusLabel = l10n.statusPending;
     }
 
     return TweenAnimationBuilder<double>(
@@ -302,53 +317,56 @@ class _ServiceReportPageState extends State<ServiceReportPage>
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              // Top row
-              Row(children: [
-                _categoryBadge(categoryName.toUpperCase()),
-                const Spacer(),
-                _statusChip(rawStatus, statusColor, statusIcon),
-              ]),
-              const SizedBox(height: 14),
-              // Service type name
-              Text(typeName,
-                  style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: _T.textDark,
-                      letterSpacing: -0.2)),
-              const SizedBox(height: 14),
-              Container(height: 1, color: _T.divider),
-              const SizedBox(height: 12),
-              // Footer
-              Row(children: [
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Row(children: [
-                  Icon(Icons.access_time_rounded, size: 12, color: _T.textMid),
-                  const SizedBox(width: 5),
-                  Text(date,
-                      style: const TextStyle(
-                          color: _T.textMid,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500)),
+                  _categoryBadge(categoryName.toUpperCase()),
+                  const Spacer(),
+                  _statusChip(statusLabel, statusColor, statusIcon),
                 ]),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                      color: _T.accentSoft,
-                      borderRadius: BorderRadius.circular(7)),
-                  child: const Row(children: [
-                    Icon(Icons.open_in_new_rounded, size: 11, color: _T.accent),
-                    SizedBox(width: 5),
-                    Text("View details",
-                        style: TextStyle(
-                            color: _T.accent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700)),
+                const SizedBox(height: 14),
+                Text(typeName,
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: _T.textDark,
+                        letterSpacing: -0.2)),
+                const SizedBox(height: 14),
+                Container(height: 1, color: _T.divider),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Row(children: [
+                    const Icon(Icons.access_time_rounded,
+                        size: 12, color: _T.textMid),
+                    const SizedBox(width: 5),
+                    Text(date,
+                        style: const TextStyle(
+                            color: _T.textMid,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500)),
                   ]),
-                ),
-              ]),
-            ]),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: _T.accentSoft,
+                        borderRadius: BorderRadius.circular(7)),
+                    child: Row(children: [
+                      const Icon(Icons.open_in_new_rounded,
+                          size: 11, color: _T.accent),
+                      const SizedBox(width: 5),
+                      Text(l10n.viewDetails,
+                          style: const TextStyle(
+                              color: _T.accent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700)),
+                    ]),
+                  ),
+                ]),
+              ],
+            ),
           ),
         ),
       ),
@@ -362,12 +380,14 @@ class _ServiceReportPageState extends State<ServiceReportPage>
           color: _T.accentSoft, borderRadius: BorderRadius.circular(8)),
       child: Text(label,
           style: const TextStyle(
-              color: _T.primary, fontSize: 9, fontWeight: FontWeight.w800,
+              color: _T.primary,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
               letterSpacing: 0.4)),
     );
   }
 
-  Widget _statusChip(String status, Color color, IconData icon) {
+  Widget _statusChip(String label, Color color, IconData icon) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
@@ -376,31 +396,36 @@ class _ServiceReportPageState extends State<ServiceReportPage>
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(icon, size: 10, color: color),
         const SizedBox(width: 4),
-        Text(status,
+        Text(label,
             style: TextStyle(
-                color: color, fontSize: 9, fontWeight: FontWeight.w800,
+                color: color,
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
                 letterSpacing: 0.3)),
       ]),
     );
   }
 
-  // ── Empty & Error States ──────────────────────────────────────────────────
   Widget _buildEmptyState() {
     return Center(
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         Container(
           width: 80, height: 80,
           decoration: BoxDecoration(
-              color: _T.accentSoft, borderRadius: BorderRadius.circular(24)),
-          child: const Icon(Icons.inventory_2_outlined, size: 36, color: _T.primary),
+              color: _T.accentSoft,
+              borderRadius: BorderRadius.circular(24)),
+          child: const Icon(Icons.inventory_2_outlined,
+              size: 36, color: _T.primary),
         ),
         const SizedBox(height: 18),
-        const Text("No Reports Yet",
-            style: TextStyle(
-                fontSize: 18, fontWeight: FontWeight.w800, color: _T.textDark)),
+        Text(l10n.noReportsYet,
+            style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: _T.textDark)),
         const SizedBox(height: 6),
-        const Text("Your service reports will appear here.",
-            style: TextStyle(fontSize: 13, color: _T.textMid)),
+        Text(l10n.noReportsSubtitle,
+            style: const TextStyle(fontSize: 13, color: _T.textMid)),
       ]),
     );
   }
@@ -418,9 +443,11 @@ class _ServiceReportPageState extends State<ServiceReportPage>
               color: _T.red, size: 30),
         ),
         const SizedBox(height: 14),
-        const Text("Failed to Load",
-            style: TextStyle(
-                fontWeight: FontWeight.w800, fontSize: 16, color: _T.textDark)),
+        Text(l10n.failedToLoad,
+            style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+                color: _T.textDark)),
         const SizedBox(height: 8),
         Text(_error ?? "",
             textAlign: TextAlign.center,
@@ -435,8 +462,8 @@ class _ServiceReportPageState extends State<ServiceReportPage>
                   colors: [_T.primary, _T.primaryMid]),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Text("Try Again",
-                style: TextStyle(
+            child: Text(l10n.tryAgain,
+                style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
                     fontSize: 13)),

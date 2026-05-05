@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:first_app/services/user_service.dart';
+import 'package:first_app/l10n/app_localizations.dart';
 import '../auth/verify_screen.dart';
 import 'edit_profile_page.dart';
 import '../auth/login_page.dart';
@@ -30,6 +31,9 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage>
     with TickerProviderStateMixin {
+
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   Map<String, dynamic>? _userData;
   bool _isLoading = true;
 
@@ -97,16 +101,16 @@ class _ProfilePageState extends State<ProfilePage>
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: _T.surface,
-        title: const Text("Logout",
-            style: TextStyle(
+        title: Text(l10n.logoutConfirmTitle,
+            style: const TextStyle(
                 fontWeight: FontWeight.w800, color: _T.textDark, fontSize: 17)),
-        content: const Text("Are you sure you want to logout?",
-            style: TextStyle(color: _T.textMid, fontSize: 14)),
+        content: Text(l10n.logoutConfirmMessage,
+            style: const TextStyle(color: _T.textMid, fontSize: 14)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel",
-                style: TextStyle(
+            child: Text(l10n.cancel,
+                style: const TextStyle(
                     color: _T.textMid, fontWeight: FontWeight.w600)),
           ),
           GestureDetector(
@@ -117,8 +121,8 @@ class _ProfilePageState extends State<ProfilePage>
                 color: _T.red.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text("Logout",
-                  style: TextStyle(
+              child: Text(l10n.logout,
+                  style: const TextStyle(
                       color: _T.red,
                       fontWeight: FontWeight.w800,
                       fontSize: 13)),
@@ -164,36 +168,36 @@ class _ProfilePageState extends State<ProfilePage>
                               const SizedBox(height: 24),
                               _buildActionButtons(),
                               const SizedBox(height: 24),
-                              _buildSection("Personal Info", Icons.person_rounded, [
-                                _infoRow(Icons.person_rounded, "First Name",
+                              _buildSection(l10n.personalInfo, Icons.person_rounded, [
+                                _infoRow(Icons.person_rounded, l10n.firstName,
                                     _userData!["firstName"] ?? "—"),
-                                _infoRow(Icons.person_outline_rounded, "Last Name",
+                                _infoRow(Icons.person_outline_rounded, l10n.lastName,
                                     _userData!["lastName"] ?? "—"),
-                                _infoRow(Icons.cake_rounded, "Date of Birth",
+                                _infoRow(Icons.cake_rounded, l10n.dateOfBirth,
                                     formatDate(_userData!["dateOfBirth"]?.toString())),
-                                _infoRow(Icons.wc_rounded, "Gender",
+                                _infoRow(Icons.wc_rounded, l10n.gender,
                                     formatGender(_userData!["gender"])),
                               ]),
                               const SizedBox(height: 16),
-                              _buildSection("Contact Info", Icons.contact_mail_rounded, [
-                                _infoRow(Icons.email_rounded, "Email",
+                              _buildSection(l10n.contactInfo, Icons.contact_mail_rounded, [
+                                _infoRow(Icons.email_rounded, l10n.email,
                                     _userData!["email"] ?? "—"),
-                                _infoRow(Icons.phone_rounded, "Phone",
+                                _infoRow(Icons.phone_rounded, l10n.phone,
                                     _userData!["phone"] ?? "—"),
-                                _infoRow(Icons.location_city_rounded, "City",
+                                _infoRow(Icons.location_city_rounded, l10n.city,
                                     _userData!["city"] ?? "—"),
-                                _infoRow(Icons.flag_rounded, "Country",
+                                _infoRow(Icons.flag_rounded, l10n.country,
                                     _userData!["country"] ?? "—"),
-                                _infoRow(Icons.home_rounded, "Address",
+                                _infoRow(Icons.home_rounded, l10n.address,
                                     _userData!["address"] ?? "—"),
                               ]),
                               const SizedBox(height: 16),
-                              _buildSection("Account Info", Icons.shield_rounded, [
-                                _infoRow(Icons.badge_rounded, "Account Type",
+                              _buildSection(l10n.accountInfo, Icons.shield_rounded, [
+                                _infoRow(Icons.badge_rounded, l10n.accountType,
                                     _userData!["role"] ?? "User"),
-                                _infoRow(Icons.calendar_month_rounded, "Member Since",
+                                _infoRow(Icons.calendar_month_rounded, l10n.memberSince,
                                     formatDate(_userData!["createdAt"]?.toString())),
-                                _infoRow(Icons.verified_rounded, "Status", "Active",
+                                _infoRow(Icons.verified_rounded, l10n.statusActive, l10n.statusActive,
                                     valueColor: _T.green),
                               ]),
                             ]),
@@ -250,8 +254,8 @@ class _ProfilePageState extends State<ProfilePage>
           child: const Icon(Icons.error_outline_rounded, color: _T.red, size: 32),
         ),
         const SizedBox(height: 16),
-        const Text("Failed to load profile",
-            style: TextStyle(
+        Text(l10n.failedToLoadProfile,
+            style: const TextStyle(
                 fontSize: 16, fontWeight: FontWeight.w700, color: _T.textDark)),
         const SizedBox(height: 20),
         GestureDetector(
@@ -262,8 +266,8 @@ class _ProfilePageState extends State<ProfilePage>
               gradient: const LinearGradient(colors: [_T.primary, _T.primaryMid]),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Text("Retry",
-                style: TextStyle(
+            child: Text(l10n.retry,
+                style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
                     fontSize: 14)),
@@ -297,10 +301,9 @@ class _ProfilePageState extends State<ProfilePage>
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 36),
             child: Column(children: [
-              // Top bar
               Row(children: [
-                const Text("Profile",
-                    style: TextStyle(
+                Text(l10n.profile,
+                    style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
@@ -322,8 +325,6 @@ class _ProfilePageState extends State<ProfilePage>
                 ),
               ]),
               const SizedBox(height: 28),
-
-              // Avatar
               Stack(alignment: Alignment.bottomRight, children: [
                 Container(
                   padding: const EdgeInsets.all(3),
@@ -356,8 +357,6 @@ class _ProfilePageState extends State<ProfilePage>
                 ),
               ]),
               const SizedBox(height: 16),
-
-              // Name
               Text(
                 _fullName.isNotEmpty ? _fullName : "User",
                 style: const TextStyle(
@@ -375,8 +374,6 @@ class _ProfilePageState extends State<ProfilePage>
                     fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 18),
-
-              // Stats row
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -386,7 +383,7 @@ class _ProfilePageState extends State<ProfilePage>
                   _statPill(Icons.location_on_rounded,
                       _userData!["city"] ?? "Bahir Dar"),
                   const SizedBox(width: 10),
-                  _statPill(Icons.verified_rounded, "Active",
+                  _statPill(Icons.verified_rounded, l10n.statusActive,
                       color: _T.green),
                 ],
               ),
@@ -425,12 +422,11 @@ class _ProfilePageState extends State<ProfilePage>
   // ── Action Buttons ─────────────────────────────────────────────────────────
   Widget _buildActionButtons() {
     return Column(children: [
-      // Edit + Logout row
       Row(children: [
         Expanded(
           child: _actionButton(
             icon: Icons.edit_rounded,
-            label: "Edit Profile",
+            label: l10n.editProfile,
             gradient: const LinearGradient(
                 colors: [_T.primary, _T.primaryMid],
                 begin: Alignment.centerLeft,
@@ -440,8 +436,7 @@ class _ProfilePageState extends State<ProfilePage>
               final updatedData = await Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (_) =>
-                        EditProfilePage(userData: _userData!)),
+                    builder: (_) => EditProfilePage(userData: _userData!)),
               );
               if (updatedData != null) _updateProfile(updatedData);
             },
@@ -451,7 +446,7 @@ class _ProfilePageState extends State<ProfilePage>
         Expanded(
           child: _actionButton(
             icon: Icons.logout_rounded,
-            label: "Logout",
+            label: l10n.logout,
             gradient: LinearGradient(
                 colors: [_T.red, _T.red.withOpacity(0.8)],
                 begin: Alignment.centerLeft,
@@ -462,10 +457,9 @@ class _ProfilePageState extends State<ProfilePage>
         ),
       ]),
       const SizedBox(height: 12),
-      // Verify button (full width)
       _actionButton(
         icon: Icons.verified_user_rounded,
-        label: "Verify Account",
+        label: l10n.verifyAccount,
         gradient: LinearGradient(
             colors: [_T.green, _T.green.withOpacity(0.8)],
             begin: Alignment.centerLeft,
@@ -537,7 +531,6 @@ class _ProfilePageState extends State<ProfilePage>
           ],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Section header
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
             child: Row(children: [

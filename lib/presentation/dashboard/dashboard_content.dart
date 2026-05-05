@@ -4,6 +4,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:first_app/l10n/app_localizations.dart';
 
 import 'package:first_app/services/user_service.dart';
 import 'package:first_app/services/case_service.dart';
@@ -13,6 +15,7 @@ import 'package:first_app/model/service_type.dart';
 import 'package:first_app/presentation/categories/user_category_selection_page.dart';
 import 'package:first_app/presentation/categories/user_service_category_selection_page.dart';
 import 'package:first_app/presentation/cases/case_detail_page.dart';
+import 'package:first_app/main.dart';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 class _T {
@@ -30,7 +33,7 @@ class _T {
   static const red        = Color(0xFFEF4444);
 }
 
-// ─── Widget ───────────────────────────────────────────────────────────────────
+// ─── Dashboard ────────────────────────────────────────────────────────────────
 class DashboardContent extends StatefulWidget {
   const DashboardContent({super.key});
   @override
@@ -39,6 +42,8 @@ class DashboardContent extends StatefulWidget {
 
 class _DashboardContentState extends State<DashboardContent>
     with TickerProviderStateMixin {
+
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
 
   String _fullName = "User";
   bool _isLoading = true;
@@ -61,7 +66,6 @@ class _DashboardContentState extends State<DashboardContent>
       Tween<double>(begin: 0.88, end: 1.0).animate(
           CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
 
-  // ── Lifecycle ────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
@@ -77,7 +81,6 @@ class _DashboardContentState extends State<DashboardContent>
     super.dispose();
   }
 
-  // ── Data ─────────────────────────────────────────────────────────────────
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
@@ -141,7 +144,14 @@ class _DashboardContentState extends State<DashboardContent>
     });
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
+  Future<void> _switchLanguage(String langCode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('language_code', langCode);
+    if (mounted) {
+      MyApp.of(context)?.setLocale(Locale(langCode));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) return _buildSplash();
@@ -163,7 +173,6 @@ class _DashboardContentState extends State<DashboardContent>
     );
   }
 
-  // ── Splash ───────────────────────────────────────────────────────────────
   Widget _buildSplash() {
     return Scaffold(
       body: Container(
@@ -188,7 +197,8 @@ class _DashboardContentState extends State<DashboardContent>
                     width: 120, height: 120,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withOpacity(0.12), width: 2),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.12), width: 2),
                     ),
                   ),
                   Container(
@@ -196,36 +206,51 @@ class _DashboardContentState extends State<DashboardContent>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.white.withOpacity(0.07),
-                      border: Border.all(color: Colors.white.withOpacity(0.22), width: 1.5),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.22), width: 1.5),
                     ),
                   ),
                   Container(
                     width: 72, height: 72,
                     decoration: BoxDecoration(
-                      color: Colors.white, shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(
-                          color: Colors.black.withOpacity(0.22),
-                          blurRadius: 28, offset: const Offset(0, 10))],
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black.withOpacity(0.22),
+                            blurRadius: 28,
+                            offset: const Offset(0, 10))
+                      ],
                     ),
-                    child: ClipOval(child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Image.asset('assets/images/logo.webp', fit: BoxFit.contain,
+                    child: ClipOval(
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Image.asset(
+                          'assets/images/logo.webp',
+                          fit: BoxFit.contain,
                           errorBuilder: (_, __, ___) =>
-                              Icon(Icons.hub_rounded, color: _T.primary, size: 36)),
-                    )),
+                              Icon(Icons.hub_rounded, color: _T.primary, size: 36),
+                        ),
+                      ),
+                    ),
                   ),
                 ]),
               ),
               const SizedBox(height: 30),
               const Text("BahirLink",
-                  style: TextStyle(color: Colors.white, fontSize: 28,
-                      fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.2)),
               const SizedBox(height: 5),
-              Text("Your city. Connected.",
-                  style: TextStyle(color: Colors.white.withOpacity(0.55),
-                      fontSize: 13, letterSpacing: 0.4)),
+              Text(l10n.tagline,
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.55),
+                      fontSize: 13,
+                      letterSpacing: 0.4)),
               const SizedBox(height: 52),
-              _LoadingDots(),
+              const _LoadingDots(),
             ]),
           ),
         ]),
@@ -233,152 +258,216 @@ class _DashboardContentState extends State<DashboardContent>
     );
   }
 
-  // ── Header ───────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
           stops: [0.0, 0.5, 1.0],
         ),
         borderRadius: BorderRadius.only(
-            bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+            bottomLeft: Radius.circular(30),
+            bottomRight: Radius.circular(30)),
       ),
       child: Stack(children: [
         Positioned(top: -40, right: -25, child: _blob(140, Colors.white, 0.055)),
-        Positioned(top: 14, right: 85, child: _blob(55, Colors.white, 0.045)),
+        Positioned(top: 14, right: 85,   child: _blob(55,  Colors.white, 0.045)),
         Positioned(bottom: -18, left: -28, child: _blob(105, _T.accent, 0.14)),
         SafeArea(
           bottom: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 26),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                // Logo pill
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(13),
-                    border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
-                  ),
-                  child: Row(children: [
-                    SizedBox(
-                      width: 22, height: 22,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(5),
-                        child: Image.asset('assets/images/logo.webp', fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                const Icon(Icons.hub_rounded, color: Colors.white, size: 18)),
-                      ),
-                    ),
-                    const SizedBox(width: 7),
-                    const Text("BahirLink",
-                        style: TextStyle(color: Colors.white,
-                            fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.3)),
-                  ]),
-                ),
-                const Spacer(),
-                // Bell
-                Stack(clipBehavior: Clip.none, children: [
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                  // ── Brand chip ──
                   Container(
-                    width: 38, height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.11),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+                      color: Colors.white.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(13),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.2), width: 1),
                     ),
-                    child: const Icon(Icons.notifications_outlined, color: Colors.white, size: 19),
-                  ),
-                  Positioned(
-                    top: 7, right: 7,
-                    child: Container(
-                      width: 8, height: 8,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF4B4B), shape: BoxShape.circle,
-                        border: Border.all(color: _T.primary, width: 1.5),
+                    child: Row(children: [
+                      SizedBox(
+                        width: 22, height: 22,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(5),
+                          child: Image.asset(
+                            'assets/images/logo.webp',
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(
+                                Icons.hub_rounded,
+                                color: Colors.white,
+                                size: 18),
+                          ),
+                        ),
                       ),
+                      const SizedBox(width: 7),
+                      Text(l10n.appTitle,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 15,
+                              letterSpacing: 0.3)),
+                    ]),
+                  ),
+                  const Spacer(),
+                  // ── Language toggle ──
+                  _buildLangToggle(),
+                  const SizedBox(width: 10),
+                  // ── Notification bell ──
+                  Stack(clipBehavior: Clip.none, children: [
+                    Container(
+                      width: 38, height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.11),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: Colors.white.withOpacity(0.2), width: 1),
+                      ),
+                      child: const Icon(Icons.notifications_outlined,
+                          color: Colors.white, size: 19),
+                    ),
+                    Positioned(
+                      top: 7, right: 7,
+                      child: Container(
+                        width: 8, height: 8,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF4B4B),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: _T.primary, width: 1.5),
+                        ),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(width: 10),
+                  // ── Avatar ──
+                  Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.45), width: 2),
+                    ),
+                    child: const CircleAvatar(
+                      radius: 16,
+                      backgroundImage: AssetImage('assets/images/avatar.jpg'),
+                      backgroundColor: Colors.white24,
                     ),
                   ),
                 ]),
-                const SizedBox(width: 10),
-                // Avatar
-                Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withOpacity(0.45), width: 2),
+                const SizedBox(height: 22),
+                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(l10n.goodMorning,
+                            style: TextStyle(
+                                color: Colors.white.withOpacity(0.62),
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 3),
+                        Text(
+                          _fullName.isNotEmpty ? _fullName : l10n.welcomeBack,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.4,
+                              height: 1.1),
+                        ),
+                      ],
+                    ),
                   ),
-                  child: const CircleAvatar(
-                    radius: 16,
-                    backgroundImage: AssetImage('assets/images/avatar.jpg'),
-                    backgroundColor: Colors.white24,
+                  // ── Location chip ──
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.11),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.2), width: 1),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.location_on_rounded,
+                          color: Colors.white.withOpacity(0.8), size: 12),
+                      const SizedBox(width: 4),
+                      Text(l10n.locationCity,
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.85),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600)),
+                    ]),
                   ),
-                ),
-              ]),
-              const SizedBox(height: 22),
-              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text("Good morning 👋",
-                        style: TextStyle(color: Colors.white.withOpacity(0.62),
-                            fontSize: 12.5, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 3),
-                    Text(_fullName.isNotEmpty ? _fullName : "Welcome back",
-                        style: const TextStyle(color: Colors.white, fontSize: 22,
-                            fontWeight: FontWeight.w800, letterSpacing: -0.4, height: 1.1)),
-                  ]),
-                ),
-                // Location pill
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.11),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.location_on_rounded, color: Colors.white.withOpacity(0.8), size: 12),
-                    const SizedBox(width: 4),
-                    Text("Bahir Dar",
-                        style: TextStyle(color: Colors.white.withOpacity(0.85),
-                            fontSize: 11, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-              ]),
-            ]),
+                ]),
+              ],
+            ),
           ),
         ),
       ]),
     );
   }
 
-  Widget _blob(double size, Color color, double opacity) => Container(
-        width: size, height: size,
+  Widget _buildLangToggle() {
+    final isAmharic = Localizations.localeOf(context).languageCode == 'am';
+    return GestureDetector(
+      onTap: () => _switchLanguage(isAmharic ? 'en' : 'am'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-            shape: BoxShape.circle, color: color.withOpacity(opacity)));
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+        ),
+        child: Text(
+          isAmharic ? 'EN' : 'አማ',
+          style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3),
+        ),
+      ),
+    );
+  }
 
-  // ── Body ─────────────────────────────────────────────────────────────────
+  Widget _blob(double size, Color color, double opacity) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color.withOpacity(opacity)));
+
   Widget _buildBody() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 24),
         if (_cases.isNotEmpty) ...[
-          _sectionLabel("Live Reports", Icons.cell_tower_rounded,
-              badge: "${_cases.length} Active", badgeColor: _T.green),
+          _sectionLabel(
+            l10n.liveReports,
+            Icons.cell_tower_rounded,
+            badge: l10n.activeBadge(_cases.length.toString()),
+            badgeColor: _T.green,
+          ),
           const SizedBox(height: 12),
           _buildCaseSlider(),
           const SizedBox(height: 10),
           _buildDots(),
         ],
         const SizedBox(height: 26),
-        _sectionLabel("Emergency Assist", Icons.crisis_alert_rounded),
+        _sectionLabel(l10n.emergencyAssist, Icons.crisis_alert_rounded),
         const SizedBox(height: 12),
         _buildGrid(_emergencyTypes, true),
         const SizedBox(height: 26),
-        _sectionLabel("Public Services", Icons.account_balance_rounded),
+        _sectionLabel(l10n.publicServices, Icons.account_balance_rounded),
         const SizedBox(height: 12),
         _buildGrid(_serviceTypes, false),
         const SizedBox(height: 100),
@@ -386,7 +475,6 @@ class _DashboardContentState extends State<DashboardContent>
     );
   }
 
-  // ── Section Label ─────────────────────────────────────────────────────────
   Widget _sectionLabel(String title, IconData icon,
       {String? badge, Color? badgeColor}) {
     return Padding(
@@ -395,13 +483,17 @@ class _DashboardContentState extends State<DashboardContent>
         Container(
           width: 32, height: 32,
           decoration: BoxDecoration(
-              color: _T.accentSoft, borderRadius: BorderRadius.circular(9)),
+              color: _T.accentSoft,
+              borderRadius: BorderRadius.circular(9)),
           child: Icon(icon, color: _T.primary, size: 16),
         ),
         const SizedBox(width: 10),
         Text(title,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800,
-                color: _T.textDark, letterSpacing: -0.2)),
+            style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: _T.textDark,
+                letterSpacing: -0.2)),
         const Spacer(),
         if (badge != null)
           Container(
@@ -411,23 +503,29 @@ class _DashboardContentState extends State<DashboardContent>
               borderRadius: BorderRadius.circular(20),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Container(width: 6, height: 6,
+              Container(
+                  width: 6, height: 6,
                   decoration: BoxDecoration(
-                      color: badgeColor ?? _T.primary, shape: BoxShape.circle)),
+                      color: badgeColor ?? _T.primary,
+                      shape: BoxShape.circle)),
               const SizedBox(width: 5),
               Text(badge,
-                  style: TextStyle(color: badgeColor ?? _T.primary,
-                      fontSize: 10, fontWeight: FontWeight.w700)),
+                  style: TextStyle(
+                      color: badgeColor ?? _T.primary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700)),
             ]),
           )
         else
-          Text("See all",
-              style: TextStyle(color: _T.accent, fontSize: 12, fontWeight: FontWeight.w600)),
+          Text(l10n.seeAll,
+              style: TextStyle(
+                  color: _T.accent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600)),
       ]),
     );
   }
 
-  // ── Case Slider ───────────────────────────────────────────────────────────
   Widget _buildCaseSlider() {
     return SizedBox(
       height: 200,
@@ -438,26 +536,35 @@ class _DashboardContentState extends State<DashboardContent>
         itemBuilder: (context, index) {
           final c = _cases[index];
           final status = (c['status'] ?? '').toString().toLowerCase();
-          Color sColor;
-          String sLabel;
+          final Color sColor;
+          final String sLabel;
+
           if (status == 'pending') {
-            sColor = _T.orange; sLabel = 'Pending';
+            sColor = _T.orange;
+            sLabel = l10n.statusPending;
           } else if (status == 'in_progress') {
-            sColor = _T.accent; sLabel = 'In Progress';
+            sColor = _T.accent;
+            sLabel = l10n.statusInProgress;
           } else {
-            sColor = _T.green; sLabel = status.toUpperCase();
+            sColor = _T.green;
+            sLabel = status.toUpperCase();
           }
 
           return GestureDetector(
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => CaseDetailPage(caseData: c))),
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => CaseDetailPage(caseData: c))),
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(22),
-                boxShadow: [BoxShadow(
-                    color: _T.primary.withOpacity(0.18),
-                    blurRadius: 18, offset: const Offset(0, 6))],
+                boxShadow: [
+                  BoxShadow(
+                      color: _T.primary.withOpacity(0.18),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6))
+                ],
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(22),
@@ -475,7 +582,8 @@ class _DashboardContentState extends State<DashboardContent>
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                         colors: [
                           Colors.transparent,
                           Colors.black.withOpacity(0.18),
@@ -487,40 +595,64 @@ class _DashboardContentState extends State<DashboardContent>
                   ),
                   Padding(
                     padding: const EdgeInsets.all(14),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [
-                        _glassBadge(c['caseType']?['name'] ?? "Report", Icons.report_rounded),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          _glassBadge(
+                              c['caseType']?['name'] ?? "Report",
+                              Icons.report_rounded),
+                          const Spacer(),
+                          _colorBadge(sLabel, sColor),
+                        ]),
                         const Spacer(),
-                        _colorBadge(sLabel, sColor),
-                      ]),
-                      const Spacer(),
-                      Text(c['fullName'] ?? "Incident Reported",
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800,
-                              fontSize: 15, letterSpacing: -0.2),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 6),
-                      Row(children: [
-                        const Icon(Icons.location_on_rounded, color: Colors.white60, size: 11),
-                        const SizedBox(width: 3),
-                        Expanded(
-                          child: Text(c['location'] ?? "Bahir Dar",
-                              style: const TextStyle(color: Colors.white60, fontSize: 10),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(
+                          c['fullName'] ?? l10n.incidentReported,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              letterSpacing: -0.2),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                          decoration: BoxDecoration(
-                              color: _T.green, borderRadius: BorderRadius.circular(8)),
-                          child: Row(children: [
-                            const Icon(Icons.monetization_on_rounded, color: Colors.white, size: 11),
-                            const SizedBox(width: 4),
-                            Text("${c['reward'] ?? '0'} ETB",
-                                style: const TextStyle(color: Colors.white,
-                                    fontSize: 10, fontWeight: FontWeight.w800)),
-                          ]),
-                        ),
-                      ]),
-                    ]),
+                        const SizedBox(height: 6),
+                        Row(children: [
+                          const Icon(Icons.location_on_rounded,
+                              color: Colors.white60, size: 11),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              c['location'] ?? l10n.locationCity,
+                              style: const TextStyle(
+                                  color: Colors.white60, fontSize: 10),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 9, vertical: 4),
+                            decoration: BoxDecoration(
+                                color: _T.green,
+                                borderRadius: BorderRadius.circular(8)),
+                            child: Row(children: [
+                              const Icon(Icons.monetization_on_rounded,
+                                  color: Colors.white, size: 11),
+                              const SizedBox(width: 4),
+                              Text(
+                                l10n.rewardLabel(
+                                    c['reward']?.toString() ?? '0'),
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800),
+                              ),
+                            ]),
+                          ),
+                        ]),
+                      ],
+                    ),
                   ),
                 ]),
               ),
@@ -540,7 +672,8 @@ class _DashboardContentState extends State<DashboardContent>
         return AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           margin: const EdgeInsets.symmetric(horizontal: 3),
-          width: active ? 22 : 6, height: 6,
+          width: active ? 22 : 6,
+          height: 6,
           decoration: BoxDecoration(
               color: active ? _T.primary : _T.accentSoft,
               borderRadius: BorderRadius.circular(3)),
@@ -549,7 +682,6 @@ class _DashboardContentState extends State<DashboardContent>
     );
   }
 
-  // ── Grid — ALL cards unified blue gradient ────────────────────────────────
   Widget _buildGrid(List<dynamic> items, bool isEmergency) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -604,7 +736,9 @@ class _DashboardContentState extends State<DashboardContent>
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      isEmergency ? _emergencyIcon(idx) : _serviceIcon(idx),
+                      isEmergency
+                          ? _emergencyIcon(idx)
+                          : _serviceIcon(idx),
                       color: Colors.white,
                       size: 22,
                     ),
@@ -652,7 +786,6 @@ class _DashboardContentState extends State<DashboardContent>
         Icons.local_post_office_rounded,
       ][i % 6];
 
-  // ── Badges ────────────────────────────────────────────────────────────────
   Widget _glassBadge(String txt, IconData icon) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
@@ -663,13 +796,17 @@ class _DashboardContentState extends State<DashboardContent>
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.18),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withOpacity(0.28), width: 0.5),
+            border: Border.all(
+                color: Colors.white.withOpacity(0.28), width: 0.5),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(icon, color: Colors.white, size: 10),
             const SizedBox(width: 4),
             Text(txt,
-                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700)),
           ]),
         ),
       ),
@@ -678,19 +815,25 @@ class _DashboardContentState extends State<DashboardContent>
 
   Widget _colorBadge(String txt, Color color) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
+        decoration:
+            BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
         child: Text(txt,
-            style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 9,
+                fontWeight: FontWeight.w800)),
       );
 }
 
-// ─── Animated Loading Dots ────────────────────────────────────────────────────
+// ─── Loading Dots ─────────────────────────────────────────────────────────────
 class _LoadingDots extends StatefulWidget {
+  const _LoadingDots();
   @override
   State<_LoadingDots> createState() => _LoadingDotsState();
 }
 
-class _LoadingDotsState extends State<_LoadingDots> with TickerProviderStateMixin {
+class _LoadingDotsState extends State<_LoadingDots>
+    with TickerProviderStateMixin {
   final List<AnimationController> _ctls = [];
   final List<Animation<double>> _anims = [];
 
@@ -720,16 +863,19 @@ class _LoadingDotsState extends State<_LoadingDots> with TickerProviderStateMixi
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: List.generate(3, (i) => AnimatedBuilder(
-        animation: _anims[i],
-        builder: (_, __) => Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          width: 8, height: 8,
-          decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withOpacity(_anims[i].value)),
+      children: List.generate(
+        3,
+        (i) => AnimatedBuilder(
+          animation: _anims[i],
+          builder: (_, __) => Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            width: 8, height: 8,
+            decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(_anims[i].value)),
+          ),
         ),
-      )),
+      ),
     );
   }
 }

@@ -1,0 +1,82 @@
+{
+  "@@locale": "en",
+  "appTitle": "BahirLink",
+  "tagline": "Your city. Connected.",
+  "goodMorning": "Good morning 👋",
+  "welcomeBack": "Welcome back",
+  "locationCity": "Bahir Dar",
+  "liveReports": "Live Reports",
+  "activeBadge": "{count} Active",
+  "@activeBadge": {
+    "placeholders": {
+      "count": { "type": "String" }
+    }
+  },
+  "emergencyAssist": "Emergency Assist",
+  "publicServices": "Public Services",
+  "seeAll": "See all",
+  "incidentReported": "Incident Reported",
+  "rewardLabel": "{amount} ETB",
+  "@rewardLabel": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "statusPending": "Pending",
+  "statusInProgress": "In Progress",
+  "myPublic": "My Public",
+  "serviceReports": "Service Reports",
+  "reportsCount": "{count} Reports",
+  "@reportsCount": {
+    "placeholders": {
+      "count": { "type": "String" }
+    }
+  },
+  "generalService": "General Service",
+  "publicService": "Public Service",
+  "statusCompleted": "COMPLETED",
+  "statusRejected": "REJECTED",
+  "viewDetails": "View details",
+  "noReportsYet": "No Reports Yet",
+  "noReportsSubtitle": "Your service reports will appear here.",
+  "failedToLoad": "Failed to Load",
+  "tryAgain": "Try Again",
+  "profile": "Profile",
+  "logout": "Logout",
+  "logoutConfirmTitle": "Logout",
+  "logoutConfirmMessage": "Are you sure you want to logout?",
+  "cancel": "Cancel",
+  "editProfile": "Edit Profile",
+  "verifyAccount": "Verify Account",
+  "personalInfo": "Personal Info",
+  "contactInfo": "Contact Info",
+  "accountInfo": "Account Info",
+  "firstName": "First Name",
+  "lastName": "Last Name",
+  "dateOfBirth": "Date of Birth",
+  "gender": "Gender",
+  "email": "Email",
+  "phone": "Phone",
+  "city": "City",
+  "country": "Country",
+  "address": "Address",
+  "accountType": "Account Type",
+  "memberSince": "Member Since",
+  "statusActive": "Active",
+  "failedToLoadProfile": "Failed to load profile",
+  "retry": "Retry",
+  "myEmergency": "My Emergency",
+  "reports": "Reports",
+  "reportsCountLabel": "{count} Reports",
+  "@reportsCountLabel": {
+    "placeholders": {
+      "count": { "type": "String" }
+    }
+  },
+  "noReportsYetEmergency": "No Reports Yet",
+  "noReportsSubtitleEmergency": "Your submitted reports will appear here.",
+  "uncategorized": "Uncategorized",
+  "general": "General",
+  "recently": "Recently",
+  "noDescription": "No description provided."
+}
