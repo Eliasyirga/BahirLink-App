@@ -451,6 +451,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No description provided.'**
   String get noDescription;
+
+  /// No description provided for @statusResolved.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolved'**
+  String get statusResolved;
+
+  /// No description provided for @statusUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get statusUnknown;
+
+  /// No description provided for @notificationsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications'**
+  String get notificationsLabel;
+
+  /// No description provided for @profileLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile'**
+  String get profileLabel;
+
+  /// No description provided for @switchToEnglish.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to English'**
+  String get switchToEnglish;
+
+  /// No description provided for @switchToAmharic.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Amharic'**
+  String get switchToAmharic;
+
+  /// No description provided for @defaultCaseType.
+  ///
+  /// In en, this message translates to:
+  /// **'Report'**
+  String get defaultCaseType;
+
+  /// No description provided for @reportPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Report'**
+  String get reportPlaceholder;
+
+  /// No description provided for @emergencyCategoryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}'**
+  String emergencyCategoryLabel(String name);
+
+  /// No description provided for @serviceCategoryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}'**
+  String serviceCategoryLabel(String name);
+
+  /// Label for the section displaying different categories of emergency or service cases
+  ///
+  /// In en, this message translates to:
+  /// **'Case Types'**
+  String get caseTypesLabel;
 }
 
 class _AppLocalizationsDelegate

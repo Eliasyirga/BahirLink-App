@@ -1,16 +1,37 @@
 class ServiceType {
-  final String id;
-  final String name;
-  final String? description;
+  final int    id;
+  final String nameEn;
+  final String nameAm;
 
-  ServiceType({required this.id, required this.name, this.description});
+  const ServiceType({
+    required this.id,
+    required this.nameEn,
+    required this.nameAm,
+  });
+
+  String localizedName(String lang) => lang == 'am' ? nameAm : nameEn;
+  String get name => nameEn;
 
   factory ServiceType.fromJson(Map<String, dynamic> json) {
+    String en = '';
+    String am = '';
+
+    final raw = json['name'];
+    if (raw is Map) {
+      // Backend returns { "en": "...", "am": "..." }
+      en = raw['en']?.toString() ?? '';
+      am = raw['am']?.toString() ?? '';
+    } else if (raw is String) {
+      // Backend already resolved it to a plain string via Accept-Language
+      en = raw;
+      am = raw;
+    }
+
     return ServiceType(
-      // Handles both Sequelize/Postgres 'id' and MongoDB '_id'
-      id: (json['id'] ?? json['_id'] ?? '').toString(),
-      name: json['name']?.toString() ?? 'Unknown',
-      description: json['description']?.toString(),
+      id:     json['id'] is int ? json['id'] as int
+                                : int.tryParse(json['id'].toString()) ?? 0,
+      nameEn: en,
+      nameAm: am,
     );
   }
 }

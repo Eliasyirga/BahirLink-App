@@ -9,7 +9,9 @@
   "activeBadge": "{count} Active",
   "@activeBadge": {
     "placeholders": {
-      "count": { "type": "String" }
+      "count": {
+        "type": "String"
+      }
     }
   },
   "emergencyAssist": "Emergency Assist",
@@ -19,7 +21,9 @@
   "rewardLabel": "{amount} ETB",
   "@rewardLabel": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "statusPending": "Pending",
@@ -29,7 +33,9 @@
   "reportsCount": "{count} Reports",
   "@reportsCount": {
     "placeholders": {
-      "count": { "type": "String" }
+      "count": {
+        "type": "String"
+      }
     }
   },
   "generalService": "General Service",
@@ -70,7 +76,9 @@
   "reportsCountLabel": "{count} Reports",
   "@reportsCountLabel": {
     "placeholders": {
-      "count": { "type": "String" }
+      "count": {
+        "type": "String"
+      }
     }
   },
   "noReportsYetEmergency": "No Reports Yet",
@@ -78,5 +86,33 @@
   "uncategorized": "Uncategorized",
   "general": "General",
   "recently": "Recently",
-  "noDescription": "No description provided."
+  "noDescription": "No description provided.",
+  "statusResolved": "Resolved",
+  "statusUnknown": "Unknown",
+  "notificationsLabel": "Notifications",
+  "profileLabel": "Profile",
+  "switchToEnglish": "Switch to English",
+  "switchToAmharic": "Switch to Amharic",
+  "defaultCaseType": "Report",
+  "reportPlaceholder": "Report",
+  "emergencyCategoryLabel": "{name}",
+  "@emergencyCategoryLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "serviceCategoryLabel": "{name}",
+  "@serviceCategoryLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "caseTypesLabel": "Case Types",
+  "@caseTypesLabel": {
+    "description": "Label for the section displaying different categories of emergency or service cases"
+  }
 }

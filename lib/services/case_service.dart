@@ -1,45 +1,59 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class CaseService {
+  // Use 10.0.2.2 for Android Emulator, or your machine's IP for physical devices
   static const String _baseUrl = "http://localhost:5000/api/cases";
 
-  static Future<List<dynamic>> getAllCases() async {
+  /// Fetches filtered list of active cases with localization support
+  static Future<List<dynamic>> getAllCases({String lang = 'en'}) async {
     try {
-      final response = await http
-          .get(Uri.parse(_baseUrl))
-          .timeout(const Duration(seconds: 10));
+      // ✅ Append 'lang' as a query parameter
+      final Uri url = Uri.parse(_baseUrl).replace(queryParameters: {
+        'lang': lang,
+      });
+
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Accept-Language': lang,
+        },
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        final dynamic data = jsonDecode(response.body);
-        final List<dynamic> allCases = _extractList(data);
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
 
-        // --- FILTER LOGIC START ---
-        // We only keep cases that are NOT 'rejected' and NOT 'resolved'
-        final filteredCases = allCases.where((c) {
-          final status = (c['status'] ?? '').toString().toLowerCase();
-          return status != 'rejected' && status != 'resolved';
-        }).toList();
-        // --- FILTER LOGIC END ---
+        // ✅ Check for 'success' flag and extract from 'data' key
+        if (responseData['success'] == true && responseData['data'] is List) {
+          final List<dynamic> allCases = responseData['data'];
 
-        return filteredCases;
+          // Filter Logic: Exclude 'rejected' and 'resolved' cases
+          return allCases.where((c) {
+            final status = (c['status'] ?? '').toString().toLowerCase();
+            return status != 'rejected' && status != 'resolved';
+          }).toList();
+        }
+        return [];
       } else {
-        debugPrint("Server Error (${response.statusCode}): ${response.body}");
+        debugPrint("❌ CaseService Error: ${response.statusCode} - ${response.body}");
         return [];
       }
+    } on SocketException {
+      debugPrint("❌ Connection Error: Server unreachable (Check IP or Network)");
+      return [];
     } catch (e) {
-      debugPrint("Fetch Exception: $e");
+      debugPrint("❌ CaseService Exception: $e");
       return [];
     }
   }
 
-  static List<dynamic> _extractList(dynamic data) {
-    if (data is List) return data;
-    if (data is Map<String, dynamic>) {
-      if (data['cases'] is List) return data['cases'];
-      if (data['data'] is List) return data['data'];
-    }
-    return [];
+  /// Simple null-check helper for UI display
+  static String getDisplayText(dynamic value) {
+    if (value == null) return "N/A";
+    return value.toString();
   }
 }

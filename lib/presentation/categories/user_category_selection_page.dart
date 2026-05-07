@@ -4,13 +4,13 @@ import '../../services/category_service.dart';
 
 // ─── Dashboard Color Tokens ───────────────────────────────────────────────────
 class _T {
-  static const primary    = Color(0xFF1A3BAA);
+  static const primary     = Color(0xFF1A3BAA);
   static const primaryMid = Color(0xFF2252CC);
-  static const accent     = Color(0xFF4B83F0);
+  static const accent      = Color(0xFF4B83F0);
   static const accentSoft = Color(0xFFD6E4FF);
-  static const bg         = Color(0xFFF2F6FF);
+  static const bg          = Color(0xFFF2F6FF);
   static const textDark   = Color(0xFF0C1A45);
-  static const textMid    = Color(0xFF5569A0);
+  static const textMid     = Color(0xFF5569A0);
 }
 
 class UserCategorySelectionPage extends StatefulWidget {
@@ -34,8 +34,9 @@ class _UserCategorySelectionPageState
   List<Map<String, dynamic>> categories = [];
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Fetch categories here to ensure context is ready for Localization
     fetchCategories();
   }
 
@@ -56,8 +57,15 @@ class _UserCategorySelectionPageState
 
   Future<void> fetchCategories() async {
     try {
-      final response =
-          await CategoryService.getCategories(widget.emergencyTypeId);
+      // ─── LANGUAGE SWITCH LOGIC ───
+      // Automatically detect the current locale (am/en)
+      final String currentLang = Localizations.localeOf(context).languageCode;
+
+      final response = await CategoryService.getCategories(
+        widget.emergencyTypeId,
+        lang: currentLang, // Pass the detected language to the service
+      );
+      
       if (!mounted) return;
       setState(() {
         categories =

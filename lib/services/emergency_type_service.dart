@@ -1,43 +1,49 @@
-// import 'dart:convert';
-// import 'package:http/http.dart' as http;
-// import '../model/emergency_type.dart'; // FIXED: removed the 's'
-
-// class EmergencyTypeService {
-//   static const String baseUrl = "http://localhost:5000/api/emergencyType";
-
-//   static Future<List<EmergencyType>> fetchEmergencyTypes() async {
-//     final response = await http.get(Uri.parse(baseUrl));
-
-//     if (response.statusCode == 200) {
-//       final data = jsonDecode(response.body);
-//       // Ensure this matches your backend key
-//       List list = data["emergencyTypes"] ?? [];
-//       return list.map((e) => EmergencyType.fromJson(e)).toList();
-//     } else {
-//       throw Exception("Failed to load emergency types");
-//     }
-//   }
-// }
-
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../model/emergency_type.dart';
 
 class EmergencyTypeService {
+  // Use 10.0.2.2 for Android Emulator, or your machine's IP for physical devices
   static const String baseUrl = "http://localhost:5000/api/emergencyType";
 
-  static Future<List<EmergencyType>> fetchEmergencyTypes() async {
-    final response = await http.get(Uri.parse(baseUrl));
+  static Future<List<EmergencyType>> fetchEmergencyTypes({String lang = 'en'}) async {
+    try {
+      // ✅ Append 'lang' as a query parameter for the backend localization helper
+      final Uri url = Uri.parse(baseUrl).replace(queryParameters: {
+        'lang': lang,
+      });
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Accept-Language': lang, 
+        },
+      ).timeout(const Duration(seconds: 10));
 
-      // ✅ FIXED HERE
-      List list = data["data"] ?? [];
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
 
-      return list.map((e) => EmergencyType.fromJson(e)).toList();
-    } else {
-      throw Exception("Failed to load emergency types");
+        // ✅ Extract from 'data' key & check success status
+        if (responseData['success'] == true && responseData['data'] is List) {
+          List list = responseData['data'];
+          return list
+              .map((e) => EmergencyType.fromJson(e as Map<String, dynamic>))
+              .toList();
+        }
+        return [];
+      } else {
+        print("❌ EmergencyTypeService Error: ${response.statusCode}");
+        return [];
+      }
+    } on SocketException {
+      print("❌ Connection Error: Server is unreachable");
+      return [];
+    } catch (e) {
+      print("❌ EmergencyTypeService Exception: $e");
+      return [];
     }
   }
 }

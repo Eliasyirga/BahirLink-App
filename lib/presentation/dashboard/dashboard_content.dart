@@ -1,15 +1,14 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:first_app/l10n/app_localizations.dart';
 
 import 'package:first_app/services/user_service.dart';
 import 'package:first_app/services/case_service.dart';
 import 'package:first_app/services/emergency_type_service.dart';
+import 'package:first_app/services/service_type_service.dart';
 import 'package:first_app/model/emergency_type.dart';
 import 'package:first_app/model/service_type.dart';
 import 'package:first_app/presentation/categories/user_category_selection_page.dart';
@@ -45,11 +44,17 @@ class _DashboardContentState extends State<DashboardContent>
 
   AppLocalizations get l10n => AppLocalizations.of(context)!;
 
-  String _fullName = "User";
-  bool _isLoading = true;
-  List<dynamic> _cases = [];
+  // ── State ──────────────────────────────────────────────────────────────────
+  String _fullName        = "User";
+  bool   _isLoading       = true;
+  bool   _isSwitchingLang = false;
+
+  List<dynamic>       _cases          = [];
   List<EmergencyType> _emergencyTypes = [];
-  List<ServiceType> _serviceTypes = [];
+  List<ServiceType>   _serviceTypes   = [];
+
+  /// Single source of truth for the current language.
+  String _currentLang = 'en';
 
   final PageController _caseCtrl = PageController(viewportFraction: 0.88);
   Timer? _sliderTimer;
@@ -66,10 +71,11 @@ class _DashboardContentState extends State<DashboardContent>
       Tween<double>(begin: 0.88, end: 1.0).animate(
           CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
 
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _initLangAndLoad();
   }
 
   @override
@@ -81,14 +87,24 @@ class _DashboardContentState extends State<DashboardContent>
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  // ── Init: read saved language, then load everything ────────────────────────
+  Future<void> _initLangAndLoad() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('language_code') ?? 'en';
+    if (mounted) setState(() => _currentLang = saved);
+    await _loadData(lang: saved);
+  }
+
+  // ── Master load — always passes an explicit lang so all fetchers stay in sync
+  Future<void> _loadData({String? lang}) async {
+    final useLang = lang ?? _currentLang;
+    if (mounted) setState(() => _isLoading = true);
     try {
       await Future.wait([
         _fetchUser(),
-        _fetchEmergencyTypes(),
-        _fetchServiceTypes(),
-        _fetchCases(),
+        _fetchEmergencyTypes(useLang),
+        _fetchServiceTypes(useLang),
+        _fetchCases(useLang),
       ]);
       _startAutoLoop();
       _fadeCtrl.forward();
@@ -97,6 +113,7 @@ class _DashboardContentState extends State<DashboardContent>
     }
   }
 
+  // ── Individual fetchers ────────────────────────────────────────────────────
   Future<void> _fetchUser() async {
     final res = await UserService.getProfile();
     if (res != null && mounted) {
@@ -106,11 +123,19 @@ class _DashboardContentState extends State<DashboardContent>
     }
   }
 
-  Future<void> _fetchEmergencyTypes() async =>
-      _emergencyTypes = await EmergencyTypeService.fetchEmergencyTypes();
+  Future<void> _fetchEmergencyTypes(String lang) async {
+    final types = await EmergencyTypeService.fetchEmergencyTypes(lang: lang);
+    if (mounted) setState(() => _emergencyTypes = types);
+  }
 
-  Future<void> _fetchCases() async {
-    final fetched = await CaseService.getAllCases() ?? [];
+  /// Uses ServiceTypeService so lang param is honoured.
+  Future<void> _fetchServiceTypes(String lang) async {
+    final types = await ServiceTypeService.getAllServiceTypes(lang: lang);
+    if (mounted) setState(() => _serviceTypes = types);
+  }
+
+  Future<void> _fetchCases(String lang) async {
+    final fetched = await CaseService.getAllCases(lang: lang) ?? [];
     if (mounted) {
       setState(() {
         _cases = fetched.where((c) {
@@ -118,16 +143,6 @@ class _DashboardContentState extends State<DashboardContent>
           return s != 'rejected' && s != 'resolved';
         }).toList();
       });
-    }
-  }
-
-  Future<void> _fetchServiceTypes() async {
-    final res = await http.get(Uri.parse("http://localhost:5000/api/serviceType"));
-    if (res.statusCode == 200 && mounted) {
-      final data = jsonDecode(res.body);
-      final List list = (data is List) ? data : (data["serviceTypes"] ?? []);
-      setState(() =>
-          _serviceTypes = list.map((e) => ServiceType.fromJson(e)).toList());
     }
   }
 
@@ -144,14 +159,38 @@ class _DashboardContentState extends State<DashboardContent>
     });
   }
 
+  // ── Language switcher ──────────────────────────────────────────────────────
   Future<void> _switchLanguage(String langCode) async {
+    if (_isSwitchingLang || langCode == _currentLang) return;
+
+    // 1. Persist
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('language_code', langCode);
-    if (mounted) {
-      MyApp.of(context)?.setLocale(Locale(langCode));
+
+    if (!mounted) return;
+
+    // 2. Update app locale (rebuilds l10n strings)
+    MyApp.of(context)?.setLocale(Locale(langCode));
+
+    // 3. Update state + show loading indicator
+    setState(() {
+      _currentLang     = langCode;
+      _isSwitchingLang = true;
+    });
+
+    // 4. Re-fetch ALL localised data in parallel
+    try {
+      await Future.wait([
+        _fetchEmergencyTypes(langCode),
+        _fetchServiceTypes(langCode),
+        _fetchCases(langCode),
+      ]);
+    } finally {
+      if (mounted) setState(() => _isSwitchingLang = false);
     }
   }
 
+  // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     if (_isLoading) return _buildSplash();
@@ -173,6 +212,7 @@ class _DashboardContentState extends State<DashboardContent>
     );
   }
 
+  // ── Splash / loading screen ────────────────────────────────────────────────
   Widget _buildSplash() {
     return Scaffold(
       body: Container(
@@ -185,9 +225,9 @@ class _DashboardContentState extends State<DashboardContent>
           ),
         ),
         child: Stack(children: [
-          Positioned(top: -90, left: -70, child: _blob(300, Colors.white, 0.04)),
+          Positioned(top: -90,  left: -70,  child: _blob(300, Colors.white, 0.04)),
           Positioned(bottom: -110, right: -70, child: _blob(340, Colors.white, 0.05)),
-          Positioned(top: 60, right: -40, child: _blob(160, Colors.white, 0.06)),
+          Positioned(top: 60,  right: -40,  child: _blob(160, Colors.white, 0.06)),
           Center(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               ScaleTransition(
@@ -258,6 +298,7 @@ class _DashboardContentState extends State<DashboardContent>
     );
   }
 
+  // ── Header ─────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Container(
       decoration: const BoxDecoration(
@@ -272,8 +313,8 @@ class _DashboardContentState extends State<DashboardContent>
             bottomRight: Radius.circular(30)),
       ),
       child: Stack(children: [
-        Positioned(top: -40, right: -25, child: _blob(140, Colors.white, 0.055)),
-        Positioned(top: 14, right: 85,   child: _blob(55,  Colors.white, 0.045)),
+        Positioned(top: -40,  right: -25, child: _blob(140, Colors.white, 0.055)),
+        Positioned(top: 14,  right: 85,   child: _blob(55,  Colors.white, 0.045)),
         Positioned(bottom: -18, left: -28, child: _blob(105, _T.accent, 0.14)),
         SafeArea(
           bottom: false,
@@ -283,7 +324,7 @@ class _DashboardContentState extends State<DashboardContent>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                  // ── Brand chip ──
+                  // ── Brand chip ──────────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
@@ -317,10 +358,10 @@ class _DashboardContentState extends State<DashboardContent>
                     ]),
                   ),
                   const Spacer(),
-                  // ── Language toggle ──
+                  // ── Language toggle ─────────────────────────────────────
                   _buildLangToggle(),
                   const SizedBox(width: 10),
-                  // ── Notification bell ──
+                  // ── Notification bell ───────────────────────────────────
                   Stack(clipBehavior: Clip.none, children: [
                     Container(
                       width: 38, height: 38,
@@ -346,7 +387,7 @@ class _DashboardContentState extends State<DashboardContent>
                     ),
                   ]),
                   const SizedBox(width: 10),
-                  // ── Avatar ──
+                  // ── Avatar ──────────────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(2),
                     decoration: BoxDecoration(
@@ -385,7 +426,7 @@ class _DashboardContentState extends State<DashboardContent>
                       ],
                     ),
                   ),
-                  // ── Location chip ──
+                  // ── Location chip ───────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 5),
@@ -415,36 +456,49 @@ class _DashboardContentState extends State<DashboardContent>
     );
   }
 
+  // ── Language toggle button ─────────────────────────────────────────────────
   Widget _buildLangToggle() {
-    final isAmharic = Localizations.localeOf(context).languageCode == 'am';
+    final isAmharic = _currentLang == 'am';
     return GestureDetector(
-      onTap: () => _switchLanguage(isAmharic ? 'en' : 'am'),
-      child: Container(
+      onTap: _isSwitchingLang
+          ? null
+          : () => _switchLanguage(isAmharic ? 'en' : 'am'),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
+          color: _isSwitchingLang
+              ? Colors.white.withOpacity(0.08)
+              : Colors.white.withOpacity(0.15),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
         ),
-        child: Text(
-          isAmharic ? 'EN' : 'አማ',
-          style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.3),
-        ),
+        child: _isSwitchingLang
+            ? const SizedBox(
+                width: 22, height: 14,
+                child: Center(
+                  child: SizedBox(
+                    width: 12, height: 12,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(Colors.white)),
+                  ),
+                ),
+              )
+            : Text(
+                isAmharic ? 'EN' : 'አማ',   // shows what you WILL switch TO
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3),
+              ),
       ),
     );
   }
 
-  Widget _blob(double size, Color color, double opacity) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color.withOpacity(opacity)));
-
+  // ── Body ───────────────────────────────────────────────────────────────────
   Widget _buildBody() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -465,16 +519,52 @@ class _DashboardContentState extends State<DashboardContent>
         const SizedBox(height: 26),
         _sectionLabel(l10n.emergencyAssist, Icons.crisis_alert_rounded),
         const SizedBox(height: 12),
-        _buildGrid(_emergencyTypes, true),
+        _isSwitchingLang
+            ? _buildGridShimmer(_emergencyTypes.isNotEmpty ? _emergencyTypes.length : 6)
+            : _buildGrid(_emergencyTypes, true),
         const SizedBox(height: 26),
         _sectionLabel(l10n.publicServices, Icons.account_balance_rounded),
         const SizedBox(height: 12),
-        _buildGrid(_serviceTypes, false),
+        _isSwitchingLang
+            ? _buildGridShimmer(_serviceTypes.isNotEmpty ? _serviceTypes.length : 6)
+            : _buildGrid(_serviceTypes, false),
         const SizedBox(height: 100),
       ],
     );
   }
 
+  // ── Shimmer placeholder shown during language re-fetch ─────────────────────
+  Widget _buildGridShimmer(int itemCount) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 0.88,
+        ),
+        itemCount: itemCount,
+        itemBuilder: (_, __) => Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                _T.primary.withOpacity(0.45),
+                _T.primaryMid.withOpacity(0.35),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Section label row ──────────────────────────────────────────────────────
   Widget _sectionLabel(String title, IconData icon,
       {String? badge, Color? badgeColor}) {
     return Padding(
@@ -526,6 +616,7 @@ class _DashboardContentState extends State<DashboardContent>
     );
   }
 
+  // ── Case slider ────────────────────────────────────────────────────────────
   Widget _buildCaseSlider() {
     return SizedBox(
       height: 200,
@@ -663,6 +754,7 @@ class _DashboardContentState extends State<DashboardContent>
     );
   }
 
+  // ── Pagination dots ────────────────────────────────────────────────────────
   Widget _buildDots() {
     if (_cases.length <= 1) return const SizedBox.shrink();
     return Row(
@@ -682,6 +774,7 @@ class _DashboardContentState extends State<DashboardContent>
     );
   }
 
+  // ── Category grid ──────────────────────────────────────────────────────────
   Widget _buildGrid(List<dynamic> items, bool isEmergency) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -736,9 +829,7 @@ class _DashboardContentState extends State<DashboardContent>
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      isEmergency
-                          ? _emergencyIcon(idx)
-                          : _serviceIcon(idx),
+                      isEmergency ? _emergencyIcon(idx) : _serviceIcon(idx),
                       color: Colors.white,
                       size: 22,
                     ),
@@ -823,6 +914,13 @@ class _DashboardContentState extends State<DashboardContent>
                 fontSize: 9,
                 fontWeight: FontWeight.w800)),
       );
+
+  Widget _blob(double size, Color color, double opacity) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color.withOpacity(opacity)));
 }
 
 // ─── Loading Dots ─────────────────────────────────────────────────────────────
@@ -855,7 +953,7 @@ class _LoadingDotsState extends State<_LoadingDots>
 
   @override
   void dispose() {
-    for (final c in _ctls) c.dispose();
+    for (final c in _ctls) _ctls.forEach((c) => c.dispose());
     super.dispose();
   }
 

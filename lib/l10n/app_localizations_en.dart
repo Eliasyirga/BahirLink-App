@@ -193,4 +193,41 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noDescription => 'No description provided.';
+
+  @override
+  String get statusResolved => 'Resolved';
+
+  @override
+  String get statusUnknown => 'Unknown';
+
+  @override
+  String get notificationsLabel => 'Notifications';
+
+  @override
+  String get profileLabel => 'Profile';
+
+  @override
+  String get switchToEnglish => 'Switch to English';
+
+  @override
+  String get switchToAmharic => 'Switch to Amharic';
+
+  @override
+  String get defaultCaseType => 'Report';
+
+  @override
+  String get reportPlaceholder => 'Report';
+
+  @override
+  String emergencyCategoryLabel(String name) {
+    return '$name';
+  }
+
+  @override
+  String serviceCategoryLabel(String name) {
+    return '$name';
+  }
+
+  @override
+  String get caseTypesLabel => 'Case Types';
 }

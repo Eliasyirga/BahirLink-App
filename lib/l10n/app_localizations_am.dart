@@ -192,4 +192,41 @@ class AppLocalizationsAm extends AppLocalizations {
 
   @override
   String get noDescription => 'መግለጫ አልተሰጠም።';
+
+  @override
+  String get statusResolved => 'ተፈትቷል';
+
+  @override
+  String get statusUnknown => 'ያልታወቀ';
+
+  @override
+  String get notificationsLabel => 'ማሳወቂያዎች';
+
+  @override
+  String get profileLabel => 'መገለጫ';
+
+  @override
+  String get switchToEnglish => 'ወደ እንግሊዘኛ ቀይር';
+
+  @override
+  String get switchToAmharic => 'ወደ አማርኛ ቀይር';
+
+  @override
+  String get defaultCaseType => 'ሪፖርት';
+
+  @override
+  String get reportPlaceholder => 'ሪፖርት';
+
+  @override
+  String emergencyCategoryLabel(String name) {
+    return '$name';
+  }
+
+  @override
+  String serviceCategoryLabel(String name) {
+    return '$name';
+  }
+
+  @override
+  String get caseTypesLabel => 'የጉዳይ አይነቶች';
 }

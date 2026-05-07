@@ -9,7 +9,9 @@
   "activeBadge": "{count} ንቁ",
   "@activeBadge": {
     "placeholders": {
-      "count": { "type": "String" }
+      "count": {
+        "type": "String"
+      }
     }
   },
   "emergencyAssist": "የአደጋ ጊዜ እርዳታ",
@@ -19,7 +21,9 @@
   "rewardLabel": "{amount} ብር",
   "@rewardLabel": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "statusPending": "በጥበቃ ላይ",
@@ -29,7 +33,9 @@
   "reportsCount": "{count} ሪፖርቶች",
   "@reportsCount": {
     "placeholders": {
-      "count": { "type": "String" }
+      "count": {
+        "type": "String"
+      }
     }
   },
   "generalService": "አጠቃላይ አገልግሎት",
@@ -70,7 +76,9 @@
   "reportsCountLabel": "{count} ሪፖርቶች",
   "@reportsCountLabel": {
     "placeholders": {
-      "count": { "type": "String" }
+      "count": {
+        "type": "String"
+      }
     }
   },
   "noReportsYetEmergency": "ምንም ሪፖርት የለም",
@@ -78,5 +86,30 @@
   "uncategorized": "ምድብ የለም",
   "general": "አጠቃላይ",
   "recently": "በቅርቡ",
-  "noDescription": "መግለጫ አልተሰጠም።"
+  "noDescription": "መግለጫ አልተሰጠም።",
+  "statusResolved": "ተፈትቷል",
+  "statusUnknown": "ያልታወቀ",
+  "notificationsLabel": "ማሳወቂያዎች",
+  "profileLabel": "መገለጫ",
+  "switchToEnglish": "ወደ እንግሊዘኛ ቀይር",
+  "switchToAmharic": "ወደ አማርኛ ቀይር",
+  "defaultCaseType": "ሪፖርት",
+  "reportPlaceholder": "ሪፖርት",
+  "emergencyCategoryLabel": "{name}",
+  "@emergencyCategoryLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "serviceCategoryLabel": "{name}",
+  "@serviceCategoryLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "caseTypesLabel": "የጉዳይ አይነቶች"
 }
