@@ -9,9 +9,7 @@
   "activeBadge": "{count} ንቁ",
   "@activeBadge": {
     "placeholders": {
-      "count": {
-        "type": "String"
-      }
+      "count": { "type": "String" }
     }
   },
   "emergencyAssist": "የአደጋ ጊዜ እርዳታ",
@@ -21,33 +19,43 @@
   "rewardLabel": "{amount} ብር",
   "@rewardLabel": {
     "placeholders": {
-      "amount": {
-        "type": "String"
-      }
+      "amount": { "type": "String" }
     }
   },
   "statusPending": "በጥበቃ ላይ",
   "statusInProgress": "በሂደት ላይ",
+  "statusCompleted": "ተጠናቋል",
+  "statusRejected": "ተቀባይነት አላገኘም",
+  "statusResolved": "ተፈትቷል",
+  "statusUnknown": "ያልታወቀ",
+  "statusActive": "ንቁ",
   "myPublic": "የእኔ",
+  "myEmergency": "የእኔ አደጋ",
   "serviceReports": "የአገልግሎት ሪፖርቶች",
   "reportsCount": "{count} ሪፖርቶች",
   "@reportsCount": {
     "placeholders": {
-      "count": {
-        "type": "String"
-      }
+      "count": { "type": "String" }
+    }
+  },
+  "reports": "ሪፖርቶች",
+  "reportsCountLabel": "{count} ሪፖርቶች",
+  "@reportsCountLabel": {
+    "placeholders": {
+      "count": { "type": "String" }
     }
   },
   "generalService": "አጠቃላይ አገልግሎት",
   "publicService": "የህዝብ አገልግሎት",
-  "statusCompleted": "ተጠናቋል",
-  "statusRejected": "ተቀባይነት አላገኘም",
   "viewDetails": "ዝርዝር ይመልከቱ",
   "noReportsYet": "ምንም ሪፖርት የለም",
   "noReportsSubtitle": "የአገልግሎት ሪፖርቶችዎ እዚህ ይታያሉ።",
+  "noReportsYetEmergency": "ምንም ሪፖርት የለም",
+  "noReportsSubtitleEmergency": "የተላኩ ሪፖርቶችዎ እዚህ ይታያሉ።",
   "failedToLoad": "መጫን አልተሳካም",
   "tryAgain": "እንደገና ሞክር",
   "profile": "መገለጫ",
+  "profileLabel": "መገለጫ",
   "logout": "ውጣ",
   "logoutConfirmTitle": "ውጣ",
   "logoutConfirmMessage": "እርግጠኛ ነዎት መውጣት ይፈልጋሉ?",
@@ -68,29 +76,13 @@
   "address": "አድራሻ",
   "accountType": "የመለያ አይነት",
   "memberSince": "አባል የሆኑበት ቀን",
-  "statusActive": "ንቁ",
   "failedToLoadProfile": "መገለጫ መጫን አልተሳካም",
   "retry": "እንደገና ሞክር",
-  "myEmergency": "የእኔ አደጋ",
-  "reports": "ሪፖርቶች",
-  "reportsCountLabel": "{count} ሪፖርቶች",
-  "@reportsCountLabel": {
-    "placeholders": {
-      "count": {
-        "type": "String"
-      }
-    }
-  },
-  "noReportsYetEmergency": "ምንም ሪፖርት የለም",
-  "noReportsSubtitleEmergency": "የተላኩ ሪፖርቶችዎ እዚህ ይታያሉ።",
   "uncategorized": "ምድብ የለም",
   "general": "አጠቃላይ",
   "recently": "በቅርቡ",
   "noDescription": "መግለጫ አልተሰጠም።",
-  "statusResolved": "ተፈትቷል",
-  "statusUnknown": "ያልታወቀ",
   "notificationsLabel": "ማሳወቂያዎች",
-  "profileLabel": "መገለጫ",
   "switchToEnglish": "ወደ እንግሊዘኛ ቀይር",
   "switchToAmharic": "ወደ አማርኛ ቀይር",
   "defaultCaseType": "ሪፖርት",
@@ -98,18 +90,180 @@
   "emergencyCategoryLabel": "{name}",
   "@emergencyCategoryLabel": {
     "placeholders": {
-      "name": {
-        "type": "String"
-      }
+      "name": { "type": "String" }
     }
   },
   "serviceCategoryLabel": "{name}",
   "@serviceCategoryLabel": {
     "placeholders": {
-      "name": {
-        "type": "String"
-      }
+      "name": { "type": "String" }
     }
   },
-  "caseTypesLabel": "የጉዳይ አይነቶች"
+  "caseTypesLabel": "የጉዳይ አይነቶች",
+  "caseDetailLastKnownLocation": "መጨረሻ የታወቀ አካባቢ",
+  "caseDetailPhysicalIdentifiers": "አካላዊ መለያዎች",
+  "caseDetailDistinctiveMarks": "ልዩ ምልክቶች",
+  "caseDetailCaseDescription": "የጉዳዩ መግለጫ",
+  "caseDetailNoMarks": "ምንም ልዩ ምልክቶች አልተዘገቡም።",
+  "caseDetailNoDescription": "ተጨማሪ መግለጫ አልተሰጠም።",
+  "caseDetailUnknownIdentity": "ማንነት አልታወቀም",
+  "caseDetailLastSeen": "መጨረሻ የታየበት: {date}",
+  "@caseDetailLastSeen": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "caseDetailAgeYrs": "{age} ዓ",
+  "@caseDetailAgeYrs": {
+    "placeholders": {
+      "age": { "type": "String" }
+    }
+  },
+  "caseDetailAge": "ዕድሜ",
+  "caseDetailGender": "ጾታ",
+  "caseDetailHeight": "ቁመት",
+  "caseDetailWeight": "ክብደት",
+  "caseDetailLocationNotSet": "አካባቢ አልተቀናበረም",
+  "caseDetailDangerAlert": "አደጋ ማስጠንቀቂያ",
+  "caseDetailProvideTip": "የማንነት ሳይገለጽ ፍንጭ ስጥ",
+  "caseDetailEtb": "{amount} ብር",
+  "@caseDetailEtb": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "caseDetailStatusPending": "በጥበቃ ላይ",
+  "caseDetailStatusInProgress": "በሂደት ላይ",
+  "serviceReportDetails": "የሪፖርት ዝርዝር",
+  "serviceStreetLabel": "መንገድ",
+  "serviceDateReported": "የተዘገበበት ቀን",
+  "serviceSystemStatus": "የስርዓት ሁኔታ",
+  "serviceOfficialReport": "ይፋዊ ሪፖርት",
+  "serviceReportLabel": "የአገልግሎት ሪፖርት",
+  "openChat": "ውይይት ክፈት",
+  "reportSectionDescription": "መግለጫ",
+  "reportSectionLocation": "የአካባቢ ዝርዝር",
+  "reportSectionTimeGps": "ጊዜ እና ጂፒኤስ",
+  "reportSectionEvidence": "ማስረጃ",
+  "reportDescriptionHint": "ምን እየተፈጠረ እንደሆነ ያስረዱ...",
+  "reportSelectKebele": "ቀበሌ ይምረጡ",
+  "reportSubdivisionHint": "ክፍለ ከተማ",
+  "reportStreetHint": "መንገድ (አማራጭ)",
+  "reportTimeLabel": "የሪፖርት ጊዜ",
+  "reportSelectTime": "ጊዜ ይምረጡ",
+  "reportPinLocation": "አካባቢ ያስቀምጡ",
+  "reportTapToOpenMap": "ካርታ ለመክፈት ይጫኑ",
+  "reportLocationPinned": "አካባቢ ተቀምጧል",
+  "reportMediaAttachment": "ሚዲያ አያያዥ",
+  "reportUploadPhotoVideo": "ፎቶ/ቪዲዮ ይጫኑ",
+  "reportSubmitButton": "ሪፖርት ያስገቡ",
+  "reportValidationError": "መግለጫ ያስገቡ፣ ቀበሌ ይምረጡ፣ እና ክፍለ ከተማ ያስገቡ",
+  "reportFetchingUserId": "የተጠቃሚ መለያ እየተጫነ ነው። እባክዎ ይጠብቁ...",
+  "reportErrorLoadingLocations": "አካባቢዎችን መጫን አልተሳካም",
+  "reportFailedUserId": "የተጠቃሚ መለያ ማግኘት አልተሳካም",
+  "reportSentSuccess": "ሪፖርቱ በተሳካ ሁኔታ ተልኳል",
+  "reportSentFailed": "ሪፖርቱን መላክ አልተሳካም",
+  "serviceRequestTitle": "የአገልግሎት ጥያቄ",
+  "serviceSectionDescription": "መግለጫ",
+  "serviceSectionLocation": "የአካባቢ ዝርዝር",
+  "serviceSectionScheduleGps": "ጊዜ እና ጂፒኤስ",
+  "serviceSectionEvidence": "ማስረጃ / አባሪ",
+  "serviceDescriptionHint": "የሚፈለገውን አገልግሎት ይግለጹ...",
+  "serviceSelectKebele": "ቀበሌ ይምረጡ",
+  "serviceSubdivisionHint": "ክፍለ ከተማ / ቀበሌ",
+  "serviceStreetHint": "መንገድ (አማራጭ)",
+  "serviceRequestTimeLabel": "የጥያቄ ጊዜ",
+  "serviceSetTime": "ጊዜ ያስቀምጡ",
+  "serviceMarkLocation": "አካባቢ ምልክት ያድርጉ",
+  "serviceOpenMap": "ካርታ ክፈት",
+  "serviceLocationPinned": "ተቀምጧል",
+  "serviceMediaLabel": "ሚዲያ",
+  "serviceUploadMediaHint": "ፎቶ/ቪዲዮ ይጫኑ",
+  "serviceSubmitButton": "ጥያቄ ያስገቡ",
+  "serviceValidationError": "መግለጫ ያስገቡ፣ ቀበሌ ይምረጡ፣ እና ክፍለ ከተማ ያስገቡ",
+  "serviceFetchingUserId": "የተጠቃሚ መለያ እየተጫነ ነው። እባክዎ ይጠብቁ...",
+  "serviceErrorLoadingLocations": "አካባቢዎችን መጫን አልተሳካም",
+  "serviceFailedUserId": "የተጠቃሚ መለያ ማግኘት አልተሳካም",
+  "serviceRequestSentSuccess": "የአገልግሎት ጥያቄ በተሳካ ሁኔታ ተልኳል",
+  "serviceRequestSentFailed": "ጥያቄውን መላክ አልተሳካም",
+  "caseReportPageTitle": "የስለላ ሪፖርት",
+  "caseReportPageSubtitle": "ማየት ሪፖርት አቅርብ",
+  "caseReportSectionLocation": "ጂኦግራፊያዊ ትክክለኛነት",
+  "caseReportSectionTime": "የማየት ጊዜ",
+  "caseReportSelectDateTime": "ቀን እና ጊዜ ይምረጡ",
+  "caseReportSectionDescription": "የእይታ መግለጫ",
+  "caseReportDescriptionHint": "ልብስ፣ አጃቢዎች፣ የተሽከርካሪ ዝርዝሮች...",
+  "caseReportSubmitButton": "ሪፖርት ያስገቡ",
+  "caseReportEncryptedProtocol": "የተመሰጠረ የአገልግሎት ፕሮቶኮል",
+  "caseReportReportingTarget": "የሪፖርት ኢላማ",
+  "caseReportUnknownEntity": "ያልታወቀ አካል",
+  "caseReportFetchLocationError": "የአካባቢ ዳታ ማምጣት አልተሳካም",
+  "caseReportLocationTimeError": "እባክዎ አካባቢ እና ጊዜ ይምረጡ",
+  "caseReportSentSuccess": "ማየት በተሳካ ሁኔታ ቀርቧል",
+  "caseReportSentFailed": "ማስገባት አልተሳካም። ግንኙነትዎን ያረጋግጡ።",
+  "homeDescription": "የእርስዎ የህዝብ አገልግሎት እና የአደጋ ጊዜ ምላሽ መተግበሪያ — ባህር ዳርን ከአስተማማኝ እርዳታ ጋር ያገናኛል።",
+  "homeLetsStart": "እንጀምር",
+  "homeAlreadyHaveAccount": "መለያ አለዎት? ይግቡ",
+  "homeFeatureEmergency": "አደጋ",
+  "homeFeatureServices": "አገልግሎቶች",
+  "homeFeatureLiveReports": "የቀጥታ ሪፖርቶች",
+  "loginWelcomeBack": "እንኳን ደህና መጡ!",
+  "loginUsernameHint": "የተጠቃሚ ስም",
+  "loginEnterUsername": "የተጠቃሚ ስም ያስገቡ",
+  "loginPasswordHint": "የይለፍ ቃል",
+  "loginPasswordTooShort": "የይለፍ ቃሉ ያጠረ ነው",
+  "loginForgotPassword": "የይለፍ ቃል ረሱ?",
+  "loginButton": "ግባ",
+  "loginContinueAsGuest": "እንደ እንግዳ ቀጥል",
+  "loginNewUser": "አዲስ ተጠቃሚ? ",
+  "loginSignUp": "ይመዝገቡ",
+  "signupCreateAccount": "መለያ ፍጠር",
+  "signupFirstName": "የመጀመሪያ ስም",
+  "signupEnterFirstName": "የመጀመሪያ ስም ያስገቡ",
+  "signupLastName": "የአባት ስም",
+  "signupEnterLastName": "የአባት ስም ያስገቡ",
+  "signupEmailAddress": "የኢሜይል አድራሻ",
+  "signupInvalidEmail": "ልክ ያልሆነ ኢሜይል",
+  "signupPassword": "የይለፍ ቃል",
+  "signupPasswordMin": "ቢያንስ 6 ቁምፊዎች",
+  "signupCreateAccountButton": "መለያ ፍጠር",
+  "signupAlreadyHaveAccount": "መለያ አለዎት? ",
+  "signupLoginLink": "ግባ",
+  "guestMode": "የእንግዳ ሁኔታ",
+  "guestUser": "የእንግዳ ተጠቃሚ",
+  "guestFreeToJoin": "ለመቀላቀል ነፃ ነው",
+  "guestUnlockTitle": "ሙሉ መዳረሻ ያግኙ",
+  "guestUnlockSubtitle": "ነፃ መለያ ፍጠሩ — አደጋዎችን ሪፖርት ያድርጉ፣ ጉዳዮችዎን ይከታተሉ፣ ሽልማቶችን ያግኙ እና በባህር ዳር የቀጥታ ማሳወቂያዎችን ይቀበሉ።",
+  "guestFeatureReport": "አደጋ ሪፖርት ያድርጉ",
+  "guestFeatureTrack": "ጉዳዮችን ይከታተሉ",
+  "guestFeatureRewards": "ሽልማቶችን ያግኙ",
+  "guestFeatureAlerts": "የቀጥታ ማሳወቂያዎች",
+  "guestSignInCta": "ነፃ መለያ ፍጠሩ",
+  "guestContactSection": "የእውቂያ መረጃ",
+  "guestContactPhone": "የእውቂያ ስልክ ቁጥር",
+  "navHome":     "ዋና ገጽ",
+  "navServices": "አገልግሎቶች",
+  "navProfile":  "መገለጫ",
+  "navReports":  "ሪፖርቶች",
+  "navSettings": "ቅንብሮች",
+  "rdReportedAt": "የተዘገበበት ሰዓት {time}",
+"@rdReportedAt": {
+  "placeholders": {
+    "time": { "type": "String" }
+  }
+},
+"rdSectionDescription": "መግለጫ",
+"rdSectionLocation": "አካባቢ",
+"rdLocationSubtitle": "ባህር ዳር · ቀበሌ",
+"rdEmergencyReport": "የአደጋ ሪፖርት",
+"rdUpdateDetails": "ዝርዝር አዘምን",
+"rdArchiveTitle": "ሪፖርቱን ማህደር አድርግ?",
+"rdArchiveMessage": "ይህ ሪፖርት ከአሁኑ እይታዎ ይደበቃል።",
+"rdKeep": "አቆይ",
+"rdArchive": "ማህደር አድርግ",
+"rdUpdateReport": "ሪፖርት አዘምን",
+"rdFieldKebele": "ቀበሌ",
+"rdFieldDescription": "መግለጫ",
+"rdDiscard": "ተው",
+"rdSaveChanges": "ለውጦችን አስቀምጥ"
 }

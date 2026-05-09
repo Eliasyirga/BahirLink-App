@@ -1,59 +1,68 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ServiceCategoryService {
-  // Use 10.0.2.2 for Android Emulator, 127.0.0.1 for iOS, or your Local IP for physical devices
-  static const String baseUrl = "http://localhost:5000/api/serviceCategory";
+  static String get serverUrl {
+    if (kIsWeb) return "http://localhost:5000";
+    if (Platform.isAndroid) return "http://10.0.2.2:5000";
+    return "http://localhost:5000";
+  }
 
-  /// Fetches service categories based on a specific Service Type ID.
-  static Future<List<Map<String, dynamic>>> getCategoriesByServiceType(
-    String serviceTypeId,
-  ) async {
+  static String get baseUrl => "$serverUrl/api/serviceCategory";
+
+  /// Fetch categories for a specific service type ID with localization.
+  /// Backend resolves the locale via the Accept-Language header —
+  /// every item's [name] is a plain resolved string, just like CategoryService.
+  static Future<List<dynamic>> getCategoriesByServiceType(
+    String serviceTypeId, {
+    String lang = 'en',
+  }) async {
     try {
-      final response = await http
-          .get(Uri.parse("$baseUrl/type/$serviceTypeId"))
-          .timeout(const Duration(seconds: 10));
+      final response = await http.get(
+        Uri.parse("$baseUrl/type/$serviceTypeId"),
+        headers: {
+          "Content-Type"   : "application/json",
+          "Accept-Language": lang,
+        },
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final decoded = jsonDecode(response.body);
 
-        // ✅ Backend standard: { success: true, count: X, data: [...] }
-        List<dynamic> rawList = [];
-        if (data is Map && data.containsKey("data")) {
-          rawList = data["data"];
-        } else if (data is Map && data.containsKey("categories")) {
-          rawList = data["categories"];
-        } else if (data is List) {
-          rawList = data;
-        }
+        final List<dynamic> data = switch (decoded) {
+          Map d when d.containsKey('data')       => d['data']       as List? ?? [],
+          Map d when d.containsKey('categories') => d['categories'] as List? ?? [],
+          List l                                 => l,
+          _                                      => [],
+        };
 
-        return rawList.map((item) {
-          return {
-            "id": item["id"]?.toString() ?? "",
-            // ✅ CRITICAL: Do NOT use .toString() here. 
-            // Keep it as a Map so you can do name['en'] or name['am']
-            "name": item["name"], 
-            "description": item["description"],
-            "serviceTypeId": item["serviceTypeId"],
-          };
-        }).toList();
+        return data;
       } else {
-        debugPrint("❌ ServiceCategory Server Error: ${response.statusCode}");
+        debugPrint("Backend Error: ${response.body}");
         return [];
       }
     } catch (e) {
-      debugPrint("❌ ServiceCategory Connection Exception: $e");
-      return [];
+      debugPrint("Network Error: $e");
+      throw Exception("Could not connect to the server.");
     }
   }
 
-  /// ✅ UI Helper: Selects English or Amharic from the category name
-  static String getName(dynamic nameField, String langCode) {
-    if (nameField == null) return "Unknown";
-    if (nameField is Map) {
-      return nameField[langCode]?.toString() ?? nameField['en']?.toString() ?? "";
+  /// Fetch categories for a specific agency.
+  static Future<List<dynamic>> getCategoriesByAgency(
+    String agencyId, {
+    String lang = 'en',
+  }) async {
+    final response = await http.get(
+      Uri.parse("$baseUrl/by-agency/$agencyId"),
+      headers: {"Accept-Language": lang},
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+      return decoded["data"] ?? [];
     }
-    return nameField.toString();
+    return [];
   }
 }

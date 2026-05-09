@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:first_app/l10n/app_localizations.dart';
+import 'package:first_app/main.dart';
 import '../auth/login_page.dart';
 
 // ─── Design Tokens (mirrored from DashboardContent) ──────────────────────────
@@ -17,6 +20,9 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
+
+  String _currentLang     = 'en';
+  bool   _isSwitchingLang = false;
 
   late final AnimationController _fadeCtrl =
       AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
@@ -38,6 +44,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           CurvedAnimation(parent: _slideCtrl, curve: Curves.easeOutCubic));
 
   @override
+  void initState() {
+    super.initState();
+    _loadSavedLang();
+  }
+
+  @override
   void dispose() {
     _fadeCtrl.dispose();
     _pulseCtrl.dispose();
@@ -45,8 +57,82 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  // ── Load persisted language on startup ─────────────────────────────────────
+  Future<void> _loadSavedLang() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('language_code') ?? 'en';
+    if (mounted) setState(() => _currentLang = saved);
+  }
+
+  // ── Language switcher — identical logic to DashboardContent ───────────────
+  Future<void> _switchLanguage(String langCode) async {
+    if (_isSwitchingLang || langCode == _currentLang) return;
+
+    // 1. Persist
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('language_code', langCode);
+
+    if (!mounted) return;
+
+    // 2. Update app locale (rebuilds l10n strings across all pages)
+    MyApp.of(context)?.setLocale(Locale(langCode));
+
+    // 3. Update local state + show spinner
+    setState(() {
+      _currentLang     = langCode;
+      _isSwitchingLang = true;
+    });
+
+    // 4. Brief delay so spinner is visible, then clear
+    await Future.delayed(const Duration(milliseconds: 400));
+    if (mounted) setState(() => _isSwitchingLang = false);
+  }
+
+  // ── Language toggle widget — identical look to DashboardContent ────────────
+  Widget _buildLangToggle() {
+    final isAmharic = _currentLang == 'am';
+    return GestureDetector(
+      onTap: _isSwitchingLang
+          ? null
+          : () => _switchLanguage(isAmharic ? 'en' : 'am'),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: _isSwitchingLang
+              ? Colors.white.withOpacity(0.08)
+              : Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+        ),
+        child: _isSwitchingLang
+            ? const SizedBox(
+                width: 22, height: 14,
+                child: Center(
+                  child: SizedBox(
+                    width: 12, height: 12,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(Colors.white)),
+                  ),
+                ),
+              )
+            : Text(
+                isAmharic ? 'EN' : 'አማ', // shows what you WILL switch TO
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3),
+              ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
@@ -60,7 +146,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               fit: BoxFit.cover,
             ),
 
-            // ── Layer 2: Blue-tinted gradient overlay (dashboard palette) ──
+            // ── Layer 2: Blue-tinted gradient overlay ──────────────────────
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -76,7 +162,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
             ),
 
-            // ── Layer 3: Bottom dark scrim so content pops ─────────────────
+            // ── Layer 3: Bottom dark scrim ─────────────────────────────────
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -92,11 +178,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
             ),
 
-            // ── Layer 4: Decorative blobs (same as dashboard) ──────────────
-            Positioned(top: -90,  left: -70,  child: _blob(300, Colors.white, 0.04)),
+            // ── Layer 4: Decorative blobs ──────────────────────────────────
+            Positioned(top: -90,    left: -70,  child: _blob(300, Colors.white, 0.04)),
             Positioned(bottom: -110, right: -70, child: _blob(340, Colors.white, 0.05)),
-            Positioned(top: 60,  right: -40, child: _blob(160, Colors.white, 0.05)),
-            Positioned(top: 180, left: -30,  child: _blob(120, _T.accent,    0.10)),
+            Positioned(top: 60,    right: -40,  child: _blob(160, Colors.white, 0.05)),
+            Positioned(top: 180,   left: -30,   child: _blob(120, _T.accent,    0.10)),
 
             // ── Layer 5: Content ───────────────────────────────────────────
             SafeArea(
@@ -109,9 +195,19 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
+
+                        // ── Top bar: lang toggle flush to top-right ────────
+                        Align(
+                          alignment: Alignment.topRight,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: _buildLangToggle(),
+                          ),
+                        ),
+
                         const Spacer(flex: 2),
 
-                        // ── Pulsing logo rings (from dashboard splash) ─────
+                        // ── Pulsing logo rings ─────────────────────────────
                         ScaleTransition(
                           scale: _pulseAnim,
                           child: Stack(alignment: Alignment.center, children: [
@@ -120,7 +216,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                    color: Colors.white.withOpacity(0.10), width: 2),
+                                    color: Colors.white.withOpacity(0.10),
+                                    width: 2),
                               ),
                             ),
                             Container(
@@ -129,7 +226,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                 shape: BoxShape.circle,
                                 color: Colors.white.withOpacity(0.07),
                                 border: Border.all(
-                                    color: Colors.white.withOpacity(0.20), width: 1.5),
+                                    color: Colors.white.withOpacity(0.20),
+                                    width: 1.5),
                               ),
                             ),
                             Container(
@@ -164,9 +262,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         const SizedBox(height: 34),
 
                         // ── App name ──────────────────────────────────────
-                        const Text(
-                          "BahirLink",
-                          style: TextStyle(
+                        Text(
+                          l10n.appTitle,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 38,
                             fontWeight: FontWeight.w900,
@@ -176,7 +274,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
                         const SizedBox(height: 6),
 
-                        // ── Location pill (from dashboard header) ─────────
+                        // ── Tagline pill ──────────────────────────────────
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 6),
@@ -191,7 +289,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                 color: Colors.white.withOpacity(0.8), size: 13),
                             const SizedBox(width: 5),
                             Text(
-                              "Your city. Connected.",
+                              l10n.tagline,
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.88),
                                 fontSize: 12,
@@ -206,8 +304,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
                         // ── Description ───────────────────────────────────
                         Text(
-                          "Your trusted public service & emergency response app —"
-                          " connecting Bahir Dar with reliable assistance.",
+                          l10n.homeDescription,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.65),
@@ -223,11 +320,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            _featurePill(Icons.crisis_alert_rounded,    "Emergency"),
+                            _featurePill(Icons.crisis_alert_rounded,
+                                l10n.homeFeatureEmergency),
                             const SizedBox(width: 10),
-                            _featurePill(Icons.account_balance_rounded, "Services"),
+                            _featurePill(Icons.account_balance_rounded,
+                                l10n.homeFeatureServices),
                             const SizedBox(width: 10),
-                            _featurePill(Icons.cell_tower_rounded,      "Live Reports"),
+                            _featurePill(Icons.cell_tower_rounded,
+                                l10n.homeFeatureLiveReports),
                           ],
                         ),
 
@@ -240,7 +340,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
                               foregroundColor: _T.primary,
-                              padding: const EdgeInsets.symmetric(vertical: 17),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 17),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                               ),
@@ -252,9 +353,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                               MaterialPageRoute(
                                   builder: (_) => const LoginPage()),
                             ),
-                            child: const Text(
-                              "Let's Start",
-                              style: TextStyle(
+                            child: Text(
+                              l10n.homeLetsStart,
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 0.3,
@@ -273,7 +374,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                 builder: (_) => const LoginPage()),
                           ),
                           child: Text(
-                            "Already have an account? Sign in",
+                            l10n.homeAlreadyHaveAccount,
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.60),
                               fontSize: 13,
@@ -295,7 +396,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // ── Feature pill ─────────────────────────────────────────────────────────────
+  // ── Feature pill ──────────────────────────────────────────────────────────
   Widget _featurePill(IconData icon, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -309,12 +410,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         const SizedBox(width: 5),
         Text(label,
             style: const TextStyle(
-                color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w700)),
       ]),
     );
   }
 
-  // ── Blob (identical to dashboard) ────────────────────────────────────────────
+  // ── Blob ──────────────────────────────────────────────────────────────────
   Widget _blob(double size, Color color, double opacity) => Container(
         width: size, height: size,
         decoration: BoxDecoration(

@@ -1,14 +1,17 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:first_app/l10n/app_localizations.dart';
 import 'package:first_app/services/kebele_service.dart';
+import 'package:first_app/services/emergency_type_service.dart';
+import 'package:first_app/model/emergency_type.dart';
 import 'package:first_app/services/case_service.dart';
 import '../categories/category_selection_page.dart';
 import '../cases/case_detail_page.dart';
-import 'package:first_app/presentation/auth/signup_page.dart'; // SignUpPage
+import 'package:first_app/presentation/auth/signup_page.dart';
+import 'package:first_app/main.dart';
 
 // ─── Design Tokens (identical to user dashboard) ──────────────────────────────
 class _C {
@@ -38,11 +41,21 @@ class GuestDashboardContent extends StatefulWidget {
 class _GuestDashboardContentState extends State<GuestDashboardContent>
     with TickerProviderStateMixin {
 
-  late Future<Map<String, dynamic>> _dashboardData;
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  bool _isLoading       = true;
+  bool _isSwitchingLang = false;
+
+  List<dynamic>       _cases          = [];
+  List<EmergencyType> _emergencyTypes = [];
+  Map<String, String> _kebeleMap      = {};
+
+  String _currentLang = 'en';
+
   final PageController _pageCtrl = PageController(viewportFraction: 0.88);
   Timer? _autoScroll;
   int _pageIdx = 0;
-  List<dynamic> _cases = [];
 
   late final AnimationController _fadeCtrl =
       AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
@@ -53,7 +66,7 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
   @override
   void initState() {
     super.initState();
-    _dashboardData = _loadData();
+    _initLangAndLoad();
   }
 
   @override
@@ -64,36 +77,72 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
     super.dispose();
   }
 
-  // ── Data ─────────────────────────────────────────────────────────────────
-  Future<Map<String, dynamic>> _loadData() async {
+  // ── Init: read saved language, then load everything ────────────────────────
+  Future<void> _initLangAndLoad() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('language_code') ?? 'en';
+    if (mounted) setState(() => _currentLang = saved);
+    await _loadData(lang: saved);
+  }
+
+  // ── Master load ────────────────────────────────────────────────────────────
+  Future<void> _loadData({String? lang}) async {
+    final useLang = lang ?? _currentLang;
+    if (mounted) setState(() => _isLoading = true);
+    try {
+      await Future.wait([
+        _fetchKebeles(),
+        _fetchEmergencyTypes(useLang),
+        _fetchCases(useLang),
+      ]);
+      _startScroll();
+      _fadeCtrl.forward();
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ── Fetchers ───────────────────────────────────────────────────────────────
+  Future<void> _fetchKebeles() async {
     try {
       final kebeleList = await KebeleService().getAllKebeles();
-      final Map<String, String> kebeleMap = {
-        for (var k in kebeleList) k['id'].toString(): k['name'].toString()
-      };
-
-      final typeRes = await http.get(Uri.parse("http://localhost:5000/api/emergencyType"));
-      final decodedTypes = jsonDecode(typeRes.body);
-      final List<dynamic> types = (decodedTypes is Map)
-          ? List<dynamic>.from(decodedTypes["data"] ?? [])
-          : [];
-
-      final cases = await CaseService.getAllCases() ?? [];
-      _cases = cases;
-      if (_cases.isNotEmpty) _startScroll();
-      _fadeCtrl.forward();
-
-      return {'kebeleMap': kebeleMap, 'types': types, 'cases': cases};
+      if (mounted) {
+        setState(() {
+          _kebeleMap = {
+            for (var k in kebeleList) k['id'].toString(): k['name'].toString()
+          };
+        });
+      }
     } catch (e) {
-      debugPrint("Guest dashboard error: $e");
-      return {'kebeleMap': <String, String>{}, 'types': [], 'cases': []};
+      debugPrint("Guest kebele fetch error: $e");
+    }
+  }
+
+  Future<void> _fetchEmergencyTypes(String lang) async {
+    try {
+      final types = await EmergencyTypeService.fetchEmergencyTypes(lang: lang);
+      if (mounted) setState(() => _emergencyTypes = List<EmergencyType>.from(types));
+    } catch (e) {
+      debugPrint("Guest emergency types fetch error: $e");
+      if (mounted) setState(() => _emergencyTypes = []);
+    }
+  }
+
+  Future<void> _fetchCases(String lang) async {
+    try {
+      final fetched = await CaseService.getAllCases(lang: lang) ?? [];
+      if (mounted) setState(() => _cases = List<dynamic>.from(fetched));
+    } catch (e) {
+      debugPrint("Guest case fetch error: $e");
+      if (mounted) setState(() => _cases = []);
     }
   }
 
   void _startScroll() {
     _autoScroll?.cancel();
+    if (_cases.isEmpty) return;
     _autoScroll = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (_pageCtrl.hasClients) {
+      if (_pageCtrl.hasClients && _cases.isNotEmpty) {
         _pageIdx = (_pageIdx + 1) % _cases.length;
         _pageCtrl.animateToPage(_pageIdx,
             duration: const Duration(milliseconds: 800), curve: Curves.easeInOutCubic);
@@ -101,52 +150,68 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
     });
   }
 
+  // ── Language switcher — mirrors user dashboard exactly ─────────────────────
+  Future<void> _switchLanguage(String langCode) async {
+    if (_isSwitchingLang || langCode == _currentLang) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('language_code', langCode);
+
+    if (!mounted) return;
+
+    MyApp.of(context)?.setLocale(Locale(langCode));
+
+    setState(() {
+      _currentLang     = langCode;
+      _isSwitchingLang = true;
+    });
+
+    try {
+      await Future.wait([
+        _fetchEmergencyTypes(langCode),
+        _fetchCases(langCode),
+      ]);
+    } finally {
+      if (mounted) setState(() => _isSwitchingLang = false);
+    }
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [_C.grad1, _C.primary, _C.grad2],
+          ),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+        ),
+      );
+    }
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: _C.bg,
-        body: FutureBuilder<Map<String, dynamic>>(
-          future: _dashboardData,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft, end: Alignment.bottomRight,
-                    colors: [_C.grad1, _C.primary, _C.grad2],
-                  ),
-                ),
-                child: const Center(
-                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                ),
-              );
-            }
-
-            final data = snapshot.data!;
-            final cases = data['cases'] as List<dynamic>;
-            final types = data['types'] as List<dynamic>;
-            final kebeleMap = data['kebeleMap'] as Map<String, String>;
-
-            return FadeTransition(
-              opacity: _fadeAnim,
-              child: CustomScrollView(
-                physics: const BouncingScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(child: _buildHeader()),
-                  SliverToBoxAdapter(child: _buildBody(cases, types, kebeleMap)),
-                ],
-              ),
-            );
-          },
+        body: FadeTransition(
+          opacity: _fadeAnim,
+          child: CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(child: _buildHeader()),
+              SliverToBoxAdapter(child: _buildBody()),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // ── Header (same as user dashboard) ──────────────────────────────────────
+  // ── Header ────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Container(
       decoration: const BoxDecoration(
@@ -163,7 +228,6 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // Top bar
             Row(children: [
               // Logo pill
               Container(
@@ -184,11 +248,14 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
                     ),
                   ),
                   const SizedBox(width: 7),
-                  const Text("BahirLink",
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15)),
+                  Text(l10n.appTitle,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15)),
                 ]),
               ),
               const Spacer(),
+              // Language toggle
+              _buildLangToggle(),
+              const SizedBox(width: 10),
               // Guest badge
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -200,7 +267,7 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
                 child: Row(children: [
                   const Icon(Icons.lock_outline_rounded, color: Colors.white70, size: 12),
                   const SizedBox(width: 5),
-                  Text("Guest Mode",
+                  Text(l10n.guestMode,
                       style: TextStyle(color: Colors.white.withOpacity(0.85),
                           fontSize: 11, fontWeight: FontWeight.w700)),
                 ]),
@@ -220,22 +287,18 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
                 ),
               ),
             ]),
-
             const SizedBox(height: 22),
-
-            // Greeting row
             Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              const Expanded(
+              Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text("Welcome 👋",
-                      style: TextStyle(color: Colors.white60, fontSize: 12.5, fontWeight: FontWeight.w500)),
-                  SizedBox(height: 3),
-                  Text("Guest User",
-                      style: TextStyle(color: Colors.white, fontSize: 22,
+                  Text(l10n.goodMorning,
+                      style: const TextStyle(color: Colors.white60, fontSize: 12.5, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 3),
+                  Text(l10n.guestUser,
+                      style: const TextStyle(color: Colors.white, fontSize: 22,
                           fontWeight: FontWeight.w800, letterSpacing: -0.4, height: 1.1)),
                 ]),
               ),
-              // Location pill
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
@@ -246,7 +309,7 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Icon(Icons.location_on_rounded, color: Colors.white.withOpacity(0.8), size: 12),
                   const SizedBox(width: 4),
-                  Text("Bahir Dar",
+                  Text(l10n.locationCity,
                       style: TextStyle(color: Colors.white.withOpacity(0.85),
                           fontSize: 11, fontWeight: FontWeight.w600)),
                 ]),
@@ -258,30 +321,103 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
     );
   }
 
+  // ── Language toggle — identical to user dashboard ──────────────────────────
+  Widget _buildLangToggle() {
+    final isAmharic = _currentLang == 'am';
+    return GestureDetector(
+      onTap: _isSwitchingLang ? null : () => _switchLanguage(isAmharic ? 'en' : 'am'),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: _isSwitchingLang
+              ? Colors.white.withOpacity(0.08)
+              : Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+        ),
+        child: _isSwitchingLang
+            ? const SizedBox(
+                width: 22, height: 14,
+                child: Center(
+                  child: SizedBox(
+                    width: 12, height: 12,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                  ),
+                ),
+              )
+            : Text(
+                isAmharic ? 'EN' : 'አማ',
+                style: const TextStyle(
+                    color: Colors.white, fontSize: 11,
+                    fontWeight: FontWeight.w800, letterSpacing: 0.3),
+              ),
+      ),
+    );
+  }
+
   // ── Body ──────────────────────────────────────────────────────────────────
-  Widget _buildBody(List<dynamic> cases, List<dynamic> types, Map<String, String> kebeleMap) {
+  Widget _buildBody() {
+    // Snapshot local references — prevents any mid-build list mutation issues
+    final safeCases = List<dynamic>.from(_cases);
+    final safeTypes = List<EmergencyType>.from(_emergencyTypes);
+
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 24),
-      if (cases.isNotEmpty) ...[
-        _SectionLabel(title: "Live Reports", icon: Icons.cell_tower_rounded,
-            badge: "${cases.length} Active", badgeColor: _C.green),
+      if (safeCases.isNotEmpty) ...[
+        _SectionLabel(
+          title: l10n.liveReports,
+          icon: Icons.cell_tower_rounded,
+          badge: l10n.activeBadge(safeCases.length.toString()),
+          badgeColor: _C.green,
+        ),
         const SizedBox(height: 12),
-        _buildCaseSlider(cases, kebeleMap),
+        _buildCaseSlider(safeCases),
         const SizedBox(height: 10),
-        _buildDots(cases.length),
+        _buildDots(safeCases.length),
       ],
       const SizedBox(height: 26),
-      _SectionLabel(title: "Emergency Assist", icon: Icons.crisis_alert_rounded),
+      _SectionLabel(title: l10n.emergencyAssist, icon: Icons.crisis_alert_rounded),
       const SizedBox(height: 12),
-      _buildEmergencyGrid(types),
+      _isSwitchingLang
+          ? _buildGridShimmer(safeTypes.isNotEmpty ? safeTypes.length : 6)
+          : _buildEmergencyGrid(safeTypes),
       const SizedBox(height: 32),
       _buildSignupCard(),
       const SizedBox(height: 100),
     ]);
   }
 
+  // ── Shimmer placeholder during language re-fetch ───────────────────────────
+  Widget _buildGridShimmer(int itemCount) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.88),
+        itemCount: itemCount,
+        itemBuilder: (_, __) => Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+              colors: [
+                _C.primary.withOpacity(0.45),
+                _C.grad2.withOpacity(0.35),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── Case Slider ───────────────────────────────────────────────────────────
-  Widget _buildCaseSlider(List<dynamic> cases, Map<String, String> kebeleMap) {
+  Widget _buildCaseSlider(List<dynamic> cases) {
     return SizedBox(
       height: 200,
       child: PageView.builder(
@@ -289,15 +425,22 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
         itemCount: cases.length,
         onPageChanged: (i) => setState(() => _pageIdx = i),
         itemBuilder: (context, i) {
-          final c = cases[i];
-          final location = kebeleMap[c['lastSeenLocationId']?.toString()] ??
-              c['location'] ?? "Bahir Dar";
-          final status = (c['status'] ?? '').toLowerCase();
-          final (sLabel, sColor) = switch (status) {
-            'pending'     => ('Pending', _C.orange),
-            'in_progress' => ('In Progress', _C.accent),
-            _             => (status.toUpperCase(), _C.green),
-          };
+          final c = cases[i] as Map<String, dynamic>? ?? {};
+          final location = _kebeleMap[c['lastSeenLocationId']?.toString()] ??
+              c['location'] as String? ?? l10n.locationCity;
+          final status = (c['status'] as String? ?? '').toLowerCase();
+          final Color sColor;
+          final String sLabel;
+          if (status == 'pending') {
+            sColor = _C.orange;
+            sLabel = l10n.statusPending;
+          } else if (status == 'in_progress') {
+            sColor = _C.accent;
+            sLabel = l10n.statusInProgress;
+          } else {
+            sColor = _C.green;
+            sLabel = status.toUpperCase();
+          }
 
           return GestureDetector(
             onTap: () => Navigator.push(context,
@@ -325,7 +468,11 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                        colors: [Colors.transparent, Colors.black.withOpacity(0.18), Colors.black.withOpacity(0.78)],
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.18),
+                          Colors.black.withOpacity(0.78),
+                        ],
                         stops: const [0.0, 0.45, 1.0],
                       ),
                     ),
@@ -335,13 +482,15 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Row(children: [
                         _GlassBadge(
-                            label: c['CaseType']?['name'] ?? c['caseType']?['name'] ?? "Report",
+                            label: (c['CaseType'] as Map?)?['name'] as String? ??
+                                   (c['caseType'] as Map?)?['name'] as String? ??
+                                   l10n.defaultCaseType,
                             icon: Icons.report_rounded),
                         const Spacer(),
                         _ColorBadge(label: sLabel, color: sColor),
                       ]),
                       const Spacer(),
-                      Text(c['fullName'] ?? "Incident Reported",
+                      Text(c['fullName'] as String? ?? l10n.incidentReported,
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800,
                               fontSize: 15, letterSpacing: -0.2),
                           maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -360,7 +509,7 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
                           child: Row(children: [
                             const Icon(Icons.monetization_on_rounded, color: Colors.white, size: 11),
                             const SizedBox(width: 4),
-                            Text("${c['reward'] ?? '0'} ETB",
+                            Text(l10n.rewardLabel(c['reward']?.toString() ?? '0'),
                                 style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
                           ]),
                         ),
@@ -395,8 +544,9 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
     );
   }
 
-  // ── Emergency Grid (same unified blue style) ──────────────────────────────
-  Widget _buildEmergencyGrid(List<dynamic> types) {
+  // ── Emergency Grid ─────────────────────────────────────────────────────────
+  Widget _buildEmergencyGrid(List<EmergencyType> types) {
+    if (types.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: GridView.builder(
@@ -410,8 +560,8 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
           return GestureDetector(
             onTap: () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => CategorySelectionPage(
-                emergencyTypeId: type["id"].toString(),
-                emergencyTypeName: type["name"],
+                emergencyTypeId: type.id.toString(),
+                emergencyTypeName: type.name,
               ),
             )),
             child: Container(
@@ -429,12 +579,12 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
                   width: 48, height: 48,
                   decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.18), shape: BoxShape.circle),
-                  child: Icon(_getIcon(type["name"] ?? ""), color: Colors.white, size: 22),
+                  child: Icon(_getIcon(type.name), color: Colors.white, size: 22),
                 ),
                 const SizedBox(height: 9),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 5),
-                  child: Text(type["name"] ?? "",
+                  child: Text(type.name,
                       textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
                           color: Colors.white, height: 1.3)),
@@ -447,7 +597,7 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
     );
   }
 
-  // ── Sign Up Card ──────────────────────────────────────────────────────────
+  // ── Sign Up Card ───────────────────────────────────────────────────────────
   Widget _buildSignupCard() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -463,7 +613,6 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
             color: _C.primary.withOpacity(0.35), blurRadius: 24, offset: const Offset(0, 8))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Icon + badge row
         Row(children: [
           Container(
             width: 44, height: 44,
@@ -478,27 +627,25 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
               color: _C.green.withOpacity(0.9),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Text("Free to Join",
-                style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+            child: Text(l10n.guestFreeToJoin,
+                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
           ),
         ]),
         const SizedBox(height: 16),
-        const Text("Unlock Full Access",
-            style: TextStyle(color: Colors.white, fontSize: 20,
+        Text(l10n.guestUnlockTitle,
+            style: const TextStyle(color: Colors.white, fontSize: 20,
                 fontWeight: FontWeight.w900, letterSpacing: -0.4)),
         const SizedBox(height: 6),
-        Text("Report incidents, track cases, earn rewards and stay connected with your city.",
+        Text(l10n.guestUnlockSubtitle,
             style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12.5, height: 1.5)),
         const SizedBox(height: 20),
-        // Feature pills
         Wrap(spacing: 8, runSpacing: 8, children: [
-          _featurePill(Icons.report_rounded, "Report Cases"),
-          _featurePill(Icons.track_changes_rounded, "Track Status"),
-          _featurePill(Icons.monetization_on_rounded, "Earn Rewards"),
-          _featurePill(Icons.notifications_active_rounded, "Get Alerts"),
+          _featurePill(Icons.report_rounded,               l10n.guestFeatureReport),
+          _featurePill(Icons.track_changes_rounded,        l10n.guestFeatureTrack),
+          _featurePill(Icons.monetization_on_rounded,      l10n.guestFeatureRewards),
+          _featurePill(Icons.notifications_active_rounded, l10n.guestFeatureAlerts),
         ]),
         const SizedBox(height: 20),
-        // CTA Button — navigates to sign in
         GestureDetector(
           onTap: () => Navigator.push(context,
               MaterialPageRoute(builder: (_) => const SignUpPage())),
@@ -512,10 +659,10 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
                   color: Colors.black.withOpacity(0.12), blurRadius: 12, offset: const Offset(0, 4))],
             ),
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Text("Sign In / Create Account",
-                  style: TextStyle(color: _C.primary, fontSize: 14, fontWeight: FontWeight.w800)),
+              Text(l10n.guestSignInCta,
+                  style: const TextStyle(color: _C.primary, fontSize: 14, fontWeight: FontWeight.w800)),
               const SizedBox(width: 8),
-              Icon(Icons.arrow_forward_rounded, color: _C.primary, size: 16),
+              const Icon(Icons.arrow_forward_rounded, color: _C.primary, size: 16),
             ]),
           ),
         ),
@@ -541,10 +688,10 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
 
   IconData _getIcon(String name) {
     final n = name.toLowerCase();
-    if (n.contains("fire"))    return Icons.local_fire_department_rounded;
-    if (n.contains("crime"))   return Icons.local_police_rounded;
-    if (n.contains("medical")) return Icons.local_hospital_rounded;
-    if (n.contains("flood"))   return Icons.flood_rounded;
+    if (n.contains("fire"))     return Icons.local_fire_department_rounded;
+    if (n.contains("crime"))    return Icons.local_police_rounded;
+    if (n.contains("medical"))  return Icons.local_hospital_rounded;
+    if (n.contains("flood"))    return Icons.flood_rounded;
     if (n.contains("electric")) return Icons.electric_bolt_rounded;
     if (n.contains("accident")) return Icons.car_crash_rounded;
     return Icons.crisis_alert_rounded;
@@ -589,8 +736,8 @@ class _SectionLabel extends StatelessWidget {
             ]),
           )
         else
-          const Text("See all",
-              style: TextStyle(color: _C.accent, fontSize: 12, fontWeight: FontWeight.w600)),
+          Text(AppLocalizations.of(context)!.seeAll,
+              style: const TextStyle(color: _C.accent, fontSize: 12, fontWeight: FontWeight.w600)),
       ]),
     );
   }

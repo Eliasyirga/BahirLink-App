@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:first_app/l10n/app_localizations.dart';
 import '../../core/widgets/bottom_navbar.dart';
 import 'dashboard_content.dart';
 import '../reports/service_report_page.dart';
@@ -8,12 +9,12 @@ import '../settings/settings_page.dart';
 
 class DashboardPage extends StatefulWidget {
   final String userId;
-  final String token; // 1. Added token parameter
+  final String token;
 
   const DashboardPage({
     super.key,
     required this.userId,
-    required this.token, // Required in constructor
+    required this.token,
   });
 
   @override
@@ -25,20 +26,21 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     return Scaffold(
-      // 2. Added IndexedStack to preserve scroll state of pages when switching tabs
       body: IndexedStack(
         index: _selectedIndex,
         children: [
           const DashboardContent(),
           ServiceReportPage(
             userId: widget.userId,
-            token: widget.token, // Passing token here
+            token: widget.token,
           ),
           const ProfilePage(),
           ReportsPage(
             userId: widget.userId,
-            token: widget.token, // Passing token here
+            token: widget.token,
           ),
           const SettingsPage(),
         ],
@@ -46,11 +48,14 @@ class _DashboardPageState extends State<DashboardPage> {
       bottomNavigationBar: BahirBottomNavBar(
         selectedIndex: _selectedIndex,
         onItemSelected: (index) => setState(() => _selectedIndex = index),
+        labels: [
+          l10n.navHome,
+          l10n.navServices,
+          l10n.navProfile,
+          l10n.navReports,
+          l10n.navSettings,
+        ],
       ),
     );
   }
-
-  // Note: I replaced the switch statement with IndexedStack above.
-  // It's more efficient for BottomNavBars as it doesn't "re-init"
-  // the pages every time you tap a tab.
 }

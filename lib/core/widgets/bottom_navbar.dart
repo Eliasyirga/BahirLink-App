@@ -1,31 +1,32 @@
 import 'package:flutter/material.dart';
 
-// ─── Design Tokens (same as dashboard) ───────────────────────────────────────
+// ─── Design Tokens ────────────────────────────────────────────────────────────
 class _T {
   static const primary  = Color(0xFF1A3BAA);
   static const grad1    = Color(0xFF0D2580);
   static const grad2    = Color(0xFF2D5BE3);
-  static const accent   = Color(0xFF4B83F0);
-  static const accentBg = Color(0xFFD6E4FF);
   static const textMid  = Color(0xFF5569A0);
 }
 
 class BahirBottomNavBar extends StatelessWidget {
   final int selectedIndex;
   final Function(int) onItemSelected;
+  // Labels passed in from the parent so they react to l10n changes
+  final List<String> labels;
 
   const BahirBottomNavBar({
     super.key,
     required this.selectedIndex,
     required this.onItemSelected,
+    required this.labels,
   });
 
-  static const _items = [
-    (icon: Icons.home_rounded,        label: "Home"),
-    (icon: Icons.build_circle_rounded, label: "Services"),
-    (icon: Icons.person_rounded,       label: "Profile"),
-    (icon: Icons.bar_chart_rounded,    label: "Reports"),
-    (icon: Icons.settings_rounded,     label: "Settings"),
+  static const _icons = [
+    Icons.home_rounded,
+    Icons.build_circle_rounded,
+    Icons.person_rounded,
+    Icons.bar_chart_rounded,
+    Icons.settings_rounded,
   ];
 
   @override
@@ -47,12 +48,12 @@ class BahirBottomNavBar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: List.generate(
-          _items.length,
+          _icons.length,
           (i) => _NavItem(
-            icon: _items[i].icon,
-            label: _items[i].label,
+            icon:       _icons[i],
+            label:      labels[i],
             isSelected: i == selectedIndex,
-            onTap: () => onItemSelected(i),
+            onTap:      () => onItemSelected(i),
           ),
         ),
       ),

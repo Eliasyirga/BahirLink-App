@@ -33,8 +33,8 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
   final TextEditingController _searchController = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     _fetchCategories();
   }
 
@@ -58,8 +58,8 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
     sorted.sort((a, b) {
       String nameA = (a["name"] ?? "").toString().toLowerCase();
       String nameB = (b["name"] ?? "").toString().toLowerCase();
-      bool isAOther = nameA.contains("other");
-      bool isBOther = nameB.contains("other");
+      bool isAOther = nameA == "others" || nameA == "other";
+      bool isBOther = nameB == "others" || nameB == "other";
       if (isAOther && !isBOther) return 1;
       if (!isAOther && isBOther) return -1;
       return nameA.compareTo(nameB);
@@ -69,19 +69,25 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
 
   Future<void> _fetchCategories() async {
     try {
-      final data = await CategoryService.getCategories(widget.emergencyTypeId);
-      final List<Map<String, dynamic>> parsedData =
-          (data as List).map((e) => Map<String, dynamic>.from(e)).toList();
-      if (mounted) {
-        setState(() {
-          categories = _sortCategories(parsedData);
-          filteredCategories = categories;
-          isLoading = false;
-        });
-      }
+      final String currentLang = Localizations.localeOf(context).languageCode;
+
+      final data = await CategoryService.getCategories(
+        widget.emergencyTypeId,
+        lang: currentLang,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        categories = _sortCategories(
+          (data as List).map((e) => Map<String, dynamic>.from(e)).toList(),
+        );
+        filteredCategories = categories;
+        isLoading = false;
+      });
     } catch (e) {
       debugPrint("Error fetching categories: $e");
-      if (mounted) setState(() => isLoading = false);
+      if (!mounted) return;
+      setState(() => isLoading = false);
     }
   }
 
@@ -222,7 +228,7 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
   }
 
   Widget _buildCategoryCard(String name, String id) {
-    bool isOther = name.toLowerCase().contains("other");
+    bool isOther = name.toLowerCase() == "others" || name.toLowerCase() == "other";
 
     return Container(
       decoration: BoxDecoration(

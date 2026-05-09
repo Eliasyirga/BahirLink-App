@@ -1,8 +1,9 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:first_app/l10n/app_localizations.dart';
+import 'package:first_app/main.dart';
 import '../../services/reports_service.dart';
 import './report_detail_page.dart';
 
@@ -37,121 +38,176 @@ class _ReportsPageState extends State<ReportsPage>
 
   AppLocalizations get l10n => AppLocalizations.of(context)!;
 
-  List<Map<String, dynamic>> emergencies = [];
-  bool loading = true;
+  // ── State ──────────────────────────────────────────────────────────────────
+  List<Map<String, dynamic>> _emergencies    = [];
+  /// Safe accessor — always returns a typed, non-null list.
+  List<Map<String, dynamic>> get _safeEmergencies =>
+      List<Map<String, dynamic>>.from(
+        _emergencies.whereType<Map>().map((e) => Map<String, dynamic>.from(e)),
+      );
+  bool                       _isLoading      = true;
+  bool                       _isSwitchingLang = false;
+  String?                    _error;
+  String                     _currentLang    = 'en';
 
-  late final AnimationController _fadeCtrl =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
-  late final Animation<double> _fadeAnim =
-      CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+  // ── Animation ──────────────────────────────────────────────────────────────
+  late AnimationController _fadeCtrl;
+  late Animation<double>   _fadeAnim;
+  bool _ctrlReady = false;
 
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
-    fetchInitialData();
+    _fadeCtrl  = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600));
+    _fadeAnim  = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+    _ctrlReady = true;
+    _initLangAndLoad();
+  }
+
+  /// Fires whenever the locale changes (e.g. dashboard language switcher).
+  /// Keeps this page in sync even when buried in the IndexedStack.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final newLang = Localizations.localeOf(context).languageCode;
+    if (newLang != _currentLang && !_isLoading) {
+      _currentLang = newLang;
+      _fetchEmergencies(newLang); // network fetch — mirrors ServiceReportPage
+    }
   }
 
   @override
   void dispose() {
-    _fadeCtrl.dispose();
+    if (_ctrlReady) {
+      _ctrlReady = false;
+      _fadeCtrl.dispose();
+    }
     super.dispose();
   }
 
-  String? _extractId(dynamic field) {
-    if (field == null) return null;
-    if (field is String) return field;
-    if (field is Map) return field['id']?.toString() ?? field['_id']?.toString();
-    return field.toString();
+  void _safeForward() {
+    if (_ctrlReady && mounted) _fadeCtrl.forward(from: 0);
   }
+
+  // ── Init: read saved language then load ───────────────────────────────────
+  Future<void> _initLangAndLoad() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('language_code') ?? 'en';
+    if (mounted) setState(() => _currentLang = saved);
+    await _loadData(lang: saved);
+  }
+
+  // ── Master load ────────────────────────────────────────────────────────────
+  Future<void> _loadData({String? lang}) async {
+    final useLang = lang ?? _currentLang;
+    if (mounted) setState(() { _isLoading = true; _error = null; });
+    try {
+      await _fetchEmergencies(useLang);
+      _safeForward();
+    } catch (e) {
+      debugPrint('❌ ReportsPage._loadData error: $e');
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ── Fetcher — network, passes lang as Accept-Language ─────────────────────
+  Future<void> _fetchEmergencies(String lang) async {
+    final raw = await ReportsService.fetchUserEmergencies(
+      widget.userId,
+      lang:  lang,
+      token: widget.token,
+    );
+    // Defensive cast: on Flutter Web generics aren't enforced at runtime,
+    // so we explicitly filter and cast every element.
+    final clean = raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((m) => m.isNotEmpty)
+        .toList();
+    if (mounted) setState(() => _emergencies = clean);
+  }
+
+  // ── Language switcher ──────────────────────────────────────────────────────
+  Future<void> _switchLanguage(String langCode) async {
+    if (_isSwitchingLang || langCode == _currentLang) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('language_code', langCode);
+    if (!mounted) return;
+    // setLocale triggers didChangeDependencies on ALL alive IndexedStack pages
+    MyApp.of(context)?.setLocale(Locale(langCode));
+    setState(() { _currentLang = langCode; _isSwitchingLang = true; });
+    try {
+      await _fetchEmergencies(langCode);
+    } finally {
+      if (mounted) setState(() => _isSwitchingLang = false);
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  String _loc(dynamic field) =>
+      ReportsService.extractText(field, lang: _currentLang);
 
   String _formatDate(dynamic dateStr) {
     if (dateStr == null) return l10n.recently;
     try {
       final dt = DateTime.parse(dateStr.toString());
       return DateFormat('MMM dd, hh:mm a').format(dt);
-    } catch (_) {
-      return l10n.recently;
-    }
+    } catch (_) { return l10n.recently; }
   }
 
-  Future<void> fetchInitialData() async {
-    if (!mounted) return;
-    setState(() => loading = true);
-    try {
-      final emergenciesResponse =
-          await ReportsService.fetchUserEmergencies(widget.userId);
-      final categories = await ReportsService.fetchCategories();
-
-      final Map<String, String> categoryMap = {
-        for (var c in categories) c['id'].toString(): c['name'].toString(),
-      };
-      final Map<String, String> typeMap = {
-        for (var c in categories)
-          c['id'].toString():
-              c['emergencyType']?['name']?.toString() ?? l10n.general,
-      };
-
-      final enriched = emergenciesResponse.map((e) {
-        final categoryId =
-            _extractId(e['categoryId']) ?? _extractId(e['category']);
-        return {
-          ...e,
-          'id': _extractId(e['id']) ?? _extractId(e['_id']),
-          'categoryName': categoryId != null
-              ? (categoryMap[categoryId] ?? l10n.uncategorized)
-              : l10n.uncategorized,
-          'typeName': categoryId != null
-              ? (typeMap[categoryId] ?? l10n.general)
-              : l10n.general,
-          'description':
-              e['description']?.toString() ?? l10n.noDescription,
-          'createdAt':
-              e['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
-        };
-      }).toList();
-
-      if (mounted) {
-        setState(() {
-          emergencies = enriched;
-          loading = false;
-        });
-        _fadeCtrl.forward();
-      }
-    } catch (e) {
-      debugPrint("ReportsPage Error: $e");
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  // ── Build ─────────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // BUILD
+  // ══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: _T.bg,
-        body: loading
+        body: _isLoading
             ? _buildSplash()
             : FadeTransition(
                 opacity: _fadeAnim,
-                child: CustomScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  slivers: [
-                    SliverToBoxAdapter(child: _buildHeader()),
-                    if (emergencies.isEmpty)
-                      SliverFillRemaining(child: _buildEmptyState())
-                    else
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
-                        sliver: SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) =>
-                                _buildCard(emergencies[index], index),
-                            childCount: emergencies.length,
+                child: RefreshIndicator(
+                  onRefresh: _loadData,
+                  color: _T.primary,
+                  displacement: 20,
+                  child: CustomScrollView(
+                    physics: const BouncingScrollPhysics(
+                        parent: AlwaysScrollableScrollPhysics()),
+                    slivers: [
+                      SliverToBoxAdapter(child: _buildHeader()),
+                      if (_error != null)
+                        SliverToBoxAdapter(child: _buildErrorState())
+                      else if (_isSwitchingLang)
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (_, __) => _buildCardShimmer(),
+                              childCount: _safeEmergencies.isNotEmpty
+                                  ? _safeEmergencies.length : 4,
+                            ),
+                          ),
+                        )
+                      else if (_safeEmergencies.isEmpty)
+                        SliverFillRemaining(child: _buildEmptyState())
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, i) => _buildCard(_safeEmergencies[i], i),
+                              childCount: _safeEmergencies.length,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
       ),
@@ -159,21 +215,20 @@ class _ReportsPageState extends State<ReportsPage>
   }
 
   // ── Splash ────────────────────────────────────────────────────────────────
-  Widget _buildSplash() {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
-          stops: [0.0, 0.5, 1.0],
+  Widget _buildSplash() => Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
+            stops: [0.0, 0.5, 1.0],
+          ),
         ),
-      ),
-      child: const Center(
-        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-      ),
-    );
-  }
+        child: const Center(
+          child: CircularProgressIndicator(
+              color: Colors.white, strokeWidth: 2.5),
+        ),
+      );
 
   // ── Header ────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
@@ -186,118 +241,186 @@ class _ReportsPageState extends State<ReportsPage>
           stops: [0.0, 0.5, 1.0],
         ),
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(30),
+          bottomLeft:  Radius.circular(30),
           bottomRight: Radius.circular(30),
         ),
       ),
       child: Stack(children: [
-        Positioned(top: -40, right: -25, child: _blob(140, Colors.white, 0.055)),
-        Positioned(top: 14, right: 85, child: _blob(55, Colors.white, 0.045)),
-        Positioned(bottom: -18, left: -28, child: _blob(105, _T.accent, 0.14)),
+        Positioned(top: -40,    right: -25, child: _blob(140, Colors.white, 0.055)),
+        Positioned(top: 14,     right: 85,  child: _blob(55,  Colors.white, 0.045)),
+        Positioned(bottom: -18, left:  -28, child: _blob(105, _T.accent,    0.14)),
         SafeArea(
           bottom: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 26),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    width: 38, height: 38,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.11),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.2), width: 1),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  if (Navigator.canPop(context))
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: _iconBtn(Icons.arrow_back_ios_new_rounded, size: 16),
                     ),
-                    child: const Icon(Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white, size: 16),
+                  const Spacer(),
+                  _buildLangToggle(),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: _loadData,
+                    child: _iconBtn(Icons.refresh_rounded, size: 18),
                   ),
-                ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: fetchInitialData,
-                  child: Container(
-                    width: 38, height: 38,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.11),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.2), width: 1),
-                    ),
-                    child: const Icon(Icons.refresh_rounded,
-                        color: Colors.white, size: 18),
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 22),
-              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(l10n.myEmergency,
-                            style: TextStyle(
-                                color: Colors.white.withOpacity(0.62),
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 3),
-                        Text(l10n.reports,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 26,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.4,
-                                height: 1.1)),
-                      ]),
-                ),
-                if (!loading)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.11),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.2), width: 1),
-                    ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Container(
-                          width: 6, height: 6,
-                          decoration: const BoxDecoration(
-                              color: _T.green, shape: BoxShape.circle)),
-                      const SizedBox(width: 5),
-                      Text(
-                        l10n.reportsCountLabel(emergencies.length.toString()),
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600),
+                ]),
+                const SizedBox(height: 22),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(l10n.myEmergency,
+                              style: TextStyle(
+                                  color:      Colors.white.withOpacity(0.62),
+                                  fontSize:   12.5,
+                                  fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 3),
+                          Text(l10n.reports,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color:         Colors.white,
+                                  fontSize:      26,
+                                  fontWeight:    FontWeight.w800,
+                                  letterSpacing: -0.4,
+                                  height:        1.1)),
+                        ],
                       ),
-                    ]),
-                  ),
-              ]),
-            ]),
+                    ),
+                    if (!_isLoading && _error == null) ...[
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.11),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: Colors.white.withOpacity(0.2), width: 1),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Container(
+                              width: 6, height: 6,
+                              decoration: const BoxDecoration(
+                                  color: _T.green, shape: BoxShape.circle)),
+                          const SizedBox(width: 5),
+                          Text(
+                            l10n.reportsCountLabel(
+                                (_safeEmergencies.length).toString()),
+                            style: const TextStyle(
+                                color:      Colors.white,
+                                fontSize:   11,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ]),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ]),
     );
   }
 
-  Widget _blob(double size, Color color, double opacity) => Container(
-        width: size, height: size,
+  // ── Language toggle ────────────────────────────────────────────────────────
+  Widget _buildLangToggle() {
+    final isAmharic = _currentLang == 'am';
+    return GestureDetector(
+      onTap: _isSwitchingLang
+          ? null
+          : () => _switchLanguage(isAmharic ? 'en' : 'am'),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-            shape: BoxShape.circle, color: color.withOpacity(opacity)));
+          color: _isSwitchingLang
+              ? Colors.white.withOpacity(0.08)
+              : Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+        ),
+        child: _isSwitchingLang
+            ? const SizedBox(
+                width: 22, height: 14,
+                child: Center(child: SizedBox(
+                  width: 12, height: 12,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                )),
+              )
+            : Text(
+                isAmharic ? 'EN' : 'አማ',
+                style: const TextStyle(
+                    color:         Colors.white,
+                    fontSize:      11,
+                    fontWeight:    FontWeight.w800,
+                    letterSpacing: 0.3),
+              ),
+      ),
+    );
+  }
+
+  Widget _iconBtn(IconData icon, {double size = 18}) => Container(
+        width: 38, height: 38,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.11),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+        ),
+        child: Icon(icon, color: Colors.white, size: size),
+      );
+
+  // ── Shimmer ───────────────────────────────────────────────────────────────
+  Widget _buildCardShimmer() => Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        height: 140,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              _T.primary.withOpacity(0.45),
+              _T.primaryMid.withOpacity(0.35),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+      );
 
   // ── Card ──────────────────────────────────────────────────────────────────
   Widget _buildCard(Map<String, dynamic> report, int index) {
-    final String typeName = report['typeName'] ?? l10n.general;
-    final String categoryName = report['categoryName'] ?? l10n.uncategorized;
-    final String description = report['description'] ?? "";
+    // categoryName and typeName are pre-resolved flat strings written by
+    // ReportsService._enrichEmergency — no further digging needed.
+    final String typeName = (report['typeName'] as String?)
+            ?.trim()
+            .isNotEmpty == true
+        ? report['typeName'] as String
+        : l10n.general;
+    final String categoryName = (report['categoryName'] as String?)
+            ?.trim()
+            .isNotEmpty == true
+        ? report['categoryName'] as String
+        : l10n.uncategorized;
+    final String description = _loc(report['description']).isNotEmpty
+        ? _loc(report['description'])
+        : l10n.noDescription;
     final String date = _formatDate(report['createdAt']);
 
-    final bool isCritical = typeName.toLowerCase().contains('critical');
-    final Color typeColor = isCritical ? _T.red : _T.accent;
+    final bool  isCritical = typeName.toLowerCase().contains('critical');
+    final Color typeColor  = isCritical ? _T.red : _T.accent;
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
@@ -306,9 +429,7 @@ class _ReportsPageState extends State<ReportsPage>
       builder: (context, value, child) => Opacity(
         opacity: value,
         child: Transform.translate(
-          offset: Offset(0, 20 * (1 - value)),
-          child: child,
-        ),
+            offset: Offset(0, 20 * (1 - value)), child: child),
       ),
       child: GestureDetector(
         onTap: () async {
@@ -317,137 +438,181 @@ class _ReportsPageState extends State<ReportsPage>
             MaterialPageRoute(
               builder: (_) => ReportDetailsPage(
                 emergency: report,
-                userId: widget.userId,
-                token: widget.token,
+                userId:    widget.userId,
+                token:     widget.token,
               ),
             ),
           );
           if (result is String) {
-            setState(() {
-              emergencies.removeWhere(
-                (item) =>
-                    (item['id'] ?? item['_id']).toString() == result,
-              );
-            });
+            setState(() => _emergencies.removeWhere(
+                (item) => (item['id'] ?? item['_id']).toString() == result));
           } else if (result == true) {
-            fetchInitialData();
+            _loadData();
           }
         },
         child: Container(
           margin: const EdgeInsets.only(bottom: 14),
           decoration: BoxDecoration(
-            color: _T.surface,
+            color:        _T.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _T.divider, width: 1),
+            border:       Border.all(color: _T.divider, width: 1),
             boxShadow: [
               BoxShadow(
-                  color: _T.primary.withOpacity(0.07),
+                  color:      _T.primary.withOpacity(0.07),
                   blurRadius: 16,
-                  offset: const Offset(0, 5)),
+                  offset:     const Offset(0, 5)),
             ],
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Flexible(child: _typeBadge(typeName, typeColor)),
+                  const SizedBox(width: 8),
                   Row(children: [
-                    _typeBadge(typeName, typeColor),
-                    const Spacer(),
-                    Row(children: [
-                      const Icon(Icons.access_time_rounded,
-                          size: 11, color: _T.textMid),
-                      const SizedBox(width: 4),
-                      Text(date,
-                          style: const TextStyle(
-                              color: _T.textMid,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500)),
-                    ]),
-                  ]),
-                  const SizedBox(height: 14),
-                  Text(categoryName,
-                      style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: _T.textDark,
-                          letterSpacing: -0.2)),
-                  const SizedBox(height: 5),
-                  Text(description,
-                      style: const TextStyle(
-                          fontSize: 13, color: _T.textMid, height: 1.45),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 14),
-                  Container(height: 1, color: _T.divider),
-                  const SizedBox(height: 12),
-                  Row(children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                          color: _T.accentSoft,
-                          borderRadius: BorderRadius.circular(7)),
-                      child: Row(children: [
-                        const Icon(Icons.open_in_new_rounded,
-                            size: 11, color: _T.accent),
-                        const SizedBox(width: 5),
-                        Text(l10n.viewDetails,
-                            style: const TextStyle(
-                                color: _T.accent,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700)),
-                      ]),
-                    ),
-                    const Spacer(),
-                    Icon(Icons.arrow_forward_ios_rounded,
-                        size: 12,
-                        color: _T.textMid.withOpacity(0.5)),
+                    const Icon(Icons.access_time_rounded,
+                        size: 11, color: _T.textMid),
+                    const SizedBox(width: 4),
+                    Text(date,
+                        style: const TextStyle(
+                            color:      _T.textMid,
+                            fontSize:   11,
+                            fontWeight: FontWeight.w500)),
                   ]),
                 ]),
+                const SizedBox(height: 14),
+                Text(categoryName,
+                    style: const TextStyle(
+                        fontSize:      16,
+                        fontWeight:    FontWeight.w800,
+                        color:         _T.textDark,
+                        letterSpacing: -0.2)),
+                const SizedBox(height: 5),
+                Text(description,
+                    style: const TextStyle(
+                        fontSize: 13, color: _T.textMid, height: 1.45),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 14),
+                Container(height: 1, color: _T.divider),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                        color:        _T.accentSoft,
+                        borderRadius: BorderRadius.circular(7)),
+                    child: Row(children: [
+                      const Icon(Icons.open_in_new_rounded,
+                          size: 11, color: _T.accent),
+                      const SizedBox(width: 5),
+                      Text(l10n.viewDetails,
+                          style: const TextStyle(
+                              color:      _T.accent,
+                              fontSize:   11,
+                              fontWeight: FontWeight.w700)),
+                    ]),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.arrow_forward_ios_rounded,
+                      size: 12, color: _T.textMid.withOpacity(0.5)),
+                ]),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _typeBadge(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8)),
-      child: Text(label.toUpperCase(),
-          style: TextStyle(
-              color: color,
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.4)),
-    );
-  }
+  Widget _typeBadge(String label, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+            color:        color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8)),
+        child: Text(label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+                color:         color,
+                fontSize:      9,
+                fontWeight:    FontWeight.w800,
+                letterSpacing: 0.4)),
+      );
 
   // ── Empty State ───────────────────────────────────────────────────────────
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Container(
-          width: 80, height: 80,
-          decoration: BoxDecoration(
-              color: _T.accentSoft,
-              borderRadius: BorderRadius.circular(24)),
-          child: const Icon(Icons.assignment_late_outlined,
-              size: 36, color: _T.primary),
-        ),
-        const SizedBox(height: 18),
-        Text(l10n.noReportsYetEmergency,
-            style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: _T.textDark)),
-        const SizedBox(height: 6),
-        Text(l10n.noReportsSubtitleEmergency,
-            style: const TextStyle(fontSize: 13, color: _T.textMid)),
-      ]),
-    );
-  }
+  Widget _buildEmptyState() => Center(
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(
+            width: 80, height: 80,
+            decoration: BoxDecoration(
+                color:        _T.accentSoft,
+                borderRadius: BorderRadius.circular(24)),
+            child: const Icon(Icons.assignment_late_outlined,
+                size: 36, color: _T.primary),
+          ),
+          const SizedBox(height: 18),
+          Text(l10n.noReportsYetEmergency,
+              style: const TextStyle(
+                  fontSize:   18,
+                  fontWeight: FontWeight.w800,
+                  color:      _T.textDark)),
+          const SizedBox(height: 6),
+          Text(l10n.noReportsSubtitleEmergency,
+              style: const TextStyle(fontSize: 13, color: _T.textMid)),
+        ]),
+      );
+
+  // ── Error State ───────────────────────────────────────────────────────────
+  Widget _buildErrorState() => Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(children: [
+          Container(
+            width: 64, height: 64,
+            decoration: BoxDecoration(
+                color:        _T.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20)),
+            child: const Icon(Icons.error_outline_rounded,
+                color: _T.red, size: 30),
+          ),
+          const SizedBox(height: 14),
+          Text(l10n.failedToLoad,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize:   16,
+                  color:      _T.textDark)),
+          const SizedBox(height: 8),
+          Text(_error ?? '',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: _T.textMid)),
+          const SizedBox(height: 20),
+          GestureDetector(
+            onTap: _loadData,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    colors: [_T.primary, _T.primaryMid]),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(l10n.tryAgain,
+                  style: const TextStyle(
+                      color:      Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize:   13)),
+            ),
+          ),
+        ]),
+      );
+
+  Widget _blob(double size, Color color, double opacity) => Container(
+        width:  size,
+        height: size,
+        decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color.withOpacity(opacity)));
 }

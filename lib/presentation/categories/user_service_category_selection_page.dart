@@ -1,12 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../services/service_category_service.dart';
 import '../reporting/user_service_report_page.dart';
 
-// ─── Dashboard Color Tokens ───────────────────────────────────────────────────
 class _T {
   static const primary    = Color(0xFF1A3BAA);
   static const primaryMid = Color(0xFF2252CC);
-  static const accent     = Color(0xFF4B83F0);
   static const accentSoft = Color(0xFFD6E4FF);
   static const bg         = Color(0xFFF2F6FF);
   static const textDark   = Color(0xFF0C1A45);
@@ -31,22 +30,66 @@ class UserServiceCategorySelectionPage extends StatefulWidget {
 class _UserServiceCategorySelectionPageState
     extends State<UserServiceCategorySelectionPage> {
   bool isLoading = true;
+  bool _fetched = false;                          // ← guard: fetch only once
   List<Map<String, dynamic>> categories = [];
 
   @override
-  void initState() {
-    super.initState();
-    fetchCategories();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_fetched) {
+      _fetched = true;
+      fetchCategories();
+    }
+  }
+
+  String _resolveName(dynamic nameField) {
+    if (nameField == null) return "Unknown";
+
+    // Case 1: already a Dart Map  →  {"en": "Fire", "am": "እሳት"}
+    Map<String, dynamic>? map;
+    if (nameField is Map) {
+      map = Map<String, dynamic>.from(nameField);
+    }
+
+    // Case 2: backend sent name as a JSON string  →  '{"en":"Fire","am":"እሳት"}'
+    if (map == null && nameField is String) {
+      final trimmed = nameField.trim();
+      if (trimmed.startsWith('{')) {
+        try {
+          final decoded = jsonDecode(trimmed);
+          if (decoded is Map) map = Map<String, dynamic>.from(decoded);
+        } catch (_) {}
+      }
+      // Plain string — return as-is
+      if (map == null) return trimmed.isEmpty ? "Unknown" : trimmed;
+    }
+
+    // Resolve from map with locale fallback
+    if (map != null) {
+      final lang = Localizations.localeOf(context).languageCode;
+      final preferred = map[lang]?.toString() ?? '';
+      if (preferred.isNotEmpty) return preferred;
+      final english = map['en']?.toString() ?? '';
+      if (english.isNotEmpty) return english;
+      return map.values
+          .firstWhere(
+            (v) => v != null && v.toString().isNotEmpty,
+            orElse: () => "Unknown",
+          )
+          .toString();
+    }
+
+    return nameField.toString();
   }
 
   List<Map<String, dynamic>> _sortCategories(
       List<Map<String, dynamic>> list) {
-    List<Map<String, dynamic>> sorted = List.from(list);
+    final sorted = List<Map<String, dynamic>>.from(list);
     sorted.sort((a, b) {
-      String nameA = a["name"].toString().toLowerCase();
-      String nameB = b["name"].toString().toLowerCase();
-      bool isAOther = nameA == "others" || nameA == "other";
-      bool isBOther = nameB == "others" || nameB == "other";
+      final nameA = _resolveName(a["name"]).toLowerCase();
+      final nameB = _resolveName(b["name"]).toLowerCase();
+      final isAOther = nameA == "others" || nameA == "other";
+      final isBOther = nameB == "others" || nameB == "other";
       if (isAOther && !isBOther) return 1;
       if (!isAOther && isBOther) return -1;
       return nameA.compareTo(nameB);
@@ -56,10 +99,14 @@ class _UserServiceCategorySelectionPageState
 
   Future<void> fetchCategories() async {
     try {
-      final response =
-          await ServiceCategoryService.getCategoriesByServiceType(
+      final String currentLang =
+          Localizations.localeOf(context).languageCode;
+
+      final response = await ServiceCategoryService.getCategoriesByServiceType(
         widget.serviceTypeId,
+        lang: currentLang,
       );
+
       if (!mounted) return;
       setState(() {
         categories =
@@ -67,7 +114,7 @@ class _UserServiceCategorySelectionPageState
         isLoading = false;
       });
     } catch (e) {
-      debugPrint("Service Category fetch error: $e");
+      debugPrint("ServiceCategory fetch error: $e");
       if (!mounted) return;
       setState(() => isLoading = false);
     }
@@ -173,13 +220,14 @@ class _UserServiceCategorySelectionPageState
       itemBuilder: (context, index) {
         final cat = categories[index];
         return _buildCategoryCard(
-            cat["name"].toString(), cat["id"].toString());
+            _resolveName(cat["name"]), cat["id"].toString());
       },
     );
   }
 
   Widget _buildCategoryCard(String name, String id) {
-    bool isOther = name.toLowerCase().contains("other");
+    final bool isOther =
+        name.toLowerCase() == "others" || name.toLowerCase() == "other";
 
     return Container(
       decoration: BoxDecoration(

@@ -9,9 +9,7 @@
   "activeBadge": "{count} Active",
   "@activeBadge": {
     "placeholders": {
-      "count": {
-        "type": "String"
-      }
+      "count": { "type": "String" }
     }
   },
   "emergencyAssist": "Emergency Assist",
@@ -21,33 +19,43 @@
   "rewardLabel": "{amount} ETB",
   "@rewardLabel": {
     "placeholders": {
-      "amount": {
-        "type": "String"
-      }
+      "amount": { "type": "String" }
     }
   },
   "statusPending": "Pending",
   "statusInProgress": "In Progress",
+  "statusCompleted": "COMPLETED",
+  "statusRejected": "REJECTED",
+  "statusResolved": "Resolved",
+  "statusUnknown": "Unknown",
+  "statusActive": "Active",
   "myPublic": "My Public",
+  "myEmergency": "My Emergency",
   "serviceReports": "Service Reports",
   "reportsCount": "{count} Reports",
   "@reportsCount": {
     "placeholders": {
-      "count": {
-        "type": "String"
-      }
+      "count": { "type": "String" }
+    }
+  },
+  "reports": "Reports",
+  "reportsCountLabel": "{count} Reports",
+  "@reportsCountLabel": {
+    "placeholders": {
+      "count": { "type": "String" }
     }
   },
   "generalService": "General Service",
   "publicService": "Public Service",
-  "statusCompleted": "COMPLETED",
-  "statusRejected": "REJECTED",
   "viewDetails": "View details",
   "noReportsYet": "No Reports Yet",
   "noReportsSubtitle": "Your service reports will appear here.",
+  "noReportsYetEmergency": "No Reports Yet",
+  "noReportsSubtitleEmergency": "Your submitted reports will appear here.",
   "failedToLoad": "Failed to Load",
   "tryAgain": "Try Again",
   "profile": "Profile",
+  "profileLabel": "Profile",
   "logout": "Logout",
   "logoutConfirmTitle": "Logout",
   "logoutConfirmMessage": "Are you sure you want to logout?",
@@ -68,29 +76,13 @@
   "address": "Address",
   "accountType": "Account Type",
   "memberSince": "Member Since",
-  "statusActive": "Active",
   "failedToLoadProfile": "Failed to load profile",
   "retry": "Retry",
-  "myEmergency": "My Emergency",
-  "reports": "Reports",
-  "reportsCountLabel": "{count} Reports",
-  "@reportsCountLabel": {
-    "placeholders": {
-      "count": {
-        "type": "String"
-      }
-    }
-  },
-  "noReportsYetEmergency": "No Reports Yet",
-  "noReportsSubtitleEmergency": "Your submitted reports will appear here.",
   "uncategorized": "Uncategorized",
   "general": "General",
   "recently": "Recently",
   "noDescription": "No description provided.",
-  "statusResolved": "Resolved",
-  "statusUnknown": "Unknown",
   "notificationsLabel": "Notifications",
-  "profileLabel": "Profile",
   "switchToEnglish": "Switch to English",
   "switchToAmharic": "Switch to Amharic",
   "defaultCaseType": "Report",
@@ -98,21 +90,180 @@
   "emergencyCategoryLabel": "{name}",
   "@emergencyCategoryLabel": {
     "placeholders": {
-      "name": {
-        "type": "String"
-      }
+      "name": { "type": "String" }
     }
   },
   "serviceCategoryLabel": "{name}",
   "@serviceCategoryLabel": {
     "placeholders": {
-      "name": {
-        "type": "String"
-      }
+      "name": { "type": "String" }
     }
   },
   "caseTypesLabel": "Case Types",
-  "@caseTypesLabel": {
-    "description": "Label for the section displaying different categories of emergency or service cases"
+  "caseDetailLastKnownLocation": "Last Known Location",
+  "caseDetailPhysicalIdentifiers": "Physical Identifiers",
+  "caseDetailDistinctiveMarks": "Distinctive Marks",
+  "caseDetailCaseDescription": "Case Description",
+  "caseDetailNoMarks": "No distinctive marks reported.",
+  "caseDetailNoDescription": "No additional description provided.",
+  "caseDetailUnknownIdentity": "Unknown Identity",
+  "caseDetailLastSeen": "Last seen: {date}",
+  "@caseDetailLastSeen": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "caseDetailAgeYrs": "{age} yrs",
+  "@caseDetailAgeYrs": {
+    "placeholders": {
+      "age": { "type": "String" }
+    }
+  },
+  "caseDetailAge": "AGE",
+  "caseDetailGender": "GENDER",
+  "caseDetailHeight": "HEIGHT",
+  "caseDetailWeight": "WEIGHT",
+  "caseDetailLocationNotSet": "Location Not Set",
+  "caseDetailDangerAlert": "DANGER ALERT",
+  "caseDetailProvideTip": "PROVIDE ANONYMOUS TIP",
+  "caseDetailEtb": "{amount} ETB",
+  "@caseDetailEtb": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "caseDetailStatusPending": "Pending",
+  "caseDetailStatusInProgress": "In Progress",
+  "serviceReportDetails": "REPORT DETAILS",
+  "serviceStreetLabel": "STREET",
+  "serviceDateReported": "DATE REPORTED",
+  "serviceSystemStatus": "SYSTEM STATUS",
+  "serviceOfficialReport": "Official Report",
+  "serviceReportLabel": "Service Report",
+  "openChat": "Open Chat",
+  "reportSectionDescription": "Description",
+  "reportSectionLocation": "Location Details",
+  "reportSectionTimeGps": "Time & GPS",
+  "reportSectionEvidence": "Evidence",
+  "reportDescriptionHint": "Explain what is happening...",
+  "reportSelectKebele": "Select Kebele",
+  "reportSubdivisionHint": "Subdivision",
+  "reportStreetHint": "Street (Optional)",
+  "reportTimeLabel": "Report Time",
+  "reportSelectTime": "Select Time",
+  "reportPinLocation": "Pin Location",
+  "reportTapToOpenMap": "Tap to open map",
+  "reportLocationPinned": "Location Pinned",
+  "reportMediaAttachment": "Media Attachment",
+  "reportUploadPhotoVideo": "Upload Photo/Video",
+  "reportSubmitButton": "SUBMIT REPORT",
+  "reportValidationError": "Please fill description, select a kebele, and subdivision",
+  "reportFetchingUserId": "Fetching user ID. Please wait...",
+  "reportErrorLoadingLocations": "Error loading locations",
+  "reportFailedUserId": "Failed to fetch user ID",
+  "reportSentSuccess": "Report Sent Successfully",
+  "reportSentFailed": "Failed to Send Report",
+  "serviceRequestTitle": "Service Request",
+  "serviceSectionDescription": "Description",
+  "serviceSectionLocation": "Location Details",
+  "serviceSectionScheduleGps": "Schedule & GPS",
+  "serviceSectionEvidence": "Evidence / Attachment",
+  "serviceDescriptionHint": "Describe the required service...",
+  "serviceSelectKebele": "Select Kebele",
+  "serviceSubdivisionHint": "Subdivision / Village",
+  "serviceStreetHint": "Street (Optional)",
+  "serviceRequestTimeLabel": "Request Time",
+  "serviceSetTime": "Set Time",
+  "serviceMarkLocation": "Mark Location",
+  "serviceOpenMap": "Open Map",
+  "serviceLocationPinned": "Pinned",
+  "serviceMediaLabel": "Media",
+  "serviceUploadMediaHint": "Upload Image/Video",
+  "serviceSubmitButton": "SUBMIT REQUEST",
+  "serviceValidationError": "Please fill description, select a kebele, and subdivision",
+  "serviceFetchingUserId": "Fetching user ID. Please wait...",
+  "serviceErrorLoadingLocations": "Error loading locations",
+  "serviceFailedUserId": "Failed to fetch user ID",
+  "serviceRequestSentSuccess": "Service Request Sent Successfully",
+  "serviceRequestSentFailed": "Failed to Send Request",
+  "caseReportPageTitle": "Intel Report",
+  "caseReportPageSubtitle": "Submit a sighting",
+  "caseReportSectionLocation": "Geographic Precision",
+  "caseReportSectionTime": "Time of Sighting",
+  "caseReportSelectDateTime": "Select date & time",
+  "caseReportSectionDescription": "Visual Description",
+  "caseReportDescriptionHint": "Clothing, companions, vehicle details...",
+  "caseReportSubmitButton": "Submit Report",
+  "caseReportEncryptedProtocol": "Encrypted Service Protocol",
+  "caseReportReportingTarget": "Reporting Target",
+  "caseReportUnknownEntity": "Unknown Entity",
+  "caseReportFetchLocationError": "Failed to fetch location data",
+  "caseReportLocationTimeError": "Please select both location and time",
+  "caseReportSentSuccess": "Sighting submitted successfully",
+  "caseReportSentFailed": "Submission failed. Please check connection.",
+  "homeDescription": "Your trusted public service & emergency response app — connecting Bahir Dar with reliable assistance.",
+  "homeLetsStart": "Let's Start",
+  "homeAlreadyHaveAccount": "Already have an account? Sign in",
+  "homeFeatureEmergency": "Emergency",
+  "homeFeatureServices": "Services",
+  "homeFeatureLiveReports": "Live Reports",
+  "loginWelcomeBack": "Welcome back!",
+  "loginUsernameHint": "Username",
+  "loginEnterUsername": "Enter username",
+  "loginPasswordHint": "Password",
+  "loginPasswordTooShort": "Password too short",
+  "loginForgotPassword": "Forgot password?",
+  "loginButton": "Login",
+  "loginContinueAsGuest": "Continue as Guest",
+  "loginNewUser": "New user? ",
+  "loginSignUp": "Sign Up",
+  "signupCreateAccount": "Create Account",
+  "signupFirstName": "First Name",
+  "signupEnterFirstName": "Enter first name",
+  "signupLastName": "Last Name",
+  "signupEnterLastName": "Enter last name",
+  "signupEmailAddress": "Email Address",
+  "signupInvalidEmail": "Invalid email",
+  "signupPassword": "Password",
+  "signupPasswordMin": "Min 6 characters",
+  "signupCreateAccountButton": "Create Account",
+  "signupAlreadyHaveAccount": "Already have an account? ",
+  "signupLoginLink": "Login",
+  "guestMode": "Guest Mode",
+  "guestUser": "Guest User",
+  "guestFreeToJoin": "Free to Join",
+  "guestUnlockTitle": "Unlock Full Access",
+  "guestUnlockSubtitle": "Create a free account to report incidents, track your cases, earn rewards, and receive real-time alerts in Bahir Dar.",
+  "guestFeatureReport": "Report Incidents",
+  "guestFeatureTrack": "Track Cases",
+  "guestFeatureRewards": "Earn Rewards",
+  "guestFeatureAlerts": "Live Alerts",
+  "guestSignInCta": "Create Free Account",
+  "guestContactSection": "Contact Info",
+  "guestContactPhone": "Contact Phone Number",
+  "navHome":     "Home",
+  "navServices": "Services",
+  "navProfile":  "Profile",
+  "navReports":  "Reports",
+  "navSettings": "Settings",
+  "rdReportedAt": "Reported at {time}",
+"@rdReportedAt": {
+  "placeholders": {
+    "time": { "type": "String" }
   }
+},
+"rdSectionDescription": "DESCRIPTION",
+"rdSectionLocation": "LOCATION",
+"rdLocationSubtitle": "BAHIR DAR · KEBELE",
+"rdEmergencyReport": "Emergency Report",
+"rdUpdateDetails": "Update Details",
+"rdArchiveTitle": "Archive Report?",
+"rdArchiveMessage": "This report will be hidden from your current view.",
+"rdKeep": "Keep",
+"rdArchive": "Archive",
+"rdUpdateReport": "Update Report",
+"rdFieldKebele": "Kebele",
+"rdFieldDescription": "Description",
+"rdDiscard": "Discard",
+"rdSaveChanges": "Save Changes"
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:first_app/l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 import '../../services/kebele_service.dart';
 import '../../services/case_report_service.dart';
@@ -68,7 +69,7 @@ class _CaseReportPageState extends State<CaseReportPage>
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingKebeles = false);
-        _notify("Failed to fetch location data", isError: true);
+        _notify(AppLocalizations.of(context)!.caseReportFetchLocationError, isError: true);
       }
     }
   }
@@ -103,8 +104,9 @@ class _CaseReportPageState extends State<CaseReportPage>
   }
 
   Future<void> _handleSubmission() async {
+    final l10n = AppLocalizations.of(context)!;
     if (_selectedKebeleId == null || _selectedDateTime == null) {
-      _notify("Please select both location and time");
+      _notify(l10n.caseReportLocationTimeError);
       return;
     }
     setState(() => _isSubmitting = true);
@@ -124,11 +126,12 @@ class _CaseReportPageState extends State<CaseReportPage>
       setState(() => _isSubmitting = false);
       if (success) {
         final messenger = ScaffoldMessenger.of(context);
+        final successMsg = AppLocalizations.of(context)!.caseReportSentSuccess;
         FocusScope.of(context).unfocus();
         Navigator.pop(context);
         Future.delayed(const Duration(milliseconds: 100), () {
           messenger.showSnackBar(SnackBar(
-            content: const Text("Sighting submitted successfully"),
+            content: Text(successMsg),
             behavior: SnackBarBehavior.floating,
             backgroundColor: _T.green,
             margin: const EdgeInsets.all(20),
@@ -137,7 +140,7 @@ class _CaseReportPageState extends State<CaseReportPage>
           ));
         });
       } else {
-        _notify("Submission failed. Please check connection.");
+        _notify(AppLocalizations.of(context)!.caseReportSentFailed);
       }
     }
   }
@@ -158,13 +161,14 @@ class _CaseReportPageState extends State<CaseReportPage>
   // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: _T.bg,
         body: Column(
           children: [
-            _buildHeader(),
+            _buildHeader(l10n),
             Expanded(
               child: _isLoadingKebeles
                   ? const Center(
@@ -178,9 +182,9 @@ class _CaseReportPageState extends State<CaseReportPage>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildTargetCard(),
+                            _buildTargetCard(l10n),
                             const SizedBox(height: 28),
-                            _sectionLabel("Geographic Precision",
+                            _sectionLabel(l10n.caseReportSectionLocation,
                                 Icons.share_location_rounded),
                             const SizedBox(height: 10),
                             _buildCard(child: DropdownButtonFormField<int>(
@@ -191,7 +195,7 @@ class _CaseReportPageState extends State<CaseReportPage>
                               items: _kebeles
                                   .map((k) => DropdownMenuItem<int>(
                                         value: k['id'],
-                                        child: Text(k['name'] ?? "Unknown",
+                                        child: Text(k['name'] ?? l10n.statusUnknown,
                                             style: const TextStyle(
                                                 fontSize: 14,
                                                 color: _T.textDark)),
@@ -200,12 +204,12 @@ class _CaseReportPageState extends State<CaseReportPage>
                               onChanged: (val) =>
                                   setState(() => _selectedKebeleId = val),
                               decoration: _inputDeco(
-                                  "Select current Kebele",
+                                  l10n.reportSelectKebele,
                                   Icons.location_on_rounded),
                             )),
                             const SizedBox(height: 20),
                             _sectionLabel(
-                                "Time of Sighting", Icons.timer_outlined),
+                                l10n.caseReportSectionTime, Icons.timer_outlined),
                             const SizedBox(height: 10),
                             _buildCard(
                               child: ListTile(
@@ -223,7 +227,7 @@ class _CaseReportPageState extends State<CaseReportPage>
                                 ),
                                 title: Text(
                                   _selectedDateTime == null
-                                      ? "Select date & time"
+                                      ? l10n.caseReportSelectDateTime
                                       : DateFormat('MMMM dd, yyyy • hh:mm a')
                                           .format(_selectedDateTime!),
                                   style: TextStyle(
@@ -243,7 +247,7 @@ class _CaseReportPageState extends State<CaseReportPage>
                             ),
                             const SizedBox(height: 20),
                             _sectionLabel(
-                                "Visual Description", Icons.visibility_outlined),
+                                l10n.caseReportSectionDescription, Icons.visibility_outlined),
                             const SizedBox(height: 10),
                             _buildCard(
                               child: TextField(
@@ -252,13 +256,13 @@ class _CaseReportPageState extends State<CaseReportPage>
                                 style: const TextStyle(
                                     fontSize: 14, color: _T.textDark),
                                 decoration: _inputDeco(
-                                  "Clothing, companions, vehicle details...",
+                                  l10n.caseReportDescriptionHint,
                                   Icons.edit_note_rounded,
                                 ),
                               ),
                             ),
                             const SizedBox(height: 36),
-                            _buildSubmitButton(),
+                            _buildSubmitButton(l10n),
                           ],
                         ),
                       ),
@@ -271,7 +275,7 @@ class _CaseReportPageState extends State<CaseReportPage>
   }
 
   // ── Custom Header (matches dashboard header style) ─────────────────────────
-  Widget _buildHeader() {
+  Widget _buildHeader(AppLocalizations l10n) {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -312,17 +316,17 @@ class _CaseReportPageState extends State<CaseReportPage>
                     color: Colors.white, size: 17),
               ),
               const SizedBox(width: 12),
-              const Column(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Intel Report",
-                      style: TextStyle(
+                  Text(l10n.caseReportPageTitle,
+                      style: const TextStyle(
                           color: Colors.white,
                           fontSize: 17,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.3)),
-                  Text("Submit a sighting",
-                      style: TextStyle(
+                  Text(l10n.caseReportPageSubtitle,
+                      style: const TextStyle(
                           color: Colors.white54,
                           fontSize: 11,
                           fontWeight: FontWeight.w500)),
@@ -336,7 +340,7 @@ class _CaseReportPageState extends State<CaseReportPage>
   }
 
   // ── Target Card ────────────────────────────────────────────────────────────
-  Widget _buildTargetCard() {
+  Widget _buildTargetCard(AppLocalizations l10n) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -373,7 +377,7 @@ class _CaseReportPageState extends State<CaseReportPage>
           const SizedBox(width: 14),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text("Reporting Target",
+              Text(l10n.caseReportReportingTarget,
                   style: TextStyle(
                       color: Colors.white.withOpacity(0.55),
                       fontSize: 10,
@@ -381,7 +385,7 @@ class _CaseReportPageState extends State<CaseReportPage>
                       letterSpacing: 1.0)),
               const SizedBox(height: 4),
               Text(
-                widget.caseData['fullName']?.toString() ?? "Unknown Entity",
+                widget.caseData['fullName']?.toString() ?? l10n.caseReportUnknownEntity,
                 style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -400,11 +404,11 @@ class _CaseReportPageState extends State<CaseReportPage>
               border: Border.all(
                   color: Colors.white.withOpacity(0.25), width: 1),
             ),
-            child: const Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.circle, color: Color(0xFFFFD700), size: 7),
-              SizedBox(width: 5),
-              Text("Active",
-                  style: TextStyle(
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.circle, color: Color(0xFFFFD700), size: 7),
+              const SizedBox(width: 5),
+              Text(l10n.statusActive,
+                  style: const TextStyle(
                       color: Colors.white,
                       fontSize: 10,
                       fontWeight: FontWeight.w700)),
@@ -416,7 +420,7 @@ class _CaseReportPageState extends State<CaseReportPage>
   }
 
   // ── Submit Button ──────────────────────────────────────────────────────────
-  Widget _buildSubmitButton() {
+  Widget _buildSubmitButton(AppLocalizations l10n) {
     return Column(children: [
       SizedBox(
         width: double.infinity,
@@ -435,13 +439,13 @@ class _CaseReportPageState extends State<CaseReportPage>
                   width: 20, height: 20,
                   child: CircularProgressIndicator(
                       color: Colors.white, strokeWidth: 2))
-              : const Row(
+              : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.send_rounded, color: Colors.white, size: 16),
-                    SizedBox(width: 10),
-                    Text("Submit Report",
-                        style: TextStyle(
+                    const Icon(Icons.send_rounded, color: Colors.white, size: 16),
+                    const SizedBox(width: 10),
+                    Text(l10n.caseReportSubmitButton,
+                        style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
                             fontSize: 15,
@@ -452,11 +456,11 @@ class _CaseReportPageState extends State<CaseReportPage>
       ),
       const SizedBox(height: 14),
       Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(Icons.verified_user_outlined,
+        const Icon(Icons.verified_user_outlined,
             size: 13, color: _T.textMid),
         const SizedBox(width: 6),
-        Text("Encrypted Service Protocol",
-            style: TextStyle(
+        Text(l10n.caseReportEncryptedProtocol,
+            style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: _T.textMid)),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:first_app/l10n/app_localizations.dart';
+import 'package:first_app/main.dart';
 import '../../services/service_report_service.dart';
 import 'service_report_detail_page.dart';
 
@@ -37,60 +39,119 @@ class _ServiceReportPageState extends State<ServiceReportPage>
   AppLocalizations get l10n => AppLocalizations.of(context)!;
 
   final ServiceReportService _apiService = ServiceReportService();
-  List<dynamic> _services = [];
-  bool _loading = true;
-  String? _error;
 
-  late final AnimationController _fadeCtrl =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
-  late final Animation<double> _fadeAnim =
-      CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+  // ── State ──────────────────────────────────────────────────────────────────
+  List<dynamic> _services        = [];
+  bool          _isLoading       = true;
+  bool          _isSwitchingLang = false;
+  String?       _error;
+  String        _currentLang     = 'en';
 
+  // ── Animation ──────────────────────────────────────────────────────────────
+  late AnimationController _fadeCtrl;
+  late Animation<double>   _fadeAnim;
+  bool _ctrlReady = false;
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _fadeCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600));
+    _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+    _ctrlReady = true;
+    _initLangAndLoad();
+  }
+
+  /// Fires whenever the locale changes (e.g. dashboard language switcher).
+  /// Keeps this page in sync even when it's buried in the IndexedStack.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final newLang = Localizations.localeOf(context).languageCode;
+    if (newLang != _currentLang && !_isLoading) {
+      _currentLang = newLang;
+      _fetchServices(newLang);
+    }
   }
 
   @override
   void dispose() {
-    _fadeCtrl.dispose();
+    if (_ctrlReady) {
+      _ctrlReady = false;
+      _fadeCtrl.dispose();
+    }
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    if (!mounted) return;
-    setState(() { _loading = true; _error = null; });
+  void _safeForward() {
+    if (_ctrlReady && mounted) _fadeCtrl.forward(from: 0);
+  }
+
+  // ── Init: read saved language then load ───────────────────────────────────
+  Future<void> _initLangAndLoad() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('language_code') ?? 'en';
+    if (mounted) setState(() => _currentLang = saved);
+    await _loadData(lang: saved);
+  }
+
+  // ── Master load ────────────────────────────────────────────────────────────
+  Future<void> _loadData({String? lang}) async {
+    final useLang = lang ?? _currentLang;
+    if (mounted) setState(() { _isLoading = true; _error = null; });
     try {
-      final result = await _apiService.getUserServices(widget.userId);
-      if (mounted) {
-        setState(() { _services = result; _loading = false; });
-        _fadeCtrl.forward(from: 0);
-      }
+      await _fetchServices(useLang);
+      _safeForward();
     } catch (e) {
-      if (mounted) {
-        setState(() { _error = e.toString(); _loading = false; });
-      }
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  // ── Fetcher ────────────────────────────────────────────────────────────────
+  Future<void> _fetchServices(String lang) async {
+    final result = await _apiService.getUserServices(widget.userId, lang: lang);
+    if (mounted) setState(() => _services = result);
+  }
+
+  // ── Language switcher ──────────────────────────────────────────────────────
+  Future<void> _switchLanguage(String langCode) async {
+    if (_isSwitchingLang || langCode == _currentLang) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('language_code', langCode);
+    if (!mounted) return;
+    // setLocale triggers didChangeDependencies on ALL alive IndexedStack pages
+    MyApp.of(context)?.setLocale(Locale(langCode));
+    setState(() { _currentLang = langCode; _isSwitchingLang = true; });
+    try {
+      await _fetchServices(langCode);
+    } finally {
+      if (mounted) setState(() => _isSwitchingLang = false);
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
   String _formatDate(dynamic dateStr) {
     if (dateStr == null) return "N/A";
     try {
       final dt = DateTime.parse(dateStr.toString());
       return "${dt.day}/${dt.month}/${dt.year}";
-    } catch (_) {
-      return "N/A";
-    }
+    } catch (_) { return "N/A"; }
   }
 
+  String _loc(dynamic field) =>
+      ServiceReportService.extractText(field, lang: _currentLang);
+
+  // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: _T.bg,
-        body: _loading
+        body: _isLoading
             ? _buildSplash()
             : FadeTransition(
                 opacity: _fadeAnim,
@@ -105,6 +166,17 @@ class _ServiceReportPageState extends State<ServiceReportPage>
                       SliverToBoxAdapter(child: _buildHeader()),
                       if (_error != null)
                         SliverToBoxAdapter(child: _buildErrorState())
+                      else if (_isSwitchingLang)
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (_, __) => _buildCardShimmer(),
+                              childCount: _services.isNotEmpty
+                                  ? _services.length : 4,
+                            ),
+                          ),
+                        )
                       else if (_services.isEmpty)
                         SliverFillRemaining(child: _buildEmptyState())
                       else
@@ -125,22 +197,22 @@ class _ServiceReportPageState extends State<ServiceReportPage>
     );
   }
 
-  Widget _buildSplash() {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
-          stops: [0.0, 0.5, 1.0],
+  // ── Splash ────────────────────────────────────────────────────────────────
+  Widget _buildSplash() => Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
+            stops: [0.0, 0.5, 1.0],
+          ),
         ),
-      ),
-      child: const Center(
-        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-      ),
-    );
-  }
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+        ),
+      );
 
+  // ── Header ────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Container(
       decoration: const BoxDecoration(
@@ -151,14 +223,14 @@ class _ServiceReportPageState extends State<ServiceReportPage>
           stops: [0.0, 0.5, 1.0],
         ),
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(30),
+          bottomLeft:  Radius.circular(30),
           bottomRight: Radius.circular(30),
         ),
       ),
       child: Stack(children: [
-        Positioned(top: -40, right: -25, child: _blob(140, Colors.white, 0.055)),
-        Positioned(top: 14, right: 85,   child: _blob(55,  Colors.white, 0.045)),
-        Positioned(bottom: -18, left: -28, child: _blob(105, _T.accent, 0.14)),
+        Positioned(top: -40,    right: -25, child: _blob(140, Colors.white, 0.055)),
+        Positioned(top: 14,     right: 85,  child: _blob(55,  Colors.white, 0.045)),
+        Positioned(bottom: -18, left:  -28, child: _blob(105, _T.accent,    0.14)),
         SafeArea(
           bottom: false,
           child: Padding(
@@ -169,82 +241,71 @@ class _ServiceReportPageState extends State<ServiceReportPage>
                 Row(children: [
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
-                    child: Container(
-                      width: 38, height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.11),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: Colors.white.withOpacity(0.2), width: 1),
-                      ),
-                      child: const Icon(Icons.arrow_back_ios_new_rounded,
-                          color: Colors.white, size: 16),
-                    ),
+                    child: _iconBtn(Icons.arrow_back_ios_new_rounded, size: 16),
                   ),
                   const Spacer(),
+                  _buildLangToggle(),
+                  const SizedBox(width: 10),
                   GestureDetector(
                     onTap: _loadData,
-                    child: Container(
-                      width: 38, height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.11),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: Colors.white.withOpacity(0.2), width: 1),
-                      ),
-                      child: const Icon(Icons.refresh_rounded,
-                          color: Colors.white, size: 18),
-                    ),
+                    child: _iconBtn(Icons.refresh_rounded, size: 18),
                   ),
                 ]),
                 const SizedBox(height: 22),
-                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(l10n.myPublic,
-                            style: TextStyle(
-                                color: Colors.white.withOpacity(0.62),
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 3),
-                        Text(l10n.serviceReports,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 26,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.4,
-                                height: 1.1)),
-                      ],
-                    ),
-                  ),
-                  if (!_loading && _error == null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.11),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: Colors.white.withOpacity(0.2), width: 1),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(l10n.myPublic,
+                              style: TextStyle(
+                                  color:      Colors.white.withOpacity(0.62),
+                                  fontSize:   12.5,
+                                  fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 3),
+                          Text(l10n.serviceReports,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color:         Colors.white,
+                                  fontSize:      26,
+                                  fontWeight:    FontWeight.w800,
+                                  letterSpacing: -0.4,
+                                  height:        1.1)),
+                        ],
                       ),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Container(
-                            width: 6, height: 6,
-                            decoration: const BoxDecoration(
-                                color: _T.green, shape: BoxShape.circle)),
-                        const SizedBox(width: 5),
-                        Text(
-                          l10n.reportsCount(_services.length.toString()),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600),
-                        ),
-                      ]),
                     ),
-                ]),
+                    if (!_isLoading && _error == null) ...[
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.11),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: Colors.white.withOpacity(0.2), width: 1),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Container(
+                              width: 6, height: 6,
+                              decoration: const BoxDecoration(
+                                  color: _T.green, shape: BoxShape.circle)),
+                          const SizedBox(width: 5),
+                          Text(
+                            l10n.reportsCount(_services.length.toString()),
+                            style: const TextStyle(
+                                color:      Colors.white,
+                                fontSize:   11,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ]),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),
@@ -253,20 +314,87 @@ class _ServiceReportPageState extends State<ServiceReportPage>
     );
   }
 
-  Widget _blob(double size, Color color, double opacity) => Container(
-        width: size, height: size,
+  // ── Language toggle ────────────────────────────────────────────────────────
+  Widget _buildLangToggle() {
+    final isAmharic = _currentLang == 'am';
+    return GestureDetector(
+      onTap: _isSwitchingLang
+          ? null
+          : () => _switchLanguage(isAmharic ? 'en' : 'am'),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-            shape: BoxShape.circle, color: color.withOpacity(opacity)));
+          color: _isSwitchingLang
+              ? Colors.white.withOpacity(0.08)
+              : Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+        ),
+        child: _isSwitchingLang
+            ? const SizedBox(
+                width: 22, height: 14,
+                child: Center(child: SizedBox(
+                  width: 12, height: 12,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                )),
+              )
+            : Text(
+                isAmharic ? 'EN' : 'አማ',
+                style: const TextStyle(
+                    color:         Colors.white,
+                    fontSize:      11,
+                    fontWeight:    FontWeight.w800,
+                    letterSpacing: 0.3),
+              ),
+      ),
+    );
+  }
 
+  Widget _iconBtn(IconData icon, {double size = 18}) => Container(
+        width: 38, height: 38,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.11),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+        ),
+        child: Icon(icon, color: Colors.white, size: size),
+      );
+
+  // ── Shimmer ───────────────────────────────────────────────────────────────
+  Widget _buildCardShimmer() => Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        height: 130,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              _T.primary.withOpacity(0.45),
+              _T.primaryMid.withOpacity(0.35),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+      );
+
+  // ── Card ──────────────────────────────────────────────────────────────────
   Widget _buildCard(dynamic service, int index) {
-    final typeName     = service['serviceType']?['name']     ?? l10n.generalService;
-    final categoryName = service['serviceCategory']?['name'] ?? l10n.publicService;
-    final rawStatus    = (service['status'] ?? 'Pending').toString().toUpperCase();
-    final date         = _formatDate(service['createdAt']);
+    final typeName = _loc(service['serviceType']?['name']).isNotEmpty
+        ? _loc(service['serviceType']?['name'])
+        : l10n.generalService;
+    final categoryName = _loc(service['serviceCategory']?['name']).isNotEmpty
+        ? _loc(service['serviceCategory']?['name'])
+        : l10n.publicService;
 
-    Color statusColor;
+    final rawStatus = (service['status'] ?? 'Pending').toString().toUpperCase();
+    final date      = _formatDate(service['createdAt']);
+
+    Color    statusColor;
     IconData statusIcon;
-    String statusLabel;
+    String   statusLabel;
 
     if (rawStatus == 'COMPLETED') {
       statusColor = _T.green;
@@ -297,22 +425,22 @@ class _ServiceReportPageState extends State<ServiceReportPage>
           MaterialPageRoute(
             builder: (_) => ServiceReportDetailPage(
               service: service,
-              userId: widget.userId,
-              token: widget.token,
+              userId:  widget.userId,
+              token:   widget.token,
             ),
           ),
         ),
         child: Container(
           margin: const EdgeInsets.only(bottom: 14),
           decoration: BoxDecoration(
-            color: _T.surface,
+            color:        _T.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _T.divider, width: 1),
+            border:       Border.all(color: _T.divider, width: 1),
             boxShadow: [
               BoxShadow(
-                  color: _T.primary.withOpacity(0.07),
+                  color:      _T.primary.withOpacity(0.07),
                   blurRadius: 16,
-                  offset: const Offset(0, 5)),
+                  offset:     const Offset(0, 5)),
             ],
           ),
           child: Padding(
@@ -321,46 +449,56 @@ class _ServiceReportPageState extends State<ServiceReportPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  _categoryBadge(categoryName.toUpperCase()),
-                  const Spacer(),
+                  Flexible(child: _categoryBadge(categoryName.toUpperCase())),
+                  const SizedBox(width: 8),
                   _statusChip(statusLabel, statusColor, statusIcon),
                 ]),
                 const SizedBox(height: 14),
                 Text(typeName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: _T.textDark,
+                        fontSize:      16,
+                        fontWeight:    FontWeight.w800,
+                        color:         _T.textDark,
                         letterSpacing: -0.2)),
                 const SizedBox(height: 14),
                 Container(height: 1, color: _T.divider),
                 const SizedBox(height: 12),
                 Row(children: [
-                  Row(children: [
-                    const Icon(Icons.access_time_rounded,
-                        size: 12, color: _T.textMid),
-                    const SizedBox(width: 5),
-                    Text(date,
-                        style: const TextStyle(
-                            color: _T.textMid,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500)),
-                  ]),
-                  const Spacer(),
+                  Flexible(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.access_time_rounded,
+                            size: 12, color: _T.textMid),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(date,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color:      _T.textMid,
+                                  fontSize:   12,
+                                  fontWeight: FontWeight.w500)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                        color: _T.accentSoft,
+                        color:        _T.accentSoft,
                         borderRadius: BorderRadius.circular(7)),
-                    child: Row(children: [
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
                       const Icon(Icons.open_in_new_rounded,
                           size: 11, color: _T.accent),
                       const SizedBox(width: 5),
                       Text(l10n.viewDetails,
                           style: const TextStyle(
-                              color: _T.accent,
-                              fontSize: 11,
+                              color:      _T.accent,
+                              fontSize:   11,
                               fontWeight: FontWeight.w700)),
                     ]),
                   ),
@@ -373,103 +511,104 @@ class _ServiceReportPageState extends State<ServiceReportPage>
     );
   }
 
-  Widget _categoryBadge(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-          color: _T.accentSoft, borderRadius: BorderRadius.circular(8)),
-      child: Text(label,
-          style: const TextStyle(
-              color: _T.primary,
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.4)),
-    );
-  }
-
-  Widget _statusChip(String label, Color color, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 10, color: color),
-        const SizedBox(width: 4),
-        Text(label,
-            style: TextStyle(
-                color: color,
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.3)),
-      ]),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Container(
-          width: 80, height: 80,
-          decoration: BoxDecoration(
-              color: _T.accentSoft,
-              borderRadius: BorderRadius.circular(24)),
-          child: const Icon(Icons.inventory_2_outlined,
-              size: 36, color: _T.primary),
-        ),
-        const SizedBox(height: 18),
-        Text(l10n.noReportsYet,
+  Widget _categoryBadge(String label) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+            color: _T.accentSoft, borderRadius: BorderRadius.circular(8)),
+        child: Text(label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: _T.textDark)),
-        const SizedBox(height: 6),
-        Text(l10n.noReportsSubtitle,
-            style: const TextStyle(fontSize: 13, color: _T.textMid)),
-      ]),
-    );
-  }
+                color:         _T.primary,
+                fontSize:      9,
+                fontWeight:    FontWeight.w800,
+                letterSpacing: 0.4)),
+      );
 
-  Widget _buildErrorState() {
-    return Padding(
-      padding: const EdgeInsets.all(40),
-      child: Column(children: [
-        Container(
-          width: 64, height: 64,
-          decoration: BoxDecoration(
-              color: _T.red.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20)),
-          child: const Icon(Icons.error_outline_rounded,
-              color: _T.red, size: 30),
-        ),
-        const SizedBox(height: 14),
-        Text(l10n.failedToLoad,
-            style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 16,
-                color: _T.textDark)),
-        const SizedBox(height: 8),
-        Text(_error ?? "",
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, color: _T.textMid)),
-        const SizedBox(height: 20),
-        GestureDetector(
-          onTap: _loadData,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+  Widget _statusChip(String label, Color color, IconData icon) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 10, color: color),
+          const SizedBox(width: 4),
+          Text(label,
+              style: TextStyle(
+                  color:         color,
+                  fontSize:      9,
+                  fontWeight:    FontWeight.w800,
+                  letterSpacing: 0.3)),
+        ]),
+      );
+
+  Widget _buildEmptyState() => Center(
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(
+            width: 80, height: 80,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                  colors: [_T.primary, _T.primaryMid]),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Text(l10n.tryAgain,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13)),
+                color:        _T.accentSoft,
+                borderRadius: BorderRadius.circular(24)),
+            child: const Icon(Icons.inventory_2_outlined,
+                size: 36, color: _T.primary),
           ),
-        ),
-      ]),
-    );
-  }
+          const SizedBox(height: 18),
+          Text(l10n.noReportsYet,
+              style: const TextStyle(
+                  fontSize:   18,
+                  fontWeight: FontWeight.w800,
+                  color:      _T.textDark)),
+          const SizedBox(height: 6),
+          Text(l10n.noReportsSubtitle,
+              style: const TextStyle(fontSize: 13, color: _T.textMid)),
+        ]),
+      );
+
+  Widget _buildErrorState() => Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(children: [
+          Container(
+            width: 64, height: 64,
+            decoration: BoxDecoration(
+                color:        _T.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20)),
+            child: const Icon(Icons.error_outline_rounded,
+                color: _T.red, size: 30),
+          ),
+          const SizedBox(height: 14),
+          Text(l10n.failedToLoad,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize:   16,
+                  color:      _T.textDark)),
+          const SizedBox(height: 8),
+          Text(_error ?? '',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: _T.textMid)),
+          const SizedBox(height: 20),
+          GestureDetector(
+            onTap: _loadData,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    colors: [_T.primary, _T.primaryMid]),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(l10n.tryAgain,
+                  style: const TextStyle(
+                      color:      Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize:   13)),
+            ),
+          ),
+        ]),
+      );
+
+  Widget _blob(double size, Color color, double opacity) => Container(
+        width: size, height: size,
+        decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color.withOpacity(opacity)));
 }
