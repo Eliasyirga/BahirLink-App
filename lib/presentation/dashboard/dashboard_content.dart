@@ -44,6 +44,11 @@ class _DashboardContentState extends State<DashboardContent>
 
   AppLocalizations get l10n => AppLocalizations.of(context)!;
 
+  // ── Disposed flag ──────────────────────────────────────────────────────────
+  // Raised in deactivate() so all async callbacks that check mounted/disposed
+  // bail out before touching the scaffold or setState after teardown.
+  bool _disposed = false;
+
   // ── State ──────────────────────────────────────────────────────────────────
   String _fullName        = "User";
   bool   _isLoading       = true;
@@ -79,6 +84,14 @@ class _DashboardContentState extends State<DashboardContent>
   }
 
   @override
+  void deactivate() {
+    // Raise the disposed flag while the element is still in the tree so any
+    // in-flight async callbacks that check _disposed / mounted stop safely.
+    _disposed = true;
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     _sliderTimer?.cancel();
     _caseCtrl.dispose();
@@ -91,14 +104,14 @@ class _DashboardContentState extends State<DashboardContent>
   Future<void> _initLangAndLoad() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('language_code') ?? 'en';
-    if (mounted) setState(() => _currentLang = saved);
+    if (!_disposed && mounted) setState(() => _currentLang = saved);
     await _loadData(lang: saved);
   }
 
   // ── Master load — always passes an explicit lang so all fetchers stay in sync
   Future<void> _loadData({String? lang}) async {
     final useLang = lang ?? _currentLang;
-    if (mounted) setState(() => _isLoading = true);
+    if (!_disposed && mounted) setState(() => _isLoading = true);
     try {
       await Future.wait([
         _fetchUser(),
@@ -106,17 +119,19 @@ class _DashboardContentState extends State<DashboardContent>
         _fetchServiceTypes(useLang),
         _fetchCases(useLang),
       ]);
-      _startAutoLoop();
-      _fadeCtrl.forward();
+      if (!_disposed && mounted) {
+        _startAutoLoop();
+        _fadeCtrl.forward();
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (!_disposed && mounted) setState(() => _isLoading = false);
     }
   }
 
   // ── Individual fetchers ────────────────────────────────────────────────────
   Future<void> _fetchUser() async {
     final res = await UserService.getProfile();
-    if (res != null && mounted) {
+    if (res != null && !_disposed && mounted) {
       final u = res['user'] ?? res;
       setState(() =>
           _fullName = "${u["firstName"] ?? ""} ${u["lastName"] ?? ""}".trim());
@@ -125,18 +140,17 @@ class _DashboardContentState extends State<DashboardContent>
 
   Future<void> _fetchEmergencyTypes(String lang) async {
     final types = await EmergencyTypeService.fetchEmergencyTypes(lang: lang);
-    if (mounted) setState(() => _emergencyTypes = types);
+    if (!_disposed && mounted) setState(() => _emergencyTypes = types);
   }
 
-  /// Uses ServiceTypeService so lang param is honoured.
   Future<void> _fetchServiceTypes(String lang) async {
     final types = await ServiceTypeService.getAllServiceTypes(lang: lang);
-    if (mounted) setState(() => _serviceTypes = types);
+    if (!_disposed && mounted) setState(() => _serviceTypes = types);
   }
 
   Future<void> _fetchCases(String lang) async {
     final fetched = await CaseService.getAllCases(lang: lang) ?? [];
-    if (mounted) {
+    if (!_disposed && mounted) {
       setState(() {
         _cases = fetched.where((c) {
           final s = (c['status'] ?? '').toString().toLowerCase();
@@ -150,6 +164,7 @@ class _DashboardContentState extends State<DashboardContent>
     _sliderTimer?.cancel();
     if (_cases.isEmpty) return;
     _sliderTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_disposed || !mounted) return;
       if (_caseCtrl.hasClients) {
         _currentIdx = (_currentIdx + 1) % _cases.length;
         _caseCtrl.animateToPage(_currentIdx,
@@ -167,7 +182,7 @@ class _DashboardContentState extends State<DashboardContent>
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('language_code', langCode);
 
-    if (!mounted) return;
+    if (_disposed || !mounted) return;
 
     // 2. Update app locale (rebuilds l10n strings)
     MyApp.of(context)?.setLocale(Locale(langCode));
@@ -186,7 +201,7 @@ class _DashboardContentState extends State<DashboardContent>
         _fetchCases(langCode),
       ]);
     } finally {
-      if (mounted) setState(() => _isSwitchingLang = false);
+      if (!_disposed && mounted) setState(() => _isSwitchingLang = false);
     }
   }
 
@@ -932,8 +947,8 @@ class _LoadingDots extends StatefulWidget {
 
 class _LoadingDotsState extends State<_LoadingDots>
     with TickerProviderStateMixin {
-  final List<AnimationController> _ctls = [];
-  final List<Animation<double>> _anims = [];
+  final List<AnimationController> _ctls  = [];
+  final List<Animation<double>>   _anims = [];
 
   @override
   void initState() {
@@ -946,6 +961,7 @@ class _LoadingDotsState extends State<_LoadingDots>
       _anims.add(Tween<double>(begin: 0.25, end: 1.0).animate(
           CurvedAnimation(parent: ctrl, curve: Curves.easeInOut)));
       Future.delayed(Duration(milliseconds: i * 180), () {
+        // Guard: widget may have been disposed before the delay fires.
         if (mounted) ctrl.forward();
       });
     }
@@ -953,7 +969,13 @@ class _LoadingDotsState extends State<_LoadingDots>
 
   @override
   void dispose() {
-    for (final c in _ctls) _ctls.forEach((c) => c.dispose());
+    // FIX: was `for (final c in _ctls) _ctls.forEach((c) => c.dispose());`
+    // That nested loop disposed every controller N×N times (3×3 = 9 calls
+    // for 3 controllers), triggering "AnimationController disposed > once".
+    // Correct: a single pass — one dispose() call per controller.
+    for (final c in _ctls) {
+      c.dispose();
+    }
     super.dispose();
   }
 
