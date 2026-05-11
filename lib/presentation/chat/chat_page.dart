@@ -1,16 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:http_parser/http_parser.dart';
-// Audio
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
-// Call
 import '../../services/call_services.dart';
 import '../call/call_page.dart';
 import '../../main.dart' show appMessengerKey;
@@ -36,6 +36,8 @@ class _T {
 
 // ─── ChatPage ─────────────────────────────────────────────────────────────────
 class ChatPage extends StatefulWidget {
+  // FIX D: declared as int — never String — so emergencyId comparisons against
+  // CallInvite.emergencyId (also int) can never silently fail.
   final int    emergencyId;
   final String token;
   final int    userId;
@@ -52,76 +54,69 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
-  static const String _serverUrl = "http://localhost:5000";
+  static const String _serverUrl = 'http://localhost:5000';
 
-  // ── Disposed flag ─────────────────────────────────────────────────────────
   bool _disposed = false;
 
-  // ── Socket ────────────────────────────────────────────────────────────────
   IO.Socket? _socket;
 
-  // ── State ─────────────────────────────────────────────────────────────────
-  bool   _isLoading      = true;
-  String _status         = "idle";
-  bool   _isChatEnabled  = false;
-  bool   _isComposing    = false;
-  bool   _isRecording    = false;
-  bool   _isUploading    = false;
+  bool   _isLoading     = true;
+  String _status        = 'idle';
+  bool   _isChatEnabled = false;
+  bool   _isComposing   = false;
+  bool   _isRecording   = false;
+  bool   _isUploading   = false;
 
-  // Stores the temp file path between _startRecording and _stopAndSend
   String? _recordingPath;
 
-  // ── Audio ─────────────────────────────────────────────────────────────────
-  final AudioRecorder _recorder = AudioRecorder();
-  final AudioPlayer   _player   = AudioPlayer();
+  AudioRecorder? _recorder;
+  final AudioPlayer _player = AudioPlayer();
   dynamic _playingKey;
 
-  // ── Messages ──────────────────────────────────────────────────────────────
   final List<Map<String, dynamic>> _messages = [];
-  final Set<dynamic> _seenKeys = {};
+  final Set<dynamic> _seenIds = {};
 
-  // ── Controllers ───────────────────────────────────────────────────────────
   final TextEditingController _msgCtrl    = TextEditingController();
   final ScrollController      _scrollCtrl = ScrollController();
 
   late final AnimationController _fadeCtrl = AnimationController(
-    vsync: this, duration: const Duration(milliseconds: 400));
+      vsync: this, duration: const Duration(milliseconds: 400));
   late final Animation<double> _fadeAnim =
       CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   String get _cleanToken {
     final t = widget.token.trim();
-    return t.startsWith("Bearer ") ? t.substring(7) : t;
+    return t.startsWith('Bearer ') ? t.substring(7) : t;
   }
 
   String _absoluteUrl(String url) =>
-      url.startsWith("http") ? url : "$_serverUrl$url";
+      url.startsWith('http') ? url : '$_serverUrl$url';
 
   Color _statusColor() => switch (_status) {
-        "ready"      => _isChatEnabled ? _T.green : _T.orange,
-        "connecting" => _T.orange,
-        "error"      => _T.red,
+        'ready'      => _isChatEnabled ? _T.green : _T.orange,
+        'connecting' => _T.orange,
+        'error'      => _T.red,
         _            => _T.textMid,
       };
 
   String _statusLabel() => switch (_status) {
-        "ready"      => _isChatEnabled ? "Online" : "Waiting for responder…",
-        "connecting" => "Connecting…",
-        "error"      => "Offline",
-        _            => "Idle",
+        'ready'      => _isChatEnabled ? 'Online' : 'Waiting for responder…',
+        'connecting' => 'Connecting…',
+        'error'      => 'Offline',
+        _            => 'Idle',
       };
 
   bool _isMe(Map<String, dynamic> msg) =>
-      msg["senderType"] == "user" && msg["senderId"] == widget.userId;
+      msg['senderType'] == 'user' && msg['senderId'] == widget.userId;
 
   bool _isAudio(Map<String, dynamic> msg) =>
-      msg["messageType"]?.toString() == "audio" ||
-      (msg["audioUrl"] != null && msg["audioUrl"].toString().isNotEmpty);
+      msg['messageType']?.toString() == 'audio' ||
+      (msg['audioUrl'] != null && msg['audioUrl'].toString().isNotEmpty);
 
   DateTime? _parseTime(Map<String, dynamic> msg) {
-    final raw = msg["createdAt"] ?? msg["created_at"] ??
-                msg["timestamp"] ?? msg["time"];
+    final raw = msg['createdAt'] ?? msg['created_at'] ??
+                msg['timestamp'] ?? msg['time'];
     if (raw == null) return null;
     if (raw is int) {
       return raw > 1000000000000
@@ -134,18 +129,19 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   String _formatTime(DateTime dt) {
     final h  = dt.hour;
     final hh = ((h + 11) % 12) + 1;
-    final mm = dt.minute.toString().padLeft(2, "0");
-    return "$hh:$mm ${h >= 12 ? 'PM' : 'AM'}";
+    final mm = dt.minute.toString().padLeft(2, '0');
+    return '$hh:$mm ${h >= 12 ? 'PM' : 'AM'}';
   }
 
   void _showError(String message) {
     if (_disposed || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message,
+      content:         Text(message,
           style: const TextStyle(fontWeight: FontWeight.w600)),
       behavior:        SnackBarBehavior.floating,
       backgroundColor: _T.textDark,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape:           RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.all(16),
     ));
   }
@@ -165,10 +161,31 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
 
   void _addMessage(Map<String, dynamic> msg) {
     if (_disposed || !mounted) return;
-    final key = msg["id"] ?? msg["createdAt"] ?? msg["created_at"];
-    if (key != null && _seenKeys.contains(key)) return;
-    if (key != null) _seenKeys.add(key);
+    final id = msg['id'];
+    if (id != null) {
+      if (_seenIds.contains(id)) return;
+      _seenIds.add(id);
+    }
     setState(() => _messages.add(msg));
+  }
+
+  void _confirmMessage(Map<String, dynamic> confirmed, {String? tempKey}) {
+    if (_disposed || !mounted) return;
+    final id = confirmed['id'];
+    if (id != null) {
+      if (_seenIds.contains(id)) return;
+      _seenIds.add(id);
+    }
+    setState(() {
+      if (tempKey != null) {
+        final idx = _messages.indexWhere((m) => m['id'] == tempKey);
+        if (idx != -1) {
+          _messages[idx] = confirmed;
+          return;
+        }
+      }
+      _messages.add(confirmed);
+    });
   }
 
   // ── Socket teardown ───────────────────────────────────────────────────────
@@ -176,7 +193,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     if (_disposed) return;
     _disposed = true;
     final s = _socket;
-    _socket = null;
+    _socket  = null;
     s?.clearListeners();
     s?.disconnect();
     s?.dispose();
@@ -192,7 +209,28 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+
+    // FIX B: ensure the CallService socket is alive before registering the
+    // callback — if connect() was never called this logs a warning and no-ops.
     CallService.I.ensureConnected();
+
+    // Register incoming-call callback. This fires for every call:incoming that
+    // arrives while this screen is open.
+    CallService.I.onIncomingCall = _handleIncomingCall;
+
+    // FIX C: consume a pending invite that arrived before this screen opened.
+    // We use addPostFrameCallback so the Navigator is ready for push().
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_disposed || !mounted) return;
+      final pending = CallService.I.pendingInvite;
+      if (pending == null) return;
+      // FIX D: both sides are int — no type-mismatch possible.
+      if (pending.emergencyId != widget.emergencyId) return;
+      debugPrint('📞 ChatPage: consuming pendingInvite $pending');
+      CallService.I.pendingInvite = null;
+      _handleIncomingCall(pending);
+    });
+
     _initChat();
 
     _msgCtrl.addListener(() {
@@ -217,54 +255,83 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    // Clear the callback so a disposed ChatPage never triggers navigation.
+    CallService.I.onIncomingCall = null;
+
     _teardownSocket();
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
-    _recorder.dispose();
+    _recorder?.dispose();
     _player.dispose();
     _fadeCtrl.dispose();
     super.dispose();
   }
 
+  // ── Incoming call handler ─────────────────────────────────────────────────
+  // FIX C + FIX D: called both from onIncomingCall and from the
+  // pendingInvite check in initState. emergencyId comparison is int vs int.
+  void _handleIncomingCall(CallInvite invite) {
+    debugPrint(
+      '📞 _handleIncomingCall: invite.emergencyId=${invite.emergencyId} '
+      'widget.emergencyId=${widget.emergencyId} '
+      'disposed=$_disposed mounted=$mounted',
+    );
+
+    if (_disposed || !mounted) return;
+
+    // FIX D: both are int — strict equality, no coercion needed.
+    if (invite.emergencyId != widget.emergencyId) {
+      debugPrint('📞 emergencyId mismatch — ignoring');
+      return;
+    }
+
+    // Clear pending so _openCallOrExplain doesn't re-open it after dismiss.
+    CallService.I.pendingInvite = null;
+
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (_) => CallPage(invite: invite),
+    ));
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────────
   Future<void> _initChat() async {
     if (_disposed || !mounted) return;
-    setState(() { _isLoading = true; _status = "connecting"; });
+    setState(() { _isLoading = true; _status = 'connecting'; });
 
     try {
       final res = await http.get(
-        Uri.parse("$_serverUrl/api/message/${widget.emergencyId}"),
+        Uri.parse('$_serverUrl/api/message/${widget.emergencyId}'),
         headers: {
-          "Authorization": "Bearer $_cleanToken",
-          "Content-Type":  "application/json",
+          'Authorization': 'Bearer $_cleanToken',
+          'Content-Type':  'application/json',
         },
       );
-
       if (_disposed || !mounted) return;
 
       final body = jsonDecode(res.body) as Map<String, dynamic>;
-
-      if (res.statusCode != 200 || body["success"] != true) {
-        _showError(body["message"]?.toString() ?? "Failed to load chat history");
-        setState(() => _status = "error");
+      if (res.statusCode != 200 || body['success'] != true) {
+        _showError(body['message']?.toString() ?? 'Failed to load chat history');
+        setState(() => _status = 'error');
         return;
       }
 
-      final list = (body["data"] as List<dynamic>? ?? [])
+      final list = (body['data'] as List<dynamic>? ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
 
       for (final m in list) {
-        final k = m["id"] ?? m["createdAt"] ?? m["created_at"];
-        if (k != null) _seenKeys.add(k);
+        final id = m['id'];
+        if (id != null) _seenIds.add(id);
       }
 
-      // If any message from a responder exists in history, chat is already
-      // open — unlock immediately so the user doesn't have to wait.
-      final alreadyEnabled = list.any((m) => m["senderType"] == "responderTeam");
+      final alreadyEnabled =
+          list.any((m) => m['senderType'] == 'responderTeam');
 
       setState(() {
-        _messages..clear()..addAll(list);
+        _messages
+          ..clear()
+          ..addAll(list);
         if (alreadyEnabled) _isChatEnabled = true;
       });
 
@@ -272,30 +339,31 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
       _scrollToBottom(force: true);
       _fadeCtrl.forward();
     } catch (e) {
-      debugPrint("_initChat error: $e");
+      debugPrint('_initChat error: $e');
       if (_disposed || !mounted) return;
-      setState(() => _status = "error");
-      _showError("Could not reach server.");
+      setState(() => _status = 'error');
+      _showError('Could not reach server.');
     } finally {
       if (!_disposed && mounted) setState(() => _isLoading = false);
     }
   }
 
-  // ── Socket ────────────────────────────────────────────────────────────────
+  // ── Chat socket ───────────────────────────────────────────────────────────
+  // This is a SEPARATE socket used only for chat messages. The call socket is
+  // managed exclusively by CallService.I so it stays alive across screens.
   void _connectSocket() {
     final old = _socket;
     _socket = null;
     old?.clearListeners();
     old?.disconnect();
     old?.dispose();
-
     if (_disposed) return;
 
     final s = IO.io(
       _serverUrl,
       IO.OptionBuilder()
-          .setTransports(["websocket"])
-          .setAuth({"token": "Bearer $_cleanToken"})
+          .setTransports(['websocket'])
+          .setAuth({'token': 'Bearer $_cleanToken'})
           .disableAutoConnect()
           .build(),
     );
@@ -303,38 +371,41 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
 
     s.onConnect((_) {
       if (_disposed || !mounted) return;
-      s.emit("chat:join",      {"emergencyId": widget.emergencyId});
-      s.emit("join_emergency", widget.emergencyId);
+      s.emit('chat:join',      {'emergencyId': widget.emergencyId});
+      s.emit('join_emergency', widget.emergencyId);
     });
 
-    // One-way ratchet — only ever goes true, never back to false.
-    s.on("chat:joined", (data) {
+    s.on('chat:joined', (data) {
       if (_disposed || !mounted) return;
-      final map = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+      final map = data is Map
+          ? Map<String, dynamic>.from(data)
+          : <String, dynamic>{};
       setState(() {
-        _status = "ready";
-        if (map["isChatEnabled"] == true) _isChatEnabled = true;
+        _status = 'ready';
+        if (map['isChatEnabled'] == true) _isChatEnabled = true;
       });
     });
 
-    s.on("chat:new", _onIncoming);
+    s.on('chat:new',        _onIncoming);
+    s.on('receive_message', _onIncoming);
 
-    // Fired by the server the moment a responder enables chat.
-    s.on("chat:enabled", (data) {
+    s.on('chat:enabled', (_) {
       if (_disposed || !mounted) return;
       setState(() => _isChatEnabled = true);
     });
 
-    s.on("error_alert", (e) {
+    s.on('error_alert', (e) {
       if (_disposed) return;
-      final raw = e is Map ? (e["message"] ?? e["error"] ?? e.toString()) : e.toString();
+      final raw = e is Map
+          ? (e['message'] ?? e['error'] ?? e.toString())
+          : e.toString();
       _showError(raw.toString());
     });
 
     s.onConnectError((_) {
       if (_disposed || !mounted) return;
-      setState(() => _status = "error");
-      _showError("Socket connection failed.");
+      setState(() => _status = 'error');
+      _showError('Socket connection failed.');
     });
 
     s.connect();
@@ -344,21 +415,20 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     if (_disposed || !mounted) return;
     try {
       final msg = Map<String, dynamic>.from(data as Map);
-
-      // Any incoming message means chat is open — unlock if not already.
       if (!_isChatEnabled) setState(() => _isChatEnabled = true);
 
-      final isOwnText = msg["senderId"]   == widget.userId &&
-                        msg["senderType"] == "user" &&
-                        (msg["messageType"] == "text" ||
-                         msg["audioUrl"] == null ||
-                         msg["audioUrl"] == "");
-      if (isOwnText) return;
+      final isOwnTextEcho =
+          msg['senderId']   == widget.userId &&
+          msg['senderType'] == 'user'        &&
+          msg['messageType'] != 'audio'      &&
+          (msg['audioUrl'] == null ||
+           msg['audioUrl'].toString().isEmpty);
+      if (isOwnTextEcho) return;
 
       _addMessage(msg);
       _scrollToBottom();
     } catch (e) {
-      debugPrint("Bad socket payload: $e");
+      debugPrint('Bad socket payload: $e');
     }
   }
 
@@ -368,119 +438,149 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     if (text.isEmpty) return;
 
     if (!_isChatEnabled) {
-      _showError("Chat not yet opened by a responder. Please wait.");
+      _showError('Chat not yet opened by a responder. Please wait.');
       return;
     }
 
     final s = _socket;
     if (s == null || !s.connected) {
-      _showError("Not connected to chat.");
+      _showError('Not connected to chat.');
       return;
     }
 
-    final optimisticKey = "opt_${DateTime.now().millisecondsSinceEpoch}";
+    final tempKey = 'opt_${DateTime.now().millisecondsSinceEpoch}';
     _addMessage(<String, dynamic>{
-      "id":          optimisticKey,
-      "emergencyId": widget.emergencyId,
-      "senderId":    widget.userId,
-      "senderType":  "user",
-      "messageType": "text",
-      "text":        text,
-      "audioUrl":    null,
-      "createdAt":   DateTime.now().toIso8601String(),
+      'id':          tempKey,
+      'emergencyId': widget.emergencyId,
+      'senderId':    widget.userId,
+      'senderType':  'user',
+      'messageType': 'text',
+      'text':        text,
+      'audioUrl':    null,
+      'createdAt':   DateTime.now().toIso8601String(),
     });
 
-    s.emit("chat:send", {"emergencyId": widget.emergencyId, "text": text});
+    s.emit('chat:send', {'emergencyId': widget.emergencyId, 'text': text});
     _msgCtrl.clear();
     _scrollToBottom();
   }
 
-  // ── Video call ────────────────────────────────────────────────────────────
+  // ── Video call — manual fallback ──────────────────────────────────────────
+  // Primary path is _handleIncomingCall() fired automatically by CallService.
+  // This button lets the user open the call if they somehow missed the push.
   void _openCallOrExplain() {
     final invite = CallService.I.pendingInvite;
     if (invite != null && invite.emergencyId == widget.emergencyId) {
+      CallService.I.pendingInvite = null;
       Navigator.of(context).push(MaterialPageRoute<void>(
         fullscreenDialog: true,
         builder: (_) => CallPage(invite: invite),
       ));
       return;
     }
-    _showError("No incoming call right now. Wait for the responder.");
+    _showError('No incoming call right now. Wait for the responder.');
   }
 
   // ── Audio recording ───────────────────────────────────────────────────────
   Future<void> _toggleRecord() async {
     if (!_isChatEnabled) {
-      _showError("Chat not yet opened by a responder. Please wait.");
+      _showError('Chat not yet opened by a responder. Please wait.');
       return;
     }
-    if (_status != "ready") { _showError("Chat not connected yet."); return; }
+    if (_status != 'ready') { _showError('Chat not connected yet.'); return; }
     if (_isUploading) return;
     _isRecording ? await _stopAndSend() : await _startRecording();
   }
 
   Future<void> _startRecording() async {
-    final ok = await _recorder.hasPermission();
-    if (!ok) { _showError("Microphone permission denied."); return; }
-    try {
-      // FIX: use the system temp directory — a bare filename is not writable
-      // on Android/iOS. Store the path so _stopAndSend can find the file.
-      final dir  = Directory.systemTemp;
-      final path = '${dir.path}/bahirlink_'
-                   '${widget.emergencyId}_'
-                   '${DateTime.now().millisecondsSinceEpoch}.m4a';
+    await _recorder?.dispose();
+    _recorder = AudioRecorder();
 
-      await _recorder.start(
-        const RecordConfig(
+    final ok = await _recorder!.hasPermission();
+    if (!ok) {
+      _showError('Microphone permission denied.');
+      await _recorder?.dispose();
+      _recorder = null;
+      return;
+    }
+
+    try {
+      final String path;
+      final RecordConfig config;
+
+      if (kIsWeb) {
+        path   = 'recording_${DateTime.now().millisecondsSinceEpoch}.webm';
+        config = const RecordConfig(
+          encoder:    AudioEncoder.opus,
+          bitRate:    128000,
+          sampleRate: 44100,
+        );
+      } else {
+        final dir = await getTemporaryDirectory();
+        path = '${dir.path}/bahirlink_'
+               '${widget.emergencyId}_'
+               '${DateTime.now().millisecondsSinceEpoch}.m4a';
+        config = const RecordConfig(
           encoder:    AudioEncoder.aacLc,
           bitRate:    128000,
           sampleRate: 44100,
-        ),
-        path: path,
-      );
+        );
+      }
 
+      await _recorder!.start(config, path: path);
       _recordingPath = path;
       if (!_disposed && mounted) setState(() => _isRecording = true);
     } catch (e) {
-      _showError("Failed to start recording: $e");
+      _showError('Failed to start recording: $e');
+      await _recorder?.dispose();
+      _recorder = null;
     }
   }
 
   Future<void> _stopAndSend() async {
     try {
-      // FIX: _recorder.stop() returns the path but on some platforms it
-      // returns null even on success. Fall back to the path we stored at
-      // start time so we never lose the file.
-      final stoppedPath = await _recorder.stop();
-      final path = stoppedPath ?? _recordingPath;
-      _recordingPath = null;
+      final stoppedPath = await _recorder?.stop();
+      await _recorder?.dispose();
+      _recorder = null;
 
       if (!_disposed && mounted) setState(() => _isRecording = false);
 
-      if (path == null || path.isEmpty) {
-        _showError("Recording finished but no file was saved.");
+      if (kIsWeb) {
+        if (stoppedPath == null || stoppedPath.isEmpty) {
+          _showError('Recording failed — no audio captured.');
+          return;
+        }
+        await _uploadAudioWeb(stoppedPath);
         return;
       }
 
-      // Verify the file actually exists before trying to upload it.
+      final path = (stoppedPath != null && stoppedPath.isNotEmpty)
+          ? stoppedPath
+          : _recordingPath;
+      _recordingPath = null;
+
+      if (path == null || path.isEmpty) {
+        _showError('Recording finished but no file path was returned.');
+        return;
+      }
+
       final file = File(path);
       if (!file.existsSync()) {
-        _showError("Recording file not found at: $path");
+        _showError('Recording file not found at: $path');
+        return;
+      }
+      if (file.lengthSync() == 0) {
+        _showError('Recording is empty — please try again.');
         return;
       }
 
-      final size = file.lengthSync();
-      if (size == 0) {
-        _showError("Recording is empty — please try again.");
-        return;
-      }
-
-      debugPrint("🎙 Uploading audio: $path ($size bytes)");
       await _uploadAudio(path);
     } catch (e) {
       if (!_disposed && mounted) setState(() => _isRecording = false);
       _recordingPath = null;
-      _showError("Failed to stop recording: $e");
+      await _recorder?.dispose();
+      _recorder = null;
+      _showError('Failed to stop recording: $e');
     }
   }
 
@@ -489,64 +589,118 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     setState(() => _isUploading = true);
 
     try {
-      // FIX: explicitly set the content-type so the server multer middleware
-      // recognises the file as audio regardless of the file extension.
       final file     = File(path);
       final filename = path.split('/').last;
 
       final req = http.MultipartRequest(
-        "POST",
-        Uri.parse("$_serverUrl/api/message/audio"),
+        'POST',
+        Uri.parse('$_serverUrl/api/message/audio'),
       )
-        ..headers["Authorization"] = "Bearer $_cleanToken"
-        ..fields["emergencyId"]    = widget.emergencyId.toString()
+        ..headers['Authorization'] = 'Bearer $_cleanToken'
+        ..fields['emergencyId']    = widget.emergencyId.toString()
         ..files.add(
           http.MultipartFile(
-            "audio",                        // must match upload.single("audio")
+            'audio',
             file.openRead(),
             file.lengthSync(),
             filename:    filename,
-            contentType: MediaType("audio", "mp4"), // m4a is audio/mp4
+            contentType: MediaType('audio', 'mp4'),
           ),
         );
-
-      debugPrint("📤 POST ${ _serverUrl}/api/message/audio "
-                 "| file=$filename | size=${file.lengthSync()}");
 
       final streamed = await req.send();
       if (_disposed || !mounted) return;
 
-      final res  = await http.Response.fromStream(streamed);
-      debugPrint("📥 Audio upload response: ${res.statusCode} ${res.body}");
+      final res = await http.Response.fromStream(streamed);
+      await _handleAudioUploadResponse(res);
 
-      final body = jsonDecode(res.body) as Map<String, dynamic>;
-
-      // FIX: accept both 200 and 201 — some server configs return 200.
-      if ((res.statusCode != 200 && res.statusCode != 201) ||
-          body["success"] != true) {
-        _showError(body["message"]?.toString() ?? "Audio upload failed");
-        return;
-      }
-
-      final saved = Map<String, dynamic>.from(body["data"] as Map);
-      _addMessage(saved);
-      _scrollToBottom();
-
-      // Clean up the temp file after a successful upload.
       try { file.deleteSync(); } catch (_) {}
     } catch (e) {
-      debugPrint("❌ _uploadAudio error: $e");
-      _showError("Failed to upload audio: $e");
+      _showError('Failed to upload audio: $e');
     } finally {
       if (!_disposed && mounted) setState(() => _isUploading = false);
     }
   }
 
+  Future<void> _uploadAudioWeb(String blobUrl) async {
+    if (_disposed || !mounted) return;
+    setState(() => _isUploading = true);
+
+    try {
+      final blobResponse = await http.get(Uri.parse(blobUrl));
+      if (blobResponse.statusCode != 200) {
+        _showError('Failed to read recorded audio from browser.');
+        return;
+      }
+
+      final filename =
+          'bahirlink_${widget.emergencyId}_${DateTime.now().millisecondsSinceEpoch}.webm';
+
+      final req = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_serverUrl/api/message/audio'),
+      )
+        ..headers['Authorization'] = 'Bearer $_cleanToken'
+        ..fields['emergencyId']    = widget.emergencyId.toString()
+        ..files.add(
+          http.MultipartFile.fromBytes(
+            'audio',
+            blobResponse.bodyBytes,
+            filename:    filename,
+            contentType: MediaType('audio', 'webm'),
+          ),
+        );
+
+      final streamed = await req.send();
+      if (_disposed || !mounted) return;
+
+      final res = await http.Response.fromStream(streamed);
+      await _handleAudioUploadResponse(res);
+    } catch (e) {
+      _showError('Failed to upload audio: $e');
+    } finally {
+      if (!_disposed && mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  Future<void> _handleAudioUploadResponse(http.Response res) async {
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      String errMsg = 'Audio upload failed (${res.statusCode})';
+      try {
+        final errBody = jsonDecode(res.body) as Map<String, dynamic>;
+        errMsg = errBody['message']?.toString() ?? errMsg;
+      } catch (_) {}
+      _showError(errMsg);
+      return;
+    }
+
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (body['success'] != true) {
+      _showError(body['message']?.toString() ?? 'Audio upload failed');
+      return;
+    }
+
+    final rawData = body['data'];
+    if (rawData == null || rawData is! Map) {
+      _showError('Server returned no message data.');
+      return;
+    }
+
+    final saved = Map<String, dynamic>.from(rawData);
+    _confirmMessage(saved);
+    _scrollToBottom();
+
+    if (body['statusChanged'] == true) {
+      if (!_disposed && mounted) setState(() => _isChatEnabled = true);
+    }
+  }
+
   // ── Audio playback ────────────────────────────────────────────────────────
   Future<void> _togglePlay(Map<String, dynamic> msg, dynamic key) async {
-    final audioUrl = msg["audioUrl"]?.toString();
+    final audioUrl = msg['audioUrl']?.toString();
     if (audioUrl == null || audioUrl.isEmpty) return;
     final src = _absoluteUrl(audioUrl);
+
     try {
       if (_playingKey == key) {
         await _player.pause();
@@ -557,14 +711,15 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
       await _player.play(UrlSource(src));
       if (!_disposed && mounted) setState(() => _playingKey = key);
     } catch (e) {
-      _showError("Audio playback failed: $e");
+      _showError('Audio playback failed: $e');
     }
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final canType     = _status == "ready" && _isChatEnabled && !_isRecording && !_isUploading;
+    final canType     = _status == 'ready' && _isChatEnabled &&
+                        !_isRecording && !_isUploading;
     final sendEnabled = canType && _isComposing;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -579,7 +734,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
               color:           _T.accent,
               backgroundColor: _T.accentSoft,
             ),
-          if (_status == "ready" && !_isChatEnabled)
+          if (_status == 'ready' && !_isChatEnabled)
             _buildChatDisabledBanner(),
           Expanded(
             child: _isLoading
@@ -601,15 +756,15 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   }
 
   Widget _buildChatDisabledBanner() => Container(
-        width: double.infinity,
+        width:   double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        color: _T.orange.withOpacity(0.12),
-        child: Row(children: [
-          const Icon(Icons.hourglass_top_rounded, color: _T.orange, size: 16),
-          const SizedBox(width: 8),
-          const Expanded(
+        color:   _T.orange.withOpacity(0.12),
+        child: const Row(children: [
+          Icon(Icons.hourglass_top_rounded, color: _T.orange, size: 16),
+          SizedBox(width: 8),
+          Expanded(
             child: Text(
-              "Waiting for a responder to open this chat before you can send messages.",
+              'Waiting for a responder to open this chat before you can send messages.',
               style: TextStyle(
                 color:      _T.orange,
                 fontSize:   12,
@@ -638,16 +793,20 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         ),
       ),
       child: Stack(children: [
-        Positioned(top: -30, right: -20, child: _blob(110, Colors.white, 0.05)),
-        Positioned(bottom: -14, left: -20, child: _blob(80, _T.accent, 0.12)),
+        Positioned(top: -30, right: -20,
+            child: _blob(110, Colors.white, 0.05)),
+        Positioned(bottom: -14, left: -20,
+            child: _blob(80, _T.accent, 0.12)),
         SafeArea(
           bottom: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
             child: Row(children: [
-              _headerBtn(onTap: _safePop,
+              _headerBtn(
+                onTap: _safePop,
                 child: const Icon(Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white, size: 16)),
+                    color: Colors.white, size: 16),
+              ),
               const SizedBox(width: 12),
               Container(
                 width: 42, height: 42,
@@ -665,7 +824,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Case #${widget.emergencyId}",
+                    Text('Case #${widget.emergencyId}',
                         style: const TextStyle(
                           color:         Colors.white,
                           fontSize:      16,
@@ -695,7 +854,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                             color:        _T.red.withOpacity(0.22),
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Text("● REC",
+                          child: const Text('● REC',
                               style: TextStyle(
                                 color:      _T.red,
                                 fontSize:   9,
@@ -705,7 +864,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                       ],
                       if (_isUploading) ...[
                         const SizedBox(width: 8),
-                        Text("Uploading…",
+                        Text('Uploading…',
                             style: TextStyle(
                               color:      Colors.white.withOpacity(0.6),
                               fontSize:   10,
@@ -716,13 +875,17 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                   ],
                 ),
               ),
-              _headerBtn(onTap: _openCallOrExplain,
+              _headerBtn(
+                onTap: _openCallOrExplain,
                 child: const Icon(Icons.videocam_rounded,
-                    color: Colors.white, size: 18)),
+                    color: Colors.white, size: 18),
+              ),
               const SizedBox(width: 8),
-              _headerBtn(onTap: _connectSocket,
+              _headerBtn(
+                onTap: _connectSocket,
                 child: const Icon(Icons.refresh_rounded,
-                    color: Colors.white, size: 18)),
+                    color: Colors.white, size: 18),
+              ),
             ]),
           ),
         ),
@@ -738,7 +901,8 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
           decoration: BoxDecoration(
             color:        Colors.white.withOpacity(0.11),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+            border:       Border.all(
+                color: Colors.white.withOpacity(0.2), width: 1),
           ),
           child: child,
         ),
@@ -747,17 +911,19 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   Widget _blob(double size, Color color, double opacity) => Container(
         width: size, height: size,
         decoration: BoxDecoration(
-            shape: BoxShape.circle, color: color.withOpacity(opacity)));
+            shape: BoxShape.circle,
+            color: color.withOpacity(opacity)));
 
   Widget _buildSplash() => const Center(
-        child: CircularProgressIndicator(color: _T.primary, strokeWidth: 2.5));
+        child: CircularProgressIndicator(
+            color: _T.primary, strokeWidth: 2.5));
 
   Widget _buildBgPattern() => IgnorePointer(
         child: Opacity(
           opacity: 0.04,
           child: CustomPaint(
             painter: _BgPatternPainter(),
-            size: Size.infinite,
+            size:    Size.infinite,
           ),
         ),
       );
@@ -774,7 +940,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                 color: _T.primary, size: 30),
           ),
           const SizedBox(height: 16),
-          const Text("No messages yet",
+          const Text('No messages yet',
               style: TextStyle(
                 color:      _T.textDark,
                 fontWeight: FontWeight.w800,
@@ -782,11 +948,11 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
               )),
           const SizedBox(height: 6),
           Text(
-            _status == "ready"
+            _status == 'ready'
                 ? _isChatEnabled
-                    ? "Send a message or voice note."
-                    : "Waiting for a responder to open chat…"
-                : "Connecting to chat…",
+                    ? 'Send a message or voice note.'
+                    : 'Waiting for a responder to open chat…'
+                : 'Connecting to chat…',
             style: const TextStyle(color: _T.textMid, fontSize: 13),
           ),
         ]),
@@ -797,16 +963,18 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         padding:    const EdgeInsets.fromLTRB(14, 16, 14, 16),
         itemCount:  _messages.length,
         itemBuilder: (context, i) {
-          final msg    = _messages[i];
-          final key    = msg["id"] ?? i;
-          final sentAt = _parseTime(msg);
+          final msg     = _messages[i];
+          final playKey = msg['id'] ?? i;
+          final sentAt  = _parseTime(msg);
           return _ChatBubble(
             isMe:         _isMe(msg),
-            time:         sentAt == null ? "" : _formatTime(sentAt.toLocal()),
+            time:         sentAt == null ? '' : _formatTime(sentAt.toLocal()),
             isAudio:      _isAudio(msg),
-            text:         (msg["text"] ?? "").toString(),
-            isPlaying:    _playingKey == key,
-            onPlayToggle: _isAudio(msg) ? () => _togglePlay(msg, key) : null,
+            text:         (msg['text'] ?? '').toString(),
+            isPlaying:    _playingKey == playKey,
+            onPlayToggle: _isAudio(msg)
+                ? () => _togglePlay(msg, playKey)
+                : null,
           );
         },
       );
@@ -829,7 +997,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         top: false,
         child: Row(children: [
           GestureDetector(
-            onTap: (canType || _isRecording) && !_isUploading
+            onTap: (_isChatEnabled && _status == 'ready' && !_isUploading)
                 ? _toggleRecord
                 : null,
             child: AnimatedContainer(
@@ -864,15 +1032,16 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                     color: _T.textDark, fontSize: 14, height: 1.4),
                 decoration: InputDecoration(
                   hintText: _isRecording
-                      ? "Recording… tap stop to send"
+                      ? 'Recording… tap ■ to send'
                       : _isUploading
-                          ? "Uploading audio…"
+                          ? 'Uploading audio…'
                           : !_isChatEnabled
-                              ? "Waiting for responder to open chat…"
+                              ? 'Waiting for responder to open chat…'
                               : canType
-                                  ? "Type a message…"
-                                  : "Connecting…",
-                  hintStyle:      const TextStyle(color: _T.textMid, fontSize: 14),
+                                  ? 'Type a message…'
+                                  : 'Connecting…',
+                  hintStyle:      const TextStyle(
+                      color: _T.textMid, fontSize: 14),
                   border:         InputBorder.none,
                   isDense:        true,
                   contentPadding: EdgeInsets.zero,
@@ -898,11 +1067,13 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                 color:     sendEnabled ? null : _T.divider,
                 shape:     BoxShape.circle,
                 boxShadow: sendEnabled
-                    ? [BoxShadow(
-                        color:      _T.primary.withOpacity(0.30),
-                        blurRadius: 12,
-                        offset:     const Offset(0, 4),
-                      )]
+                    ? [
+                        BoxShadow(
+                          color:      _T.primary.withOpacity(0.30),
+                          blurRadius: 12,
+                          offset:     const Offset(0, 4),
+                        ),
+                      ]
                     : [],
               ),
               child: Icon(Icons.send_rounded,
@@ -936,8 +1107,8 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bubbleColor = isMe ? _T.bubbleMe    : _T.bubbleThem;
-    final textColor   = isMe ? Colors.white   : _T.textDark;
+    final bubbleColor = isMe ? _T.bubbleMe   : _T.bubbleThem;
+    final textColor   = isMe ? Colors.white  : _T.textDark;
     final metaColor   = isMe ? Colors.white60 : _T.textMid;
 
     return Align(
@@ -955,7 +1126,9 @@ class _ChatBubble extends StatelessWidget {
             bottomLeft:  Radius.circular(isMe ? 20 : 5),
             bottomRight: Radius.circular(isMe ? 5  : 20),
           ),
-          border: isMe ? null : Border.all(color: _T.divider, width: 1),
+          border: isMe
+              ? null
+              : Border.all(color: _T.divider, width: 1),
           boxShadow: [
             BoxShadow(
               color:      _T.primary.withOpacity(isMe ? 0.22 : 0.05),
@@ -980,7 +1153,9 @@ class _ChatBubble extends StatelessWidget {
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                      isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
                       color: isMe ? Colors.white : _T.primary,
                       size:  22,
                     ),
@@ -993,7 +1168,7 @@ class _ChatBubble extends StatelessWidget {
                     children: [
                       _WaveformBars(color: isMe ? Colors.white : _T.accent),
                       const SizedBox(height: 4),
-                      Text("Voice message",
+                      Text('Voice message',
                           style: TextStyle(
                             fontSize:   11,
                             color:      metaColor,
@@ -1023,7 +1198,8 @@ class _ChatBubble extends StatelessWidget {
               if (isMe) ...[
                 const SizedBox(width: 5),
                 Icon(Icons.done_all_rounded,
-                    size: 13, color: Colors.white.withOpacity(0.8)),
+                    size:  13,
+                    color: Colors.white.withOpacity(0.8)),
               ],
             ]),
           ],

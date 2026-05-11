@@ -10,18 +10,18 @@ import '../../services/call_services.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // Design tokens
 // ─────────────────────────────────────────────────────────────────────────────
-const _kBlue900  = Color(0xFF1E3A8A);
-const _kBlue800  = Color(0xFF1E40AF);
-const _kBlue600  = Color(0xFF2563EB);
-const _kBlue400  = Color(0xFF60A5FA);
-const _kBlue100  = Color(0xFFDBEAFE);
-const _kDark     = Color(0xFF060D1A);
-const _kDark2    = Color(0xFF0B1629);
-const _kDark3    = Color(0xFF111D33);
-const _kSurface  = Color(0xFF152040);
-const _kWhite    = Colors.white;
-const _kGreen    = Color(0xFF22C55E);
-const _kRed      = Color(0xFFEF4444);
+const _kBlue900 = Color(0xFF1E3A8A);
+const _kBlue800 = Color(0xFF1E40AF);
+const _kBlue600 = Color(0xFF2563EB);
+const _kBlue400 = Color(0xFF60A5FA);
+const _kBlue100 = Color(0xFFDBEAFE);
+const _kDark    = Color(0xFF060D1A);
+const _kDark2   = Color(0xFF0B1629);
+const _kDark3   = Color(0xFF111D33);
+const _kSurface = Color(0xFF152040);
+const _kWhite   = Colors.white;
+const _kGreen   = Color(0xFF22C55E);
+const _kRed     = Color(0xFFEF4444);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CallPage
@@ -34,8 +34,7 @@ class CallPage extends StatefulWidget {
   State<CallPage> createState() => _CallPageState();
 }
 
-class _CallPageState extends State<CallPage>
-    with TickerProviderStateMixin {
+class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
 
   // ── Renderers ──────────────────────────────────────────────────────────────
   final RTCVideoRenderer _local  = RTCVideoRenderer();
@@ -60,6 +59,9 @@ class _CallPageState extends State<CallPage>
   String? _peerSocketId;
   final List<RTCIceCandidate> _pendingIce = [];
 
+  // Buffer for offer events that race _accept() setup.
+  Map<String, dynamic>? _pendingOffer;
+
   // ── Animations ─────────────────────────────────────────────────────────────
   late AnimationController _pulseCtrl;
   late Animation<double>   _pulseAnim;
@@ -69,9 +71,11 @@ class _CallPageState extends State<CallPage>
   late Animation<double>   _ringAnim;
 
   // ── Timer ──────────────────────────────────────────────────────────────────
-  Timer?    _callTimer;
-  int       _callSeconds = 0;
+  Timer? _callTimer;
+  int    _callSeconds = 0;
 
+  // Always use CallService.I.socket so all signalling goes through the single
+  // socket instance that the server knows about.
   dynamic get _socket => CallService.I.socket;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -80,7 +84,6 @@ class _CallPageState extends State<CallPage>
     super.initState();
     _peerSocketId = widget.invite.fromSocketId;
 
-    // Pulse for incoming ring avatar
     _pulseCtrl = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
@@ -88,19 +91,16 @@ class _CallPageState extends State<CallPage>
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
 
-    // Fade-in for call screen
     _fadeCtrl = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 400),
     );
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
 
-    // Ripple ring for incoming screen
     _ringCtrl = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1800),
     )..repeat();
     _ringAnim = CurvedAnimation(parent: _ringCtrl, curve: Curves.easeOut);
 
-    // Force portrait during call
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -130,13 +130,15 @@ class _CallPageState extends State<CallPage>
   String get _timerLabel {
     final m = _callSeconds ~/ 60;
     final s = _callSeconds  % 60;
-    return '${m.toString().padLeft(2,'0')}:${s.toString().padLeft(2,'0')}';
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
   // ── Navigation ─────────────────────────────────────────────────────────────
+  // FIX: use rootNavigator: true so the pop always reaches the top-level
+  // Navigator, regardless of nested navigators (tabs, bottom nav, etc.)
   void _safePop() {
     if (_popping) return;
-    final nav = Navigator.of(context, rootNavigator: false);
+    final nav = Navigator.of(context, rootNavigator: true);
     if (nav.canPop()) {
       _popping = true;
       nav.pop();
@@ -168,8 +170,8 @@ class _CallPageState extends State<CallPage>
     final mid = m['sdpMid']?.toString();
     final idx = m['sdpMLineIndex'];
     int? mline;
-    if (idx is int)  mline = idx;
-    if (idx is num)  mline = idx.toInt();
+    if (idx is int) mline = idx;
+    if (idx is num) mline = idx.toInt();
     return RTCIceCandidate(c, mid, mline);
   }
 
@@ -183,10 +185,21 @@ class _CallPageState extends State<CallPage>
   }
 
   // ── Socket listeners ───────────────────────────────────────────────────────
+  // _attachListeners() is called AFTER createPeerConnection() inside _accept(),
+  // so _pc is guaranteed non-null when any event fires.
   void _attachListeners() {
     final s = _socket;
     if (s == null) return;
-    s.on('call:offer',     _onCallOffer);
+
+    s.on('call:offer', (data) {
+      if (data is! Map) return;
+      if (_pc == null) {
+        _pendingOffer = Map<String, dynamic>.from(data);
+        return;
+      }
+      _onCallOffer(data);
+    });
+
     s.on('call:ice',       _onCallIce);
     s.on('call:hangup',    _onHangupOrPeerLeft);
     s.on('call:peer-left', _onHangupOrPeerLeft);
@@ -195,10 +208,10 @@ class _CallPageState extends State<CallPage>
   void _detachListeners() {
     final s = _socket;
     if (s == null) return;
-    s.off('call:offer',     _onCallOffer);
-    s.off('call:ice',       _onCallIce);
-    s.off('call:hangup',    _onHangupOrPeerLeft);
-    s.off('call:peer-left', _onHangupOrPeerLeft);
+    s.off('call:offer');
+    s.off('call:ice');
+    s.off('call:hangup');
+    s.off('call:peer-left');
   }
 
   void _onHangupOrPeerLeft(dynamic _) => unawaited(_endAndPop());
@@ -207,7 +220,9 @@ class _CallPageState extends State<CallPage>
   Future<void> _onCallOffer(dynamic data) async {
     if (!_accepted || _pc == null || _remoteOfferApplied) return;
     if (data is! Map) return;
-    if (_readEmergencyId(data) != widget.invite.emergencyId) return;
+
+    final incomingId = _readEmergencyId(data);
+    if (incomingId != null && incomingId != widget.invite.emergencyId) return;
 
     final map  = Map<String, dynamic>.from(data as Map);
     final from = map['fromSocketId']?.toString();
@@ -258,7 +273,9 @@ class _CallPageState extends State<CallPage>
   // ── call:ice ───────────────────────────────────────────────────────────────
   Future<void> _onCallIce(dynamic data) async {
     if (data is! Map) return;
-    if (_readEmergencyId(data) != widget.invite.emergencyId) return;
+
+    final incomingId = _readEmergencyId(data);
+    if (incomingId != null && incomingId != widget.invite.emergencyId) return;
 
     final map     = Map<String, dynamic>.from(data as Map);
     final rawCand = map.containsKey('candidate') ? map['candidate'] : map;
@@ -292,22 +309,22 @@ class _CallPageState extends State<CallPage>
       _remoteStream     = await createLocalMediaStream('remote');
       _remote.srcObject = _remoteStream;
 
-      _attachListeners();
-
+      // Create PC first, THEN attach listeners — guarantees _pc is non-null
+      // when call:offer arrives.
       _pc = await createPeerConnection({
         'iceServers': [
           {'urls': 'stun:stun.l.google.com:19302'},
           {'urls': 'stun:stun1.l.google.com:19302'},
           {'urls': 'stun:stun2.l.google.com:19302'},
         ],
-        'sdpSemantics': 'unified-plan',
-        // Improves connectivity on mobile NAT
+        'sdpSemantics':       'unified-plan',
         'iceTransportPolicy': 'all',
-        'bundlePolicy': 'max-bundle',
-        'rtcpMuxPolicy': 'require',
+        'bundlePolicy':       'max-bundle',
+        'rtcpMuxPolicy':      'require',
       });
 
-      // onTrack — handles both web (streams populated) and native (streams empty)
+      _attachListeners();
+
       _pc!.onTrack = (RTCTrackEvent event) {
         final rs = _remoteStream;
         if (rs == null) return;
@@ -322,7 +339,6 @@ class _CallPageState extends State<CallPage>
         if (mounted) setState(() => _remote.srcObject = rs);
       };
 
-      // onIceCandidate
       _pc!.onIceCandidate = (RTCIceCandidate? c) {
         if (c == null || (c.candidate ?? '').isEmpty) return;
         final to = _peerSocketId;
@@ -334,7 +350,6 @@ class _CallPageState extends State<CallPage>
         );
       };
 
-      // onConnectionState — fires on all platforms
       _pc!.onConnectionState = (RTCPeerConnectionState state) {
         if (!mounted) return;
         switch (state) {
@@ -354,7 +369,6 @@ class _CallPageState extends State<CallPage>
         }
       };
 
-      // onIceConnectionState — fallback for browsers/devices that only fire this
       _pc!.onIceConnectionState = (RTCIceConnectionState state) {
         if (!mounted) return;
         if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
@@ -378,6 +392,8 @@ class _CallPageState extends State<CallPage>
         await _pc!.addTrack(track, _localStream!);
       }
 
+      // joinCallRoom emits call:join on the CallService socket — the same socket
+      // the server used to deliver call:incoming — so routing works correctly.
       CallService.I.joinCallRoom(widget.invite.emergencyId);
 
       if (mounted) {
@@ -385,6 +401,13 @@ class _CallPageState extends State<CallPage>
           _starting = false;
           _status   = 'Waiting for offer…';
         });
+      }
+
+      // Replay any offer that arrived before createPeerConnection finished.
+      if (_pendingOffer != null) {
+        final buffered = _pendingOffer!;
+        _pendingOffer = null;
+        await _onCallOffer(buffered);
       }
     } catch (e) {
       if (mounted) {
@@ -419,16 +442,23 @@ class _CallPageState extends State<CallPage>
   bool _isDeviceBusy(Object e) {
     final msg = e.toString().toLowerCase();
     return msg.contains('notreadable') ||
-           msg.contains('could not start') ||
-           msg.contains('device in use') ||
-           msg.contains('failed to allocate') ||
-           msg.contains('hardware error') ||
-           msg.contains('not readable');
+        msg.contains('could not start') ||
+        msg.contains('device in use') ||
+        msg.contains('failed to allocate') ||
+        msg.contains('hardware error') ||
+        msg.contains('not readable');
   }
 
   Future<void> _openLocalMediaWeb() async {
     for (final constraints in [
-      {'audio': true, 'video': {'width': {'ideal': 640}, 'height': {'ideal': 480}, 'frameRate': {'ideal': 30}}},
+      {
+        'audio': true,
+        'video': {
+          'width': {'ideal': 640},
+          'height': {'ideal': 480},
+          'frameRate': {'ideal': 30},
+        },
+      },
       {'audio': true, 'video': true},
       {'audio': true, 'video': false},
     ]) {
@@ -449,7 +479,11 @@ class _CallPageState extends State<CallPage>
     for (final constraints in [
       {
         'audio': true,
-        'video': {'facingMode': 'user', 'width': {'ideal': 640}, 'height': {'ideal': 480}},
+        'video': {
+          'facingMode': 'user',
+          'width': {'ideal': 640},
+          'height': {'ideal': 480},
+        },
       },
       {
         'audio': true,
@@ -487,7 +521,9 @@ class _CallPageState extends State<CallPage>
   }
 
   void _flipCamera() {
-    try { Helper.switchCamera(_localStream!.getVideoTracks().first); } catch (_) {}
+    try {
+      Helper.switchCamera(_localStream!.getVideoTracks().first);
+    } catch (_) {}
   }
 
   // ── Reject / Hangup ────────────────────────────────────────────────────────
@@ -520,6 +556,7 @@ class _CallPageState extends State<CallPage>
     _cleanedUp = true;
     _callTimer?.cancel();
     _pendingIce.clear();
+    _pendingOffer = null;
     _detachListeners();
     try { await _pc?.close(); } catch (_) {}
     _pc = null;
@@ -544,12 +581,11 @@ class _CallPageState extends State<CallPage>
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    // Edge-to-edge immersive UI
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
-        statusBarColor:            Colors.transparent,
-        statusBarIconBrightness:   Brightness.light,
-        systemNavigationBarColor:  _kDark,
+        statusBarColor:                    Colors.transparent,
+        statusBarIconBrightness:           Brightness.light,
+        systemNavigationBarColor:          _kDark,
         systemNavigationBarIconBrightness: Brightness.light,
       ),
       child: _accepted ? _buildCallUI() : _buildIncomingUI(),
@@ -564,7 +600,6 @@ class _CallPageState extends State<CallPage>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Subtle radial blue glow at top
             Positioned(
               top: -80, left: 0, right: 0,
               child: Container(
@@ -578,18 +613,17 @@ class _CallPageState extends State<CallPage>
                 ),
               ),
             ),
-
             Column(
               children: [
                 const SizedBox(height: 48),
-
-                // Top label
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 6),
                   decoration: BoxDecoration(
-                    color: _kBlue800.withOpacity(0.25),
+                    color:        _kBlue800.withOpacity(0.25),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _kBlue600.withOpacity(0.4)),
+                    border:       Border.all(
+                        color: _kBlue600.withOpacity(0.4)),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -599,25 +633,21 @@ class _CallPageState extends State<CallPage>
                       Text(
                         'BahirLink · Emergency Call',
                         style: TextStyle(
-                          color: _kBlue100,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                          color:         _kBlue100,
+                          fontSize:      12,
+                          fontWeight:    FontWeight.w600,
                           letterSpacing: .4,
                         ),
                       ),
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 40),
-
-                // Ripple + Avatar
                 SizedBox(
                   width: 200, height: 200,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      // Outer ripple ring
                       AnimatedBuilder(
                         animation: _ringAnim,
                         builder: (_, __) => Opacity(
@@ -626,7 +656,7 @@ class _CallPageState extends State<CallPage>
                             width:  180 + 40 * _ringAnim.value,
                             height: 180 + 40 * _ringAnim.value,
                             decoration: BoxDecoration(
-                              shape: BoxShape.circle,
+                              shape:  BoxShape.circle,
                               border: Border.all(
                                 color: _kBlue600.withOpacity(.35),
                                 width: 1.5,
@@ -635,7 +665,6 @@ class _CallPageState extends State<CallPage>
                           ),
                         ),
                       ),
-                      // Mid ring
                       AnimatedBuilder(
                         animation: _ringAnim,
                         builder: (_, __) {
@@ -646,7 +675,7 @@ class _CallPageState extends State<CallPage>
                               width:  160 + 40 * t,
                               height: 160 + 40 * t,
                               decoration: BoxDecoration(
-                                shape: BoxShape.circle,
+                                shape:  BoxShape.circle,
                                 border: Border.all(
                                   color: _kBlue600.withOpacity(.25),
                                   width: 1.5,
@@ -656,16 +685,17 @@ class _CallPageState extends State<CallPage>
                           );
                         },
                       ),
-                      // Inner glow circle
                       Container(
                         width: 120, height: 120,
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _kBlue800.withOpacity(.3),
-                          border: Border.all(color: _kBlue600.withOpacity(.6), width: 1.5),
+                          shape:  BoxShape.circle,
+                          color:  _kBlue800.withOpacity(.3),
+                          border: Border.all(
+                            color: _kBlue600.withOpacity(.6),
+                            width: 1.5,
+                          ),
                         ),
                       ),
-                      // Pulse avatar
                       ScaleTransition(
                         scale: _pulseAnim,
                         child: Container(
@@ -673,84 +703,84 @@ class _CallPageState extends State<CallPage>
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end:   Alignment.bottomRight,
+                              begin:  Alignment.topLeft,
+                              end:    Alignment.bottomRight,
                               colors: [_kBlue600, _kBlue900],
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: _kBlue600.withOpacity(.45),
-                                blurRadius: 24, spreadRadius: 2,
+                                color:        _kBlue600.withOpacity(.45),
+                                blurRadius:   24,
+                                spreadRadius: 2,
                               ),
                             ],
                           ),
                           child: const Icon(
                             Icons.videocam_rounded,
-                            color: _kWhite, size: 40,
+                            color: _kWhite,
+                            size:  40,
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 28),
-
                 const Text(
                   'Incoming Video Call',
                   style: TextStyle(
-                    color: _kWhite,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
+                    color:         _kWhite,
+                    fontSize:      24,
+                    fontWeight:    FontWeight.w700,
                     letterSpacing: -.3,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 6),
                   decoration: BoxDecoration(
-                    color: _kSurface,
+                    color:        _kSurface,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     'Case #${widget.invite.emergencyId}',
                     style: const TextStyle(
-                      color: _kBlue400, fontSize: 13,
-                      fontWeight: FontWeight.w600, letterSpacing: .3,
+                      color:         _kBlue400,
+                      fontSize:      13,
+                      fontWeight:    FontWeight.w600,
+                      letterSpacing: .3,
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 10),
                 const Text(
                   'Responder Dashboard',
-                  style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                  style: TextStyle(
+                      color: Color(0xFF64748B), fontSize: 13),
                 ),
-
                 const Spacer(),
-
-                // Accept / Decline row
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 40),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _RoundCallButton(
-                        icon:    Icons.call_end_rounded,
-                        label:   'Decline',
-                        bg:      _kRed.withOpacity(.15),
-                        border:  _kRed.withOpacity(.5),
-                        iconBg:  _kRed,
-                        onTap:   _reject,
+                        icon:   Icons.call_end_rounded,
+                        label:  'Decline',
+                        bg:     _kRed.withOpacity(.15),
+                        border: _kRed.withOpacity(.5),
+                        iconBg: _kRed,
+                        onTap:  _reject,
                       ),
                       _RoundCallButton(
-                        icon:    Icons.videocam_rounded,
-                        label:   'Accept',
-                        bg:      _kGreen.withOpacity(.12),
-                        border:  _kGreen.withOpacity(.5),
-                        iconBg:  _kGreen,
-                        onTap:   _accept,
-                        large:   true,
+                        icon:   Icons.videocam_rounded,
+                        label:  'Accept',
+                        bg:     _kGreen.withOpacity(.12),
+                        border: _kGreen.withOpacity(.5),
+                        iconBg: _kGreen,
+                        onTap:  _accept,
+                        large:  true,
                       ),
                     ],
                   ),
@@ -776,8 +806,8 @@ class _CallPageState extends State<CallPage>
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end:   Alignment.bottomCenter,
+          begin:  Alignment.topCenter,
+          end:    Alignment.bottomCenter,
           colors: [_kDark, _kDark2],
         ),
       ),
@@ -788,13 +818,16 @@ class _CallPageState extends State<CallPage>
             Container(
               width: 80, height: 80,
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _kBlue800.withOpacity(.2),
-                border: Border.all(color: _kBlue600.withOpacity(.4), width: 1.5),
+                shape:  BoxShape.circle,
+                color:  _kBlue800.withOpacity(.2),
+                border: Border.all(
+                  color: _kBlue600.withOpacity(.4),
+                  width: 1.5,
+                ),
               ),
               child: const Center(
                 child: CircularProgressIndicator(
-                  color: _kBlue400,
+                  color:       _kBlue400,
                   strokeWidth: 2.5,
                 ),
               ),
@@ -803,15 +836,16 @@ class _CallPageState extends State<CallPage>
             Text(
               _status,
               style: const TextStyle(
-                color: _kWhite,
-                fontSize: 18,
+                color:      _kWhite,
+                fontSize:   18,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 10),
             Text(
               'Case #${widget.invite.emergencyId}',
-              style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+              style: const TextStyle(
+                  color: Color(0xFF64748B), fontSize: 13),
             ),
           ],
         ),
@@ -820,19 +854,18 @@ class _CallPageState extends State<CallPage>
   }
 
   Widget _buildVideoCall() {
-    final hasLocalVideo =
-        _localStream != null && _localStream!.getVideoTracks().isNotEmpty && !_camOff;
+    final hasLocalVideo = _localStream != null &&
+        _localStream!.getVideoTracks().isNotEmpty &&
+        !_camOff;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        // ── Remote video (full screen) ──────────────────────────────────────
         RTCVideoView(
           _remote,
-          objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+          objectFit:
+              RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
         ),
-
-        // Dark overlay when remote is not yet streaming
         if (_status != 'In call')
           Container(
             color: _kDark.withOpacity(.75),
@@ -843,8 +876,8 @@ class _CallPageState extends State<CallPage>
                   SizedBox(
                     width: 56, height: 56,
                     child: CircularProgressIndicator(
-                      color: _kBlue400,
-                      strokeWidth: 2.5,
+                      color:           _kBlue400,
+                      strokeWidth:     2.5,
                       backgroundColor: _kBlue800.withOpacity(.2),
                     ),
                   ),
@@ -852,8 +885,8 @@ class _CallPageState extends State<CallPage>
                   Text(
                     _status,
                     style: const TextStyle(
-                      color: _kWhite,
-                      fontSize: 16,
+                      color:      _kWhite,
+                      fontSize:   16,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -862,37 +895,39 @@ class _CallPageState extends State<CallPage>
             ),
           ),
 
-        // ── Top bar (status + timer) ────────────────────────────────────────
+        // Top bar
         Positioned(
           top: 0, left: 0, right: 0,
           child: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end:   Alignment.bottomCenter,
+                begin:  Alignment.topCenter,
+                end:    Alignment.bottomCenter,
                 colors: [Color(0xCC000000), Colors.transparent],
               ),
             ),
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
-                    // Logo badge
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: _kBlue800.withOpacity(.6),
+                        color:        _kBlue800.withOpacity(.6),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: _kBlue600.withOpacity(.5)),
+                        border:       Border.all(
+                            color: _kBlue600.withOpacity(.5)),
                       ),
                       child: const Text(
                         'BahirLink',
                         style: TextStyle(
-                          color: _kWhite,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
+                          color:         _kWhite,
+                          fontSize:      11,
+                          fontWeight:    FontWeight.w800,
                           letterSpacing: .3,
                         ),
                       ),
@@ -901,32 +936,35 @@ class _CallPageState extends State<CallPage>
                     Text(
                       'Case #${widget.invite.emergencyId}',
                       style: const TextStyle(
-                        color: Color(0xAAFFFFFF),
-                        fontSize: 12,
+                        color: Color(0xAAFFFFFF), fontSize: 12,
                       ),
                     ),
                     const Spacer(),
-                    // Status pill
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.black54,
+                        color:        Colors.black54,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           _PulseDot(
-                            color: _status == 'In call' ? _kGreen : Colors.orange,
-                            size: 6,
+                            color:   _status == 'In call'
+                                ? _kGreen
+                                : Colors.orange,
+                            size:    6,
                             animate: _status != 'In call',
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            _status == 'In call' ? _timerLabel : _status,
+                            _status == 'In call'
+                                ? _timerLabel
+                                : _status,
                             style: const TextStyle(
-                              color: _kWhite,
-                              fontSize: 12,
+                              color:      _kWhite,
+                              fontSize:   12,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -940,33 +978,42 @@ class _CallPageState extends State<CallPage>
           ),
         ),
 
-        // ── Local PiP ──────────────────────────────────────────────────────
+        // Local PiP
         Positioned(
           right: 16, top: 100, width: 104, height: 148,
           child: AnimatedOpacity(
-            opacity: hasLocalVideo ? 1.0 : 0.0,
+            opacity:  hasLocalVideo ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 300),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(14),
               child: Container(
                 decoration: BoxDecoration(
-                  color: _kDark3,
+                  color:        _kDark3,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: _kBlue600.withOpacity(.5), width: 1.5),
+                  border:       Border.all(
+                    color: _kBlue600.withOpacity(.5),
+                    width: 1.5,
+                  ),
                 ),
                 child: hasLocalVideo
-                    ? RTCVideoView(_local, mirror: true,
-                        objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover)
+                    ? RTCVideoView(
+                        _local,
+                        mirror:    true,
+                        objectFit: RTCVideoViewObjectFit
+                            .RTCVideoViewObjectFitCover,
+                      )
                     : const Center(
-                        child: Icon(Icons.videocam_off_rounded,
-                            color: Color(0x80FFFFFF), size: 24),
+                        child: Icon(
+                          Icons.videocam_off_rounded,
+                          color: Color(0x80FFFFFF),
+                          size:  24,
+                        ),
                       ),
               ),
             ),
           ),
         ),
 
-        // ── Cam-off badge ──────────────────────────────────────────────────
         if (!hasLocalVideo && !_starting)
           Positioned(
             right: 16, top: 100, width: 104, height: 148,
@@ -974,8 +1021,11 @@ class _CallPageState extends State<CallPage>
               borderRadius: BorderRadius.circular(14),
               child: Container(
                 decoration: BoxDecoration(
-                  color: _kDark3,
-                  border: Border.all(color: _kBlue600.withOpacity(.3), width: 1.5),
+                  color:        _kDark3,
+                  border:       Border.all(
+                    color: _kBlue600.withOpacity(.3),
+                    width: 1.5,
+                  ),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Column(
@@ -984,64 +1034,72 @@ class _CallPageState extends State<CallPage>
                     Icon(Icons.videocam_off_rounded,
                         color: Color(0x60FFFFFF), size: 26),
                     SizedBox(height: 6),
-                    Text('Camera off',
-                        style: TextStyle(color: Color(0x60FFFFFF), fontSize: 10),
-                        textAlign: TextAlign.center),
+                    Text(
+                      'Camera off',
+                      style: TextStyle(
+                          color: Color(0x60FFFFFF), fontSize: 10),
+                      textAlign: TextAlign.center,
+                    ),
                   ],
                 ),
               ),
             ),
           ),
 
-        // ── Bottom control bar ──────────────────────────────────────────────
+        // Bottom controls
         Positioned(
           bottom: 0, left: 0, right: 0,
           child: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end:   Alignment.topCenter,
+                begin:  Alignment.bottomCenter,
+                end:    Alignment.topCenter,
                 colors: [Color(0xEE000000), Colors.transparent],
               ),
             ),
             child: SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                padding:
+                    const EdgeInsets.fromLTRB(24, 12, 24, 24),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _ControlButton(
-                      icon:    _micMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-                      label:   _micMuted ? 'Unmute' : 'Mute',
-                      active:  _micMuted,
-                      onTap:   _toggleMic,
+                      icon:   _micMuted
+                          ? Icons.mic_off_rounded
+                          : Icons.mic_rounded,
+                      label:  _micMuted ? 'Unmute' : 'Mute',
+                      active: _micMuted,
+                      onTap:  _toggleMic,
                     ),
                     _ControlButton(
-                      icon:    _camOff ? Icons.videocam_off_rounded : Icons.videocam_rounded,
-                      label:   _camOff ? 'Cam on' : 'Cam off',
-                      active:  _camOff,
-                      onTap:   _toggleCam,
+                      icon:   _camOff
+                          ? Icons.videocam_off_rounded
+                          : Icons.videocam_rounded,
+                      label:  _camOff ? 'Cam on' : 'Cam off',
+                      active: _camOff,
+                      onTap:  _toggleCam,
                     ),
-                    // Hang up (prominent red)
                     GestureDetector(
                       onTap: _hangup,
                       child: Container(
                         width: 64, height: 64,
                         decoration: BoxDecoration(
-                          color: _kRed,
-                          shape: BoxShape.circle,
+                          color:  _kRed,
+                          shape:  BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: _kRed.withOpacity(.5),
-                              blurRadius: 16,
+                              color:        _kRed.withOpacity(.5),
+                              blurRadius:   16,
                               spreadRadius: 1,
                             ),
                           ],
                         ),
                         child: const Icon(
                           Icons.call_end_rounded,
-                          color: _kWhite, size: 28,
+                          color: _kWhite,
+                          size:  28,
                         ),
                       ),
                     ),
@@ -1053,15 +1111,17 @@ class _CallPageState extends State<CallPage>
                       )
                     else
                       _ControlButton(
-                        icon:    _speakerOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-                        label:   _speakerOn ? 'Speaker' : 'Earpiece',
-                        active:  !_speakerOn,
-                        onTap:   _toggleSpeaker,
+                        icon:   _speakerOn
+                            ? Icons.volume_up_rounded
+                            : Icons.volume_off_rounded,
+                        label:  _speakerOn ? 'Speaker' : 'Earpiece',
+                        active: !_speakerOn,
+                        onTap:  _toggleSpeaker,
                       ),
                     _ControlButton(
                       icon:  Icons.info_outline_rounded,
                       label: 'Info',
-                      onTap: () => _showCallInfo(),
+                      onTap: _showCallInfo,
                     ),
                   ],
                 ),
@@ -1075,29 +1135,33 @@ class _CallPageState extends State<CallPage>
 
   void _showCallInfo() {
     showModalBottomSheet<void>(
-      context: context,
+      context:         context,
       backgroundColor: _kDark2,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize:       MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
               'Call info',
               style: TextStyle(
-                color: _kWhite, fontSize: 17,
+                color:      _kWhite,
+                fontSize:   17,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 16),
-            _InfoRow('Case', '#${widget.invite.emergencyId}'),
-            _InfoRow('Status', _status),
-            _InfoRow('Duration', _timerLabel),
+            _InfoRow('Case',        '#${widget.invite.emergencyId}'),
+            _InfoRow('Status',      _status),
+            _InfoRow('Duration',    _timerLabel),
             _InfoRow('Peer socket', _peerSocketId ?? '—'),
+            _InfoRow('My socket',
+                CallService.I.socket?.id ?? '—'),
             const SizedBox(height: 8),
           ],
         ),
@@ -1110,23 +1174,26 @@ class _CallPageState extends State<CallPage>
 // Small helper widgets
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Animated pulsing status dot
 class _PulseDot extends StatefulWidget {
   final Color  color;
   final double size;
   final bool   animate;
-  const _PulseDot({required this.color, required this.size, this.animate = true});
+  const _PulseDot(
+      {required this.color, required this.size, this.animate = true});
   @override
   State<_PulseDot> createState() => _PulseDotState();
 }
+
 class _PulseDotState extends State<_PulseDot>
     with SingleTickerProviderStateMixin {
   late AnimationController _c;
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
-      ..repeat(reverse: true);
+    _c = AnimationController(
+      vsync:    this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
   }
   @override
   void dispose() { _c.dispose(); super.dispose(); }
@@ -1135,7 +1202,8 @@ class _PulseDotState extends State<_PulseDot>
     if (!widget.animate) {
       return Container(
         width: widget.size, height: widget.size,
-        decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
+        decoration: BoxDecoration(
+            color: widget.color, shape: BoxShape.circle),
       );
     }
     return AnimatedBuilder(
@@ -1144,14 +1212,14 @@ class _PulseDotState extends State<_PulseDot>
         opacity: 0.5 + _c.value * 0.5,
         child: Container(
           width: widget.size, height: widget.size,
-          decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+              color: widget.color, shape: BoxShape.circle),
         ),
       ),
     );
   }
 }
 
-/// Large rounded button for incoming screen (Accept/Decline)
 class _RoundCallButton extends StatelessWidget {
   final IconData     icon;
   final String       label;
@@ -1185,7 +1253,13 @@ class _RoundCallButton extends StatelessWidget {
               color:  bg,
               border: Border.all(color: border, width: 1.5),
               boxShadow: large
-                  ? [BoxShadow(color: iconBg.withOpacity(.35), blurRadius: 18, spreadRadius: 1)]
+                  ? [
+                      BoxShadow(
+                        color:        iconBg.withOpacity(.35),
+                        blurRadius:   18,
+                        spreadRadius: 1,
+                      ),
+                    ]
                   : null,
             ),
             child: Icon(icon, color: iconBg, size: large ? 30 : 26),
@@ -1194,9 +1268,13 @@ class _RoundCallButton extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: large ? _kWhite : const Color(0xFF94A3B8),
-              fontSize: 13,
-              fontWeight: large ? FontWeight.w600 : FontWeight.w400,
+              color:      large
+                  ? _kWhite
+                  : const Color(0xFF94A3B8),
+              fontSize:   13,
+              fontWeight: large
+                  ? FontWeight.w600
+                  : FontWeight.w400,
             ),
           ),
         ],
@@ -1205,7 +1283,6 @@ class _RoundCallButton extends StatelessWidget {
   }
 }
 
-/// In-call control pill button (mute, cam, flip, etc.)
 class _ControlButton extends StatelessWidget {
   final IconData     icon;
   final String       label;
@@ -1242,15 +1319,15 @@ class _ControlButton extends StatelessWidget {
             child: Icon(
               icon,
               color: active ? _kBlue100 : _kWhite,
-              size: 22,
+              size:  22,
             ),
           ),
           const SizedBox(height: 5),
           Text(
             label,
             style: const TextStyle(
-              color: Color(0xBBFFFFFF),
-              fontSize: 10,
+              color:      Color(0xBBFFFFFF),
+              fontSize:   10,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -1260,7 +1337,6 @@ class _ControlButton extends StatelessWidget {
   }
 }
 
-/// Info row for the bottom sheet
 class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
@@ -1273,13 +1349,22 @@ class _InfoRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 96,
-            child: Text(label,
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 13)),
-          ),
-          Text(value,
+            child: Text(
+              label,
               style: const TextStyle(
-                color: _kWhite, fontSize: 13, fontWeight: FontWeight.w600,
-              )),
+                  color: Color(0xFF64748B), fontSize: 13),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color:      _kWhite,
+                fontSize:   13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         ],
       ),
     );
