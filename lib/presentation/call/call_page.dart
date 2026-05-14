@@ -24,6 +24,14 @@ const _kGreen   = Color(0xFF22C55E);
 const _kRed     = Color(0xFFEF4444);
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Single-device testing flag.
+// When true, Flutter knows React is using screen-share and will NOT wait for
+// a call:flutter-ready delay — it goes straight for the camera.
+// Set false for production / separate physical devices.
+// ─────────────────────────────────────────────────────────────────────────────
+const _kTestMode = true;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CallPage
 // ─────────────────────────────────────────────────────────────────────────────
 class CallPage extends StatefulWidget {
@@ -74,8 +82,6 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
   Timer? _callTimer;
   int    _callSeconds = 0;
 
-  // Always use CallService.I.socket so all signalling goes through the single
-  // socket instance that the server knows about.
   dynamic get _socket => CallService.I.socket;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -134,8 +140,6 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
   }
 
   // ── Navigation ─────────────────────────────────────────────────────────────
-  // FIX: use rootNavigator: true so the pop always reaches the top-level
-  // Navigator, regardless of nested navigators (tabs, bottom nav, etc.)
   void _safePop() {
     if (_popping) return;
     final nav = Navigator.of(context, rootNavigator: true);
@@ -185,8 +189,6 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
   }
 
   // ── Socket listeners ───────────────────────────────────────────────────────
-  // _attachListeners() is called AFTER createPeerConnection() inside _accept(),
-  // so _pc is guaranteed non-null when any event fires.
   void _attachListeners() {
     final s = _socket;
     if (s == null) return;
@@ -309,8 +311,6 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
       _remoteStream     = await createLocalMediaStream('remote');
       _remote.srcObject = _remoteStream;
 
-      // Create PC first, THEN attach listeners — guarantees _pc is non-null
-      // when call:offer arrives.
       _pc = await createPeerConnection({
         'iceServers': [
           {'urls': 'stun:stun.l.google.com:19302'},
@@ -381,6 +381,27 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
         }
       };
 
+      // ── SINGLE-DEVICE FIX ──────────────────────────────────────────────────
+      // In TEST_MODE: React is using screen share, so the camera is already free.
+      // We still emit flutter-ready as a handshake, but use a much shorter delay
+      // (200ms instead of 800ms) just to let the socket event propagate.
+      //
+      // In production (_kTestMode = false): React holds the real camera briefly.
+      // We wait 1200ms after emitting flutter-ready to give React's stopStream()
+      // time to run before we call getUserMedia.
+      // ──────────────────────────────────────────────────────────────────────
+
+      if (mounted) setState(() => _status = 'Signalling ready…');
+      CallService.I.socket?.emit('call:flutter-ready', {
+        'emergencyId': widget.invite.emergencyId,
+      });
+
+      final readyWait = _kTestMode
+          ? const Duration(milliseconds: 200)   // React already using screen share
+          : const Duration(milliseconds: 1200);  // Wait for React to stop camera
+
+      await Future<void>.delayed(readyWait);
+
       if (mounted) setState(() => _status = 'Opening camera…');
       await _openLocalMedia();
 
@@ -392,8 +413,6 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
         await _pc!.addTrack(track, _localStream!);
       }
 
-      // joinCallRoom emits call:join on the CallService socket — the same socket
-      // the server used to deliver call:incoming — so routing works correctly.
       CallService.I.joinCallRoom(widget.invite.emergencyId);
 
       if (mounted) {
@@ -403,7 +422,6 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
         });
       }
 
-      // Replay any offer that arrived before createPeerConnection finished.
       if (_pendingOffer != null) {
         final buffered = _pendingOffer!;
         _pendingOffer = null;
@@ -426,6 +444,7 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
     for (final t in _localStream?.getTracks() ?? []) {
       t.enabled = true;
     }
+    if (mounted) setState(() {});
   }
 
   Future<void> _forceReleaseLocalTracks() async {
@@ -449,25 +468,48 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
         msg.contains('not readable');
   }
 
+  // SINGLE-DEVICE FIX: In test mode React uses screen share so the camera
+  // should be free immediately. We still do the retry chain but with shorter
+  // delays (400ms instead of 1200ms) since we don't expect a busy camera.
   Future<void> _openLocalMediaWeb() async {
-    for (final constraints in [
+    final constraints = [
       {
         'audio': true,
         'video': {
-          'width': {'ideal': 640},
-          'height': {'ideal': 480},
+          'width':     {'ideal': 640},
+          'height':    {'ideal': 480},
           'frameRate': {'ideal': 30},
         },
       },
       {'audio': true, 'video': true},
       {'audio': true, 'video': false},
-    ]) {
+    ];
+
+    // In test mode camera should be free; shorter retry interval.
+    final retryDelay = _kTestMode
+        ? const Duration(milliseconds: 400)
+        : const Duration(milliseconds: 1200);
+
+    for (final c in constraints) {
       try {
-        _localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        _localStream = await navigator.mediaDevices.getUserMedia(c);
         return;
       } catch (e) {
-        if (!_isDeviceBusy(e) && constraints['video'] != false) rethrow;
-        if (constraints['video'] == false) rethrow;
+        final hasVideo = c['video'] != false;
+        if (!hasVideo) rethrow;
+
+        if (_isDeviceBusy(e)) {
+          if (mounted) setState(() => _status = 'Waiting for camera…');
+          await Future<void>.delayed(retryDelay);
+          try {
+            _localStream = await navigator.mediaDevices.getUserMedia(c);
+            return;
+          } catch (_) {
+            continue;
+          }
+        } else {
+          continue;
+        }
       }
     }
   }
@@ -476,13 +518,17 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
     final granted = await Helper.requestCapturePermission();
     if (!granted) throw Exception('Camera/microphone permission denied');
 
-    for (final constraints in [
+    final retryDelay = _kTestMode
+        ? const Duration(milliseconds: 400)
+        : const Duration(milliseconds: 800);
+
+    final constraints = [
       {
         'audio': true,
         'video': {
           'facingMode': 'user',
-          'width': {'ideal': 640},
-          'height': {'ideal': 480},
+          'width':      {'ideal': 640},
+          'height':     {'ideal': 480},
         },
       },
       {
@@ -490,16 +536,28 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
         'video': {'width': {'ideal': 320}, 'height': {'ideal': 240}},
       },
       {'audio': true, 'video': false},
-    ]) {
+    ];
+
+    for (final c in constraints) {
       try {
-        _localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        _localStream = await navigator.mediaDevices.getUserMedia(c);
         try { await Helper.setSpeakerphoneOn(_speakerOn); } catch (_) {}
         return;
       } catch (e) {
-        if (!_isDeviceBusy(e) && constraints['video'] != false) rethrow;
-        if (constraints['video'] == false) rethrow;
-        if (mounted) setState(() => _status = 'Retrying camera…');
-        await Future<void>.delayed(const Duration(milliseconds: 600));
+        if (c['video'] == false) rethrow;
+        if (_isDeviceBusy(e)) {
+          if (mounted) setState(() => _status = 'Retrying camera…');
+          await Future<void>.delayed(retryDelay);
+          try {
+            _localStream = await navigator.mediaDevices.getUserMedia(c);
+            try { await Helper.setSpeakerphoneOn(_speakerOn); } catch (_) {}
+            return;
+          } catch (_) {
+            continue;
+          }
+        } else {
+          continue;
+        }
       }
     }
   }
@@ -847,6 +905,27 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
               style: const TextStyle(
                   color: Color(0xFF64748B), fontSize: 13),
             ),
+            // Test mode badge
+            if (_kTestMode) ...[
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0x1FFCD34D),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0x3FFCD34D)),
+                ),
+                child: const Text(
+                  'TEST MODE · Camera should be free',
+                  style: TextStyle(
+                    color: Color(0xFFFCD34D),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: .3,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -854,17 +933,23 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
   }
 
   Widget _buildVideoCall() {
+    // ── ROLE LABELS FIX ────────────────────────────────────────────────────
+    // Flutter is the REPORTER (answerer). So:
+    //   _remote renderer = Responder (React / dashboard) — BIG background view
+    //   _local  renderer = Reporter (this Flutter app)  — small PiP top-right
+    // ──────────────────────────────────────────────────────────────────────
     final hasLocalVideo = _localStream != null &&
         _localStream!.getVideoTracks().isNotEmpty &&
+        _localStream!.getVideoTracks().any((t) => t.enabled) &&
         !_camOff;
 
     return Stack(
       fit: StackFit.expand,
       children: [
+        // Big background = RESPONDER (React)
         RTCVideoView(
           _remote,
-          objectFit:
-              RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+          objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
         ),
         if (_status != 'In call')
           Container(
@@ -978,73 +1063,114 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
           ),
         ),
 
-        // Local PiP
+        // ── LOCAL PiP — top-right ──────────────────────────────────────────
+        // This is the REPORTER (you, on Flutter).
+        // Label corrected from "You" to make the role clearer.
         Positioned(
           right: 16, top: 100, width: 104, height: 148,
-          child: AnimatedOpacity(
-            opacity:  hasLocalVideo ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Container(
-                decoration: BoxDecoration(
-                  color:        _kDark3,
+          child: Stack(
+            children: [
+              AnimatedOpacity(
+                opacity:  hasLocalVideo ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: ClipRRect(
                   borderRadius: BorderRadius.circular(14),
-                  border:       Border.all(
-                    color: _kBlue600.withOpacity(.5),
-                    width: 1.5,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color:        _kDark3,
+                      borderRadius: BorderRadius.circular(14),
+                      border:       Border.all(
+                        color: _kBlue600.withOpacity(.5),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: hasLocalVideo
+                        ? RTCVideoView(
+                            _local,
+                            mirror:    true,
+                            objectFit: RTCVideoViewObjectFit
+                                .RTCVideoViewObjectFitCover,
+                          )
+                        : const SizedBox.shrink(),
                   ),
                 ),
-                child: hasLocalVideo
-                    ? RTCVideoView(
-                        _local,
-                        mirror:    true,
-                        objectFit: RTCVideoViewObjectFit
-                            .RTCVideoViewObjectFitCover,
-                      )
-                    : const Center(
-                        child: Icon(
-                          Icons.videocam_off_rounded,
-                          color: Color(0x80FFFFFF),
-                          size:  24,
-                        ),
+              ),
+
+              // "Camera off" state — only when not camOff from user toggle
+              if (!hasLocalVideo && !_starting)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color:        _kDark3,
+                      border:       Border.all(
+                        color: _kBlue600.withOpacity(.3),
+                        width: 1.5,
                       ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.videocam_off_rounded,
+                            color: Color(0x60FFFFFF), size: 26),
+                        const SizedBox(height: 6),
+                        Text(
+                          _camOff ? 'Camera off' : 'No camera',
+                          style: const TextStyle(
+                              color: Color(0x60FFFFFF), fontSize: 9),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // Role label pinned at bottom of PiP
+              Positioned(
+                bottom: 6, left: 0, right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      '📱 You (Reporter)',
+                      style: TextStyle(
+                        color:      _kWhite,
+                        fontSize:   8,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Remote label — bottom-left of the big view (Responder / React)
+        Positioned(
+          bottom: 100, left: 16,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text(
+              '🖥  Responder (Dashboard)',
+              style: TextStyle(
+                color:      _kWhite,
+                fontSize:   10,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
         ),
-
-        if (!hasLocalVideo && !_starting)
-          Positioned(
-            right: 16, top: 100, width: 104, height: 148,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Container(
-                decoration: BoxDecoration(
-                  color:        _kDark3,
-                  border:       Border.all(
-                    color: _kBlue600.withOpacity(.3),
-                    width: 1.5,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.videocam_off_rounded,
-                        color: Color(0x60FFFFFF), size: 26),
-                    SizedBox(height: 6),
-                    Text(
-                      'Camera off',
-                      style: TextStyle(
-                          color: Color(0x60FFFFFF), fontSize: 10),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
 
         // Bottom controls
         Positioned(
@@ -1060,8 +1186,7 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
             child: SafeArea(
               top: false,
               child: Padding(
-                padding:
-                    const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
@@ -1138,8 +1263,7 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
       context:         context,
       backgroundColor: _kDark2,
       shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => Padding(
         padding: const EdgeInsets.all(24),
@@ -1157,11 +1281,12 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 16),
             _InfoRow('Case',        '#${widget.invite.emergencyId}'),
+            _InfoRow('My role',     'Reporter (answerer)'),
             _InfoRow('Status',      _status),
             _InfoRow('Duration',    _timerLabel),
             _InfoRow('Peer socket', _peerSocketId ?? '—'),
-            _InfoRow('My socket',
-                CallService.I.socket?.id ?? '—'),
+            _InfoRow('My socket',   CallService.I.socket?.id ?? '—'),
+            _InfoRow('Test mode',   _kTestMode ? 'ON' : 'OFF'),
             const SizedBox(height: 8),
           ],
         ),
@@ -1268,13 +1393,9 @@ class _RoundCallButton extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color:      large
-                  ? _kWhite
-                  : const Color(0xFF94A3B8),
+              color:      large ? _kWhite : const Color(0xFF94A3B8),
               fontSize:   13,
-              fontWeight: large
-                  ? FontWeight.w600
-                  : FontWeight.w400,
+              fontWeight: large ? FontWeight.w600 : FontWeight.w400,
             ),
           ),
         ],
