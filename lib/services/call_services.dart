@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
-/// Backend event payload: call:incoming
 class CallInvite {
   final int emergencyId;
   final String fromSocketId;
@@ -18,7 +17,6 @@ class CallInvite {
   factory CallInvite.fromMap(Map data) {
     final m = Map<String, dynamic>.from(data);
     return CallInvite(
-      // Robust parse: handles int, String, double from any backend serialisation
       emergencyId: int.tryParse('${m['emergencyId']}') ?? 0,
       fromSocketId: '${m['fromSocketId'] ?? ''}',
       fromIdentity: m['fromIdentity'] is Map
@@ -29,6 +27,8 @@ class CallInvite {
           : int.tryParse('${m['reporterUserId']}'),
     );
   }
+
+  String get fingerprint => '$emergencyId|$fromSocketId';
 
   @override
   String toString() =>
@@ -46,42 +46,23 @@ class CallService {
   IO.Socket? get socket => _socket;
 
   String? _apiBaseUrl;
-  String? _token; // clean jwt — no "Bearer " prefix
+  String? _cleanedToken;
 
-  /// Latest unhandled invite. ChatPage checks this in initState to avoid
-  /// missing an event that fired before the screen was pushed.
   CallInvite? pendingInvite;
-
-  /// Registered by ChatPage.initState; cleared in ChatPage.dispose.
   IncomingCallHandler? onIncomingCall;
 
-  bool _incomingAttached = false;
   bool _connecting = false;
 
-  // Deduplicate rapid duplicate events (reconnect storms fire twice).
-  String? _lastFp;
-  DateTime? _lastFpAt;
+  // Cleared only on logout, never on reconnect.
+  final Set<String> _dispatchedFingerprints = {};
 
-  // FIX: correct regex — single backslash so \s matches whitespace properly.
   String _cleanToken(String token) =>
       token.replaceFirst(RegExp(r'^Bearer\s+', caseSensitive: false), '').trim();
-
-  bool _ignoreDuplicate(CallInvite i) {
-    final fp = '${i.emergencyId}|${i.fromSocketId}';
-    final now = DateTime.now();
-    if (_lastFp == fp && _lastFpAt != null) {
-      if (now.difference(_lastFpAt!) < const Duration(seconds: 2)) return true;
-    }
-    _lastFp = fp;
-    _lastFpAt = now;
-    return false;
-  }
 
   bool get isConnected => _socket?.connected == true;
 
   // ---------------------------------------------------------------------------
-  // connect — call this right after login, before any chat screen opens.
-  // Uses websocket transport only; polling fails auth on Flutter Web.
+  // connect — call once after login.
   // ---------------------------------------------------------------------------
   void connect({required String apiBaseUrl, required String token}) {
     if (_connecting) return;
@@ -89,16 +70,11 @@ class CallService {
 
     final clean = _cleanToken(token);
     _apiBaseUrl = apiBaseUrl;
-    _token = clean;
+    _cleanedToken = clean;
 
     debugPrint('📞 CallService.connect() → $apiBaseUrl');
 
-    try {
-      _socket?.disconnect();
-      _socket?.dispose();
-    } catch (_) {}
-    _socket = null;
-    _incomingAttached = false;
+    _destroySocket();
 
     final s = IO.io(
       apiBaseUrl,
@@ -111,9 +87,17 @@ class CallService {
 
     _socket = s;
 
+    // Register call:incoming immediately — socket_io_client buffers events
+    // registered before connect, so this is safe and avoids any race where
+    // the server sends call:incoming before onConnect fires.
+    _registerIncomingListener(s);
+
     s.onConnect((_) {
       _connecting = false;
       debugPrint('📞 CallService connected — socket.id: ${s.id}');
+      // Re-register after every (re)connect to guarantee the listener
+      // survives transport-level reconnects.
+      _registerIncomingListener(s);
     });
 
     s.onConnectError((e) {
@@ -124,14 +108,66 @@ class CallService {
     s.onDisconnect((reason) {
       debugPrint('📞 CallService disconnected: $reason');
     });
-
-    _attachIncomingOnce();
   }
 
-  void _attachIncomingOnce() {
-    final s = _socket;
-    if (s == null || _incomingAttached) return;
-    _incomingAttached = true;
+  // ---------------------------------------------------------------------------
+  // ensureConnected — safe to call from any page's initState.
+  // ---------------------------------------------------------------------------
+  void ensureConnected() {
+    if (_apiBaseUrl == null || _cleanedToken == null) {
+      debugPrint('📞 ensureConnected: no credentials — call connect() first');
+      return;
+    }
+    if (_socket == null) {
+      connect(apiBaseUrl: _apiBaseUrl!, token: _cleanedToken!);
+      return;
+    }
+    if (!_socket!.connected) {
+      debugPrint('📞 ensureConnected: socket exists but disconnected — reconnecting');
+      _connecting = false;
+      _socket!.connect();
+    }
+    // Always re-register to survive hot restarts and reconnects.
+    _registerIncomingListener(_socket!);
+  }
+
+  // ---------------------------------------------------------------------------
+  // disconnect — logout only.
+  // ---------------------------------------------------------------------------
+  void disconnect() {
+    _destroySocket();
+    pendingInvite = null;
+    _dispatchedFingerprints.clear();
+    debugPrint('📞 CallService disconnected (logout)');
+  }
+
+  // ---------------------------------------------------------------------------
+  // clearCall — call on hangup so the same emergency can ring again.
+  // ---------------------------------------------------------------------------
+  void clearCall(int emergencyId) {
+    _dispatchedFingerprints.removeWhere((fp) => fp.startsWith('$emergencyId|'));
+    pendingInvite = null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private
+  // ---------------------------------------------------------------------------
+
+  void _destroySocket() {
+    try {
+      _socket?.off('call:incoming');
+      _socket?.disconnect();
+      _socket?.dispose();
+    } catch (_) {}
+    _socket = null;
+    _connecting = false;
+  }
+
+  /// off() before on() guarantees exactly one listener no matter how many
+  /// times this is called. Safe to call before and after connect.
+  void _registerIncomingListener(IO.Socket s) {
+    s.off('call:incoming');
+    debugPrint('📞 _registerIncomingListener — socket.id: ${s.id}');
 
     s.on('call:incoming', (data) {
       debugPrint('📞 call:incoming raw: $data');
@@ -143,80 +179,37 @@ class CallService {
 
       final invite = CallInvite.fromMap(data);
 
-      if (invite.emergencyId == 0) {
-        debugPrint('📞 call:incoming ignored — emergencyId parsed as 0');
-        return;
-      }
-      if (invite.fromSocketId.isEmpty) {
-        debugPrint('📞 call:incoming ignored — empty fromSocketId');
-        return;
-      }
-      if (_ignoreDuplicate(invite)) {
-        debugPrint('📞 call:incoming ignored — duplicate within 2 s');
+      if (invite.emergencyId == 0 || invite.fromSocketId.isEmpty) {
+        debugPrint('📞 call:incoming ignored — invalid payload');
         return;
       }
 
-      debugPrint('📞 call:incoming accepted: $invite');
+      debugPrint('📞 dedup set: $_dispatchedFingerprints');
 
-      // Store before firing the callback so ChatPage.initState can consume it
-      // even if the screen was not open when the event arrived.
+      if (_dispatchedFingerprints.contains(invite.fingerprint)) {
+        debugPrint('📞 call:incoming ignored — duplicate: ${invite.fingerprint}');
+        return;
+      }
+
+      _dispatchedFingerprints.add(invite.fingerprint);
       pendingInvite = invite;
+
+      debugPrint('📞 onIncomingCall is ${onIncomingCall == null ? "NULL ❌" : "set ✅"}');
+      debugPrint('📞 call:incoming dispatching: $invite');
+
       onIncomingCall?.call(invite);
     });
   }
 
   // ---------------------------------------------------------------------------
-  // disconnect — call on logout.
+  // Signalling
   // ---------------------------------------------------------------------------
-  void disconnect() {
-    try {
-      _socket?.disconnect();
-      _socket?.dispose();
-    } catch (_) {}
-    _socket = null;
-    _incomingAttached = false;
-    _connecting = false;
-    pendingInvite = null;
-    _lastFp = null;
-    _lastFpAt = null;
-  }
 
-  // ---------------------------------------------------------------------------
-  // ensureConnected — called by ChatPage.initState as a safety net.
-  // If connect() was already called this is nearly a no-op.
-  // ---------------------------------------------------------------------------
-  void ensureConnected() {
-    if (_apiBaseUrl == null || _token == null) {
-      debugPrint(
-          '📞 ensureConnected: no credentials — call connect() after login first');
-      return;
-    }
-    if (_socket == null) {
-      connect(apiBaseUrl: _apiBaseUrl!, token: _token!);
-      return;
-    }
-    if (_socket!.connected != true) {
-      debugPrint(
-          '📞 ensureConnected: socket exists but disconnected — reconnecting');
-      _socket!.connect();
-    }
-    // Re-attach listener in case it was cleared (e.g. after a hot restart).
-    _attachIncomingOnce();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Call room helpers
-  // ---------------------------------------------------------------------------
   void joinCallRoom(int emergencyId) {
-    debugPrint(
-        '📞 joinCallRoom($emergencyId) — socket: ${_socket?.id}, '
-        'connected: ${_socket?.connected}');
+    debugPrint('📞 joinCallRoom($emergencyId) — connected: ${_socket?.connected}');
     _socket?.emit('call:join', {'emergencyId': emergencyId});
   }
 
-  // ---------------------------------------------------------------------------
-  // Signalling helpers
-  // ---------------------------------------------------------------------------
   void sendOffer({
     required int emergencyId,
     required String? toSocketId,
@@ -256,14 +249,11 @@ class CallService {
     });
   }
 
-  void hangup({
-    required int emergencyId,
-    String? toSocketId,
-  }) {
+  void hangup({required int emergencyId, String? toSocketId}) {
     _socket?.emit('call:hangup', {
       'emergencyId': emergencyId,
-      if (toSocketId != null && toSocketId.isNotEmpty)
-        'toSocketId': toSocketId,
+      if (toSocketId != null && toSocketId.isNotEmpty) 'toSocketId': toSocketId,
     });
+    clearCall(emergencyId);
   }
 }

@@ -52,6 +52,12 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
     _currentLang = widget.initialLang;
   }
 
+  // ── Safe string helper ─────────────────────────────────────────────────────
+  // Converts any value (int, double, String, null) to a display string.
+  // This is the single fix for the TypeError: int is not a subtype of String.
+  String _s(dynamic value, {String fallback = 'N/A'}) =>
+      value == null ? fallback : value.toString();
+
   // ── Language switch ────────────────────────────────────────────────────────
   Future<void> _switchLanguage(String langCode) async {
     if (_isSwitchingLang || langCode == _currentLang) return;
@@ -69,9 +75,8 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
     });
 
     try {
-      final caseId    = widget.caseData['id'];
       final refreshed = await CaseService.getCaseById(
-        id: caseId.toString(),
+        id: _s(_caseData['id']),
         lang: langCode,
       );
       if (mounted && refreshed != null) {
@@ -145,23 +150,22 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
   }
 
   // ── Kebele name ────────────────────────────────────────────────────────────
-  String _kebeleName(AppLocalizations l10n) {
-    return CaseService.extractKebele(
-      _caseData,
-      fallback: l10n.caseDetailLocationNotSet,
-    );
-  }
+  String _kebeleName(AppLocalizations l10n) =>
+      CaseService.extractKebele(
+        _caseData,
+        fallback: l10n.caseDetailLocationNotSet,
+      );
 
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final l10n        = AppLocalizations.of(context)!;
-    final status      = (_caseData['status'] ?? '').toString();
+    final status      = _s(_caseData['status']);
     final isDangerous = _caseData['isDangerous'] ?? false;
 
     final String imageUrl = _caseData['mediaUrl'] != null
-        ? "http://localhost:5000${_caseData['mediaUrl']}"
-        : "https://via.placeholder.com/800x400/1A3BAA/FFFFFF?text=Report";
+        ? CaseService.mediaUrl(_s(_caseData['mediaUrl']))
+        : 'https://via.placeholder.com/800x400/1A3BAA/FFFFFF?text=Report';
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
@@ -229,7 +233,8 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
                     right: 16,
                     child: Row(children: [
                       _glassBadge(
-                        _caseData['caseType']?['name'] ?? l10n.defaultCaseType,
+                        _s(_caseData['caseType']?['name'],
+                            fallback: l10n.defaultCaseType),
                         Icons.report_rounded,
                       ),
                       const Spacer(),
@@ -240,7 +245,8 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
                     ]),
                   ),
                   // Danger tag
-                  if (isDangerous) _DangerTag(label: l10n.caseDetailDangerAlert),
+                  if (isDangerous == true)
+                    _DangerTag(label: l10n.caseDetailDangerAlert),
                   // Bottom overlay
                   Positioned(
                     bottom: 20,
@@ -250,7 +256,8 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _caseData['fullName'] ?? l10n.caseDetailUnknownIdentity,
+                          _s(_caseData['fullName'],
+                              fallback: l10n.caseDetailUnknownIdentity),
                           style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
@@ -267,7 +274,8 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
-                              _caseData['location'] ?? l10n.locationCity,
+                              _s(_caseData['location'],
+                                  fallback: l10n.locationCity),
                               style: const TextStyle(
                                   color: Colors.white60, fontSize: 11),
                               maxLines: 1,
@@ -286,7 +294,7 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
                               const SizedBox(width: 5),
                               Text(
                                 l10n.caseDetailEtb(
-                                    (_caseData['reward'] ?? '0').toString()),
+                                    _s(_caseData['reward'], fallback: '0')),
                                 style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 11,
@@ -391,20 +399,24 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
         const SizedBox(height: 12),
         _buildLocationCard(l10n),
         const SizedBox(height: 26),
-        _sectionLabel(l10n.caseDetailPhysicalIdentifiers, Icons.person_search_rounded),
+        _sectionLabel(
+            l10n.caseDetailPhysicalIdentifiers, Icons.person_search_rounded),
         const SizedBox(height: 12),
         _buildPhysicalGrid(l10n),
         const SizedBox(height: 26),
-        _sectionLabel(l10n.caseDetailDistinctiveMarks, Icons.fingerprint_rounded),
+        _sectionLabel(
+            l10n.caseDetailDistinctiveMarks, Icons.fingerprint_rounded),
         const SizedBox(height: 12),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: _featureBox(
-            _caseData['distinctiveFeatures'] ?? l10n.caseDetailNoMarks,
+            _s(_caseData['distinctiveFeatures'],
+                fallback: l10n.caseDetailNoMarks),
           ),
         ),
         const SizedBox(height: 26),
-        _sectionLabel(l10n.caseDetailCaseDescription, Icons.description_rounded),
+        _sectionLabel(
+            l10n.caseDetailCaseDescription, Icons.description_rounded),
         const SizedBox(height: 12),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -422,7 +434,8 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
               ],
             ),
             child: Text(
-              _caseData['description'] ?? l10n.caseDetailNoDescription,
+              _s(_caseData['description'],
+                  fallback: l10n.caseDetailNoDescription),
               style: TextStyle(
                   fontSize: 14,
                   color: _T.textDark.withOpacity(0.8),
@@ -443,7 +456,8 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
         Container(
           width: 32, height: 32,
           decoration: BoxDecoration(
-              color: _T.accentSoft, borderRadius: BorderRadius.circular(9)),
+              color: _T.accentSoft,
+              borderRadius: BorderRadius.circular(9)),
           child: Icon(icon, color: _T.primary, size: 16),
         ),
         const SizedBox(width: 10),
@@ -477,8 +491,10 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-                color: _T.accentSoft, borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.map_rounded, color: _T.primary, size: 24),
+                color: _T.accentSoft,
+                borderRadius: BorderRadius.circular(12)),
+            child:
+                const Icon(Icons.map_rounded, color: _T.primary, size: 24),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -510,6 +526,8 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
   }
 
   // ── Physical grid ──────────────────────────────────────────────────────────
+  // FIX: every field is wrapped with _s() so int/double values from the API
+  // are safely converted to String before being passed to _infoTile.
   Widget _buildPhysicalGrid(AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -524,22 +542,22 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
         children: [
           _infoTile(
             l10n.caseDetailAge,
-            l10n.caseDetailAgeYrs((_caseData['age'] ?? 'N/A').toString()),
+            l10n.caseDetailAgeYrs(_s(_caseData['age'])),
             Icons.cake_rounded,
           ),
           _infoTile(
             l10n.caseDetailGender,
-            _caseData['gender'] ?? 'N/A',
+            _s(_caseData['gender']),
             Icons.person_rounded,
           ),
           _infoTile(
             l10n.caseDetailHeight,
-            _caseData['height'] ?? 'N/A',
+            _s(_caseData['height']),   // was: _caseData['height'] ?? 'N/A'
             Icons.straighten_rounded,
           ),
           _infoTile(
             l10n.caseDetailWeight,
-            _caseData['weight'] ?? 'N/A',
+            _s(_caseData['weight']),   // was: _caseData['weight'] ?? 'N/A'
             Icons.monitor_weight_rounded,
           ),
         ],
@@ -648,7 +666,7 @@ class _CaseDetailPageState extends State<CaseDetailPage> {
   String _formatDate(dynamic dateStr) {
     if (dateStr == null) return 'N/A';
     try {
-      return DateFormat('MMM dd, yyyy').format(DateTime.parse(dateStr));
+      return DateFormat('MMM dd, yyyy').format(DateTime.parse(dateStr.toString()));
     } catch (_) {
       return dateStr.toString();
     }
@@ -670,7 +688,8 @@ class _DangerTag extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
               color: _T.red.withOpacity(0.78),
               borderRadius: BorderRadius.circular(10),

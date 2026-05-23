@@ -36,8 +36,6 @@ class _T {
 
 // ─── ChatPage ─────────────────────────────────────────────────────────────────
 class ChatPage extends StatefulWidget {
-  // FIX D: declared as int — never String — so emergencyId comparisons against
-  // CallInvite.emergencyId (also int) can never silently fail.
   final int    emergencyId;
   final String token;
   final int    userId;
@@ -210,25 +208,22 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    // FIX B: ensure the CallService socket is alive before registering the
-    // callback — if connect() was never called this logs a warning and no-ops.
+    // Keep the CallService socket alive. Do NOT register onIncomingCall here —
+    // _MyAppState owns that callback exclusively and handles all CallPage
+    // navigation. ChatPage must never overwrite it.
     CallService.I.ensureConnected();
 
-    // Register incoming-call callback. This fires for every call:incoming that
-    // arrives while this screen is open.
-    CallService.I.onIncomingCall = _handleIncomingCall;
-
-    // FIX C: consume a pending invite that arrived before this screen opened.
-    // We use addPostFrameCallback so the Navigator is ready for push().
+    // Consume a pending invite that arrived before this screen opened
+    // (e.g. call fired during page transition). Route it through the
+    // root handler so _MyAppState does the push, not ChatPage.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_disposed || !mounted) return;
       final pending = CallService.I.pendingInvite;
       if (pending == null) return;
-      // FIX D: both sides are int — no type-mismatch possible.
       if (pending.emergencyId != widget.emergencyId) return;
-      debugPrint('📞 ChatPage: consuming pendingInvite $pending');
+      debugPrint('📞 ChatPage: re-routing pendingInvite → root handler');
       CallService.I.pendingInvite = null;
-      _handleIncomingCall(pending);
+      CallService.I.onIncomingCall?.call(pending);
     });
 
     _initChat();
@@ -248,16 +243,16 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
 
   @override
   void deactivate() {
-    _teardownSocket();
+    // Do NOT tear down the socket here. deactivate() fires whenever any route
+    // is pushed on top of ChatPage (including CallPage), which would kill the
+    // chat connection mid-call. Teardown belongs only in dispose().
     try { appMessengerKey.currentState?.clearSnackBars(); } catch (_) {}
     super.deactivate();
   }
 
   @override
   void dispose() {
-    // Clear the callback so a disposed ChatPage never triggers navigation.
-    CallService.I.onIncomingCall = null;
-
+    // Never touch onIncomingCall — it belongs to _MyAppState.
     _teardownSocket();
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
@@ -265,33 +260,6 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     _player.dispose();
     _fadeCtrl.dispose();
     super.dispose();
-  }
-
-  // ── Incoming call handler ─────────────────────────────────────────────────
-  // FIX C + FIX D: called both from onIncomingCall and from the
-  // pendingInvite check in initState. emergencyId comparison is int vs int.
-  void _handleIncomingCall(CallInvite invite) {
-    debugPrint(
-      '📞 _handleIncomingCall: invite.emergencyId=${invite.emergencyId} '
-      'widget.emergencyId=${widget.emergencyId} '
-      'disposed=$_disposed mounted=$mounted',
-    );
-
-    if (_disposed || !mounted) return;
-
-    // FIX D: both are int — strict equality, no coercion needed.
-    if (invite.emergencyId != widget.emergencyId) {
-      debugPrint('📞 emergencyId mismatch — ignoring');
-      return;
-    }
-
-    // Clear pending so _openCallOrExplain doesn't re-open it after dismiss.
-    CallService.I.pendingInvite = null;
-
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      fullscreenDialog: true,
-      builder: (_) => CallPage(invite: invite),
-    ));
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
@@ -325,8 +293,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         if (id != null) _seenIds.add(id);
       }
 
-      final alreadyEnabled =
-          list.any((m) => m['senderType'] == 'responderTeam');
+      final alreadyEnabled = list.any((m) => m['senderType'] == 'responderTeam');
 
       setState(() {
         _messages
@@ -348,9 +315,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     }
   }
 
-  // ── Chat socket ───────────────────────────────────────────────────────────
-  // This is a SEPARATE socket used only for chat messages. The call socket is
-  // managed exclusively by CallService.I so it stays alive across screens.
+  // ── Chat socket (separate from CallService socket) ────────────────────────
   void _connectSocket() {
     final old = _socket;
     _socket = null;
@@ -465,17 +430,15 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     _scrollToBottom();
   }
 
-  // ── Video call — manual fallback ──────────────────────────────────────────
-  // Primary path is _handleIncomingCall() fired automatically by CallService.
-  // This button lets the user open the call if they somehow missed the push.
+  // ── Video call button (manual fallback) ───────────────────────────────────
+  // The automatic path is handled by _MyAppState.onIncomingCall.
+  // This button lets the user open a call they may have missed.
   void _openCallOrExplain() {
     final invite = CallService.I.pendingInvite;
     if (invite != null && invite.emergencyId == widget.emergencyId) {
       CallService.I.pendingInvite = null;
-      Navigator.of(context).push(MaterialPageRoute<void>(
-        fullscreenDialog: true,
-        builder: (_) => CallPage(invite: invite),
-      ));
+      // Route through the root handler so dedup state stays consistent.
+      CallService.I.onIncomingCall?.call(invite);
       return;
     }
     _showError('No incoming call right now. Wait for the responder.');

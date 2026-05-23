@@ -28,6 +28,10 @@ class ServiceReportService {
   }
 
   // ── Text extraction ────────────────────────────────────────────────────────
+  // FIX: Language keys (lang, 'en') are checked FIRST so that a bilingual
+  //      map like {en: "Water Supply", am: "የውሃ አቅርቦት"} is resolved to the
+  //      correct locale string instead of falling through to a missing
+  //      'name'/'title'/'label' key.
   static String extractText(
     dynamic field, {
     String lang = 'en',
@@ -36,27 +40,49 @@ class ServiceReportService {
     if (field == null) return fallback;
 
     if (field is String) {
-      return field.trim().isEmpty ? fallback : field;
+      // The string might still be a JSON-encoded bilingual map that the
+      // normalizer missed (e.g. nested inside an unexpected field).
+      final t = field.trim();
+      if (t.startsWith('{') && t.endsWith('}')) {
+        try {
+          final decoded = json.decode(t);
+          if (decoded is Map) return extractText(decoded, lang: lang, fallback: fallback);
+        } catch (_) {}
+      }
+      return t.isEmpty ? fallback : t;
     }
 
     if (field is Map) {
+      // 1. Prefer the requested locale.
+      final langVal = field[lang];
+      if (langVal != null && langVal.toString().trim().isNotEmpty) {
+        return langVal.toString();
+      }
+
+      // 2. Fall back to English.
+      if (lang != 'en') {
+        final enVal = field['en'];
+        if (enVal != null && enVal.toString().trim().isNotEmpty) {
+          return enVal.toString();
+        }
+      }
+
+      // 3. Accept any named key ('name', 'title', 'label') as a last resort
+      //    (e.g. non-translated legacy records).
       for (final key in ['name', 'title', 'label']) {
         final v = field[key];
         if (v != null && v.toString().trim().isNotEmpty) {
           return v.toString();
         }
       }
-      for (final key in [lang, 'en']) {
-        final v = field[key];
-        if (v != null && v.toString().trim().isNotEmpty) {
-          return v.toString();
-        }
-      }
+
+      // 4. Return whatever non-empty value exists.
       for (final v in field.values) {
         if (v != null && v.toString().trim().isNotEmpty) {
           return v.toString();
         }
       }
+
       return fallback;
     }
 
@@ -106,8 +132,6 @@ class ServiceReportService {
   }
 
   // ── READ (list) ────────────────────────────────────────────────────────────
-  /// [lang] is forwarded as Accept-Language so the backend returns the correct
-  /// locale and autoTranslate / localise work properly.
   Future<List<Map<String, dynamic>>> getUserServices(
     String userId, {
     String lang = 'en',
@@ -143,27 +167,41 @@ class ServiceReportService {
   }
 
   // ── Normalization ──────────────────────────────────────────────────────────
+  // Decodes any double-stringified JSON fields so that extractText always
+  // receives either a plain String or a Map — never a JSON-encoded string.
   static Map<String, dynamic> _normalizeItem(dynamic raw) {
     if (raw is! Map) return {};
     final item = Map<String, dynamic>.from(raw);
 
-    for (final key in ['name', 'description']) {
+    // Top-level text fields.
+    for (final key in ['name', 'description', 'subdivision', 'street']) {
       if (item.containsKey(key)) item[key] = _decodeIfJson(item[key]);
     }
 
-    for (final key in ['serviceType', 'serviceCategory', 'street',
-                        'Kebele', 'kebele', 'lastSeenLocation']) {
-      if (item.containsKey(key)) {
-        final val = _decodeIfJson(item[key]);
-        if (val is Map) {
-          final nested = Map<String, dynamic>.from(val);
-          if (nested.containsKey('name')) {
-            nested['name'] = _decodeIfJson(nested['name']);
-          }
-          item[key] = nested;
-        } else {
-          item[key] = val;
+    // Nested objects whose 'name' may also be a bilingual map.
+    for (final key in [
+      'serviceType',
+      'serviceCategory',
+      'street',
+      'Kebele',
+      'kebele',
+      'lastSeenLocation',
+    ]) {
+      if (!item.containsKey(key)) continue;
+      final val = _decodeIfJson(item[key]);
+      if (val is Map) {
+        final nested = Map<String, dynamic>.from(val);
+        // FIX: decode nested 'name' so it becomes a Map{en,am}, not a string.
+        if (nested.containsKey('name')) {
+          nested['name'] = _decodeIfJson(nested['name']);
         }
+        // Also decode nested 'description' for completeness.
+        if (nested.containsKey('description')) {
+          nested['description'] = _decodeIfJson(nested['description']);
+        }
+        item[key] = nested;
+      } else {
+        item[key] = val;
       }
     }
 
@@ -176,6 +214,17 @@ class ServiceReportService {
     if (!t.startsWith('{') || !t.endsWith('}')) return value;
     try {
       final decoded = json.decode(t);
+      // Handle double-stringified JSON (a string whose value is also JSON).
+      if (decoded is String) {
+        final inner = decoded.trim();
+        if (inner.startsWith('{') && inner.endsWith('}')) {
+          try {
+            final inner2 = json.decode(inner);
+            if (inner2 is Map) return inner2;
+          } catch (_) {}
+        }
+        return decoded;
+      }
       if (decoded is Map) return decoded;
     } catch (_) {}
     return value;

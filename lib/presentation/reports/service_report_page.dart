@@ -64,7 +64,6 @@ class _ServiceReportPageState extends State<ServiceReportPage>
   }
 
   /// Fires whenever the locale changes (e.g. dashboard language switcher).
-  /// Keeps this page in sync even when it's buried in the IndexedStack.
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -88,7 +87,7 @@ class _ServiceReportPageState extends State<ServiceReportPage>
     if (_ctrlReady && mounted) _fadeCtrl.forward(from: 0);
   }
 
-  // ── Init: read saved language then load ───────────────────────────────────
+  // ── Init ──────────────────────────────────────────────────────────────────
   Future<void> _initLangAndLoad() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('language_code') ?? 'en';
@@ -96,7 +95,7 @@ class _ServiceReportPageState extends State<ServiceReportPage>
     await _loadData(lang: saved);
   }
 
-  // ── Master load ────────────────────────────────────────────────────────────
+  // ── Master load ───────────────────────────────────────────────────────────
   Future<void> _loadData({String? lang}) async {
     final useLang = lang ?? _currentLang;
     if (mounted) setState(() { _isLoading = true; _error = null; });
@@ -110,19 +109,18 @@ class _ServiceReportPageState extends State<ServiceReportPage>
     }
   }
 
-  // ── Fetcher ────────────────────────────────────────────────────────────────
+  // ── Fetcher ───────────────────────────────────────────────────────────────
   Future<void> _fetchServices(String lang) async {
     final result = await _apiService.getUserServices(widget.userId, lang: lang);
     if (mounted) setState(() => _services = result);
   }
 
-  // ── Language switcher ──────────────────────────────────────────────────────
+  // ── Language switcher ─────────────────────────────────────────────────────
   Future<void> _switchLanguage(String langCode) async {
     if (_isSwitchingLang || langCode == _currentLang) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('language_code', langCode);
     if (!mounted) return;
-    // setLocale triggers didChangeDependencies on ALL alive IndexedStack pages
     MyApp.of(context)?.setLocale(Locale(langCode));
     setState(() { _currentLang = langCode; _isSwitchingLang = true; });
     try {
@@ -132,7 +130,7 @@ class _ServiceReportPageState extends State<ServiceReportPage>
     }
   }
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
   String _formatDate(dynamic dateStr) {
     if (dateStr == null) return "N/A";
     try {
@@ -141,10 +139,23 @@ class _ServiceReportPageState extends State<ServiceReportPage>
     } catch (_) { return "N/A"; }
   }
 
+  /// Resolve a field (plain String or bilingual Map) to the current locale.
   String _loc(dynamic field) =>
       ServiceReportService.extractText(field, lang: _currentLang);
 
-  // ── Build ──────────────────────────────────────────────────────────────────
+  // FIX: helper that returns null instead of 'N/A' so callers can provide
+  //      their own l10n fallback.
+  String? _locOrNull(dynamic field) {
+    if (field == null) return null;
+    final result = ServiceReportService.extractText(
+      field,
+      lang: _currentLang,
+      fallback: '',
+    );
+    return result.isEmpty ? null : result;
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -314,7 +325,7 @@ class _ServiceReportPageState extends State<ServiceReportPage>
     );
   }
 
-  // ── Language toggle ────────────────────────────────────────────────────────
+  // ── Language toggle ───────────────────────────────────────────────────────
   Widget _buildLangToggle() {
     final isAmharic = _currentLang == 'am';
     return GestureDetector(
@@ -382,12 +393,12 @@ class _ServiceReportPageState extends State<ServiceReportPage>
 
   // ── Card ──────────────────────────────────────────────────────────────────
   Widget _buildCard(dynamic service, int index) {
-    final typeName = _loc(service['serviceType']?['name']).isNotEmpty
-        ? _loc(service['serviceType']?['name'])
-        : l10n.generalService;
-    final categoryName = _loc(service['serviceCategory']?['name']).isNotEmpty
-        ? _loc(service['serviceCategory']?['name'])
-        : l10n.publicService;
+    // FIX: use _locOrNull so we can supply the l10n fallback when the field
+    //      is genuinely absent, instead of showing the hardcoded 'N/A' string.
+    final typeName =
+        _locOrNull(service['serviceType']?['name']) ?? l10n.generalService;
+    final categoryName =
+        _locOrNull(service['serviceCategory']?['name']) ?? l10n.publicService;
 
     final rawStatus = (service['status'] ?? 'Pending').toString().toUpperCase();
     final date      = _formatDate(service['createdAt']);
