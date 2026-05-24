@@ -17,9 +17,9 @@ class CallInvite {
   factory CallInvite.fromMap(Map data) {
     final m = Map<String, dynamic>.from(data);
     return CallInvite(
-      emergencyId: int.tryParse('${m['emergencyId']}') ?? 0,
-      fromSocketId: '${m['fromSocketId'] ?? ''}',
-      fromIdentity: m['fromIdentity'] is Map
+      emergencyId:    int.tryParse('${m['emergencyId']}') ?? 0,
+      fromSocketId:   '${m['fromSocketId'] ?? ''}',
+      fromIdentity:   m['fromIdentity'] is Map
           ? Map<String, dynamic>.from(m['fromIdentity'] as Map)
           : null,
       reporterUserId: m['reporterUserId'] == null
@@ -32,7 +32,8 @@ class CallInvite {
 
   @override
   String toString() =>
-      'CallInvite(emergencyId: $emergencyId, fromSocketId: $fromSocketId, '
+      'CallInvite(emergencyId: $emergencyId, '
+      'fromSocketId: $fromSocketId, '
       'reporterUserId: $reporterUserId)';
 }
 
@@ -48,31 +49,53 @@ class CallService {
   String? _apiBaseUrl;
   String? _cleanedToken;
 
-  CallInvite? pendingInvite;
+  CallInvite?          pendingInvite;
   IncomingCallHandler? onIncomingCall;
 
   bool _connecting = false;
+  int  _sessionId  = 0;
 
-  // Cleared only on logout, never on reconnect.
-  final Set<String> _dispatchedFingerprints = {};
+  // Dedup set scoped to the current listener registration only.
+  // Cleared every time _registerIncomingListener is called, which happens:
+  //   • on every new physical connection (onConnect)
+  //   • never persisted across page reloads that reuse an existing socket
+  //
+  // This means:
+  //   BLOCKED  — same event arriving twice within one listener lifetime
+  //   ALLOWED  — same fingerprint after page reload / reconnect / clearCall
+  Set<String> _seenInCurrentRegistration = {};
 
+  // ── Public getters ────────────────────────────────────────────────────────
+  bool get isConnected  => _socket?.connected == true;
+  bool get isConfigured => _sessionId > 0;
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
   String _cleanToken(String token) =>
-      token.replaceFirst(RegExp(r'^Bearer\s+', caseSensitive: false), '').trim();
+      token.replaceFirst(RegExp(r'^Bearer\s+', caseSensitive: false), '')
+           .trim();
 
-  bool get isConnected => _socket?.connected == true;
-
-  // ---------------------------------------------------------------------------
-  // connect — call once after login.
-  // ---------------------------------------------------------------------------
+  // ── connect ───────────────────────────────────────────────────────────────
   void connect({required String apiBaseUrl, required String token}) {
-    if (_connecting) return;
-    _connecting = true;
-
     final clean = _cleanToken(token);
-    _apiBaseUrl = apiBaseUrl;
-    _cleanedToken = clean;
 
-    debugPrint('📞 CallService.connect() → $apiBaseUrl');
+    if (isConnected) {
+      debugPrint('📞 CallService.connect() — already connected, skipping');
+      if (_socket != null) _registerIncomingListener(_socket!);
+      return;
+    }
+
+    if (isConfigured || _connecting) {
+      debugPrint(
+          '📞 CallService.connect() — session $_sessionId active, skipping');
+      return;
+    }
+
+    _connecting   = true;
+    _apiBaseUrl   = apiBaseUrl;
+    _cleanedToken = clean;
+    _sessionId++;
+
+    debugPrint('📞 CallService.connect() → $apiBaseUrl  [session $_sessionId]');
 
     _destroySocket();
 
@@ -87,16 +110,9 @@ class CallService {
 
     _socket = s;
 
-    // Register call:incoming immediately — socket_io_client buffers events
-    // registered before connect, so this is safe and avoids any race where
-    // the server sends call:incoming before onConnect fires.
-    _registerIncomingListener(s);
-
     s.onConnect((_) {
       _connecting = false;
       debugPrint('📞 CallService connected — socket.id: ${s.id}');
-      // Re-register after every (re)connect to guarantee the listener
-      // survives transport-level reconnects.
       _registerIncomingListener(s);
     });
 
@@ -110,9 +126,7 @@ class CallService {
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // ensureConnected — safe to call from any page's initState.
-  // ---------------------------------------------------------------------------
+  // ── ensureConnected ───────────────────────────────────────────────────────
   void ensureConnected() {
     if (_apiBaseUrl == null || _cleanedToken == null) {
       debugPrint('📞 ensureConnected: no credentials — call connect() first');
@@ -122,51 +136,51 @@ class CallService {
       connect(apiBaseUrl: _apiBaseUrl!, token: _cleanedToken!);
       return;
     }
-    if (!_socket!.connected) {
-      debugPrint('📞 ensureConnected: socket exists but disconnected — reconnecting');
-      _connecting = false;
+    if (isConnected) return;
+    if (!_connecting) {
+      debugPrint(
+          '📞 ensureConnected: socket exists but disconnected — reconnecting');
       _socket!.connect();
     }
-    // Always re-register to survive hot restarts and reconnects.
-    _registerIncomingListener(_socket!);
   }
 
-  // ---------------------------------------------------------------------------
-  // disconnect — logout only.
-  // ---------------------------------------------------------------------------
+  // ── disconnect ────────────────────────────────────────────────────────────
   void disconnect() {
     _destroySocket();
     pendingInvite = null;
-    _dispatchedFingerprints.clear();
+    _seenInCurrentRegistration = {};
     debugPrint('📞 CallService disconnected (logout)');
   }
 
-  // ---------------------------------------------------------------------------
-  // clearCall — call on hangup so the same emergency can ring again.
-  // ---------------------------------------------------------------------------
+  // ── clearCall ─────────────────────────────────────────────────────────────
   void clearCall(int emergencyId) {
-    _dispatchedFingerprints.removeWhere((fp) => fp.startsWith('$emergencyId|'));
+    _seenInCurrentRegistration
+        .removeWhere((fp) => fp.startsWith('$emergencyId|'));
     pendingInvite = null;
   }
 
-  // ---------------------------------------------------------------------------
-  // Private
-  // ---------------------------------------------------------------------------
-
+  // ── Private ───────────────────────────────────────────────────────────────
   void _destroySocket() {
     try {
       _socket?.off('call:incoming');
       _socket?.disconnect();
       _socket?.dispose();
     } catch (_) {}
-    _socket = null;
+    _socket     = null;
     _connecting = false;
+    _sessionId  = 0;
   }
 
-  /// off() before on() guarantees exactly one listener no matter how many
-  /// times this is called. Safe to call before and after connect.
   void _registerIncomingListener(IO.Socket s) {
+    // Always remove the old listener first.
     s.off('call:incoming');
+
+    // Fresh set for this registration — old fingerprints are gone.
+    // This is the key fix: a page reload that calls connect() with an
+    // already-connected socket reaches here and wipes the stale set,
+    // so the responder's unchanged socketId is no longer blocked.
+    _seenInCurrentRegistration = {};
+
     debugPrint('📞 _registerIncomingListener — socket.id: ${s.id}');
 
     s.on('call:incoming', (data) {
@@ -184,75 +198,75 @@ class CallService {
         return;
       }
 
-      debugPrint('📞 dedup set: $_dispatchedFingerprints');
-
-      if (_dispatchedFingerprints.contains(invite.fingerprint)) {
-        debugPrint('📞 call:incoming ignored — duplicate: ${invite.fingerprint}');
+      if (_seenInCurrentRegistration.contains(invite.fingerprint)) {
+        debugPrint(
+            '📞 call:incoming ignored — duplicate: ${invite.fingerprint}');
         return;
       }
 
-      _dispatchedFingerprints.add(invite.fingerprint);
+      _seenInCurrentRegistration.add(invite.fingerprint);
       pendingInvite = invite;
 
-      debugPrint('📞 onIncomingCall is ${onIncomingCall == null ? "NULL ❌" : "set ✅"}');
+      debugPrint(
+          '📞 onIncomingCall is '
+          '${onIncomingCall == null ? "NULL ❌" : "set ✅"}');
       debugPrint('📞 call:incoming dispatching: $invite');
 
       onIncomingCall?.call(invite);
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Signalling
-  // ---------------------------------------------------------------------------
-
+  // ── Signalling ────────────────────────────────────────────────────────────
   void joinCallRoom(int emergencyId) {
-    debugPrint('📞 joinCallRoom($emergencyId) — connected: ${_socket?.connected}');
+    debugPrint(
+        '📞 joinCallRoom($emergencyId) — connected: ${_socket?.connected}');
     _socket?.emit('call:join', {'emergencyId': emergencyId});
   }
 
   void sendOffer({
-    required int emergencyId,
+    required int     emergencyId,
     required String? toSocketId,
     required Map<String, dynamic> sdp,
   }) {
     if (toSocketId == null || toSocketId.isEmpty) return;
     _socket?.emit('call:offer', {
       'emergencyId': emergencyId,
-      'toSocketId': toSocketId,
-      'sdp': sdp,
+      'toSocketId':  toSocketId,
+      'sdp':         sdp,
     });
   }
 
   void sendAnswer({
-    required int emergencyId,
+    required int     emergencyId,
     required String? toSocketId,
     required Map<String, dynamic> sdp,
   }) {
     if (toSocketId == null || toSocketId.isEmpty) return;
     _socket?.emit('call:answer', {
       'emergencyId': emergencyId,
-      'toSocketId': toSocketId,
-      'sdp': sdp,
+      'toSocketId':  toSocketId,
+      'sdp':         sdp,
     });
   }
 
   void sendIce({
-    required int emergencyId,
+    required int     emergencyId,
     required String? toSocketId,
     required Map<String, dynamic> candidate,
   }) {
     if (toSocketId == null || toSocketId.isEmpty) return;
     _socket?.emit('call:ice', {
       'emergencyId': emergencyId,
-      'toSocketId': toSocketId,
-      'candidate': candidate,
+      'toSocketId':  toSocketId,
+      'candidate':   candidate,
     });
   }
 
   void hangup({required int emergencyId, String? toSocketId}) {
     _socket?.emit('call:hangup', {
       'emergencyId': emergencyId,
-      if (toSocketId != null && toSocketId.isNotEmpty) 'toSocketId': toSocketId,
+      if (toSocketId != null && toSocketId.isNotEmpty)
+        'toSocketId': toSocketId,
     });
     clearCall(emergencyId);
   }

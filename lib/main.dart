@@ -7,8 +7,10 @@ import 'presentation/home/home_page.dart';
 import 'presentation/call/call_page.dart';
 import 'services/call_services.dart';
 
-final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState>         appNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> appMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
+const _kApiBaseUrl = 'http://localhost:5000';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,14 +28,22 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  Locale _locale = const Locale('en');
-  bool _callRouteOpen = false;
+  Locale _locale        = const Locale('en');
+  bool   _callRouteOpen = false;
 
   @override
   void initState() {
     super.initState();
     _loadSavedLocale();
+
+    // Set handler BEFORE any socket activity so we never miss an early
+    // call:incoming during cold-start or hot-restart.
     CallService.I.onIncomingCall = _handleIncomingCall;
+
+    // Connect immediately if credentials are already stored.
+    // The 100 ms delay lets LoginPage's synchronous connect() always win
+    // the race so we never destroy a mid-handshake socket.
+    _coldStartConnect();
   }
 
   @override
@@ -42,32 +52,64 @@ class _MyAppState extends State<MyApp> {
     super.dispose();
   }
 
+  // ── Cold-start / hot-restart connect ─────────────────────────────────────
+  Future<void> _coldStartConnect() async {
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    if (CallService.I.isConnected || CallService.I.isConfigured) return;
+    final prefs = await SharedPreferences.getInstance();
+    final token =
+        prefs.getString('accessToken') ?? prefs.getString('token');
+    if (token != null && token.isNotEmpty) {
+      CallService.I.connect(apiBaseUrl: _kApiBaseUrl, token: token);
+    }
+  }
+
+  // ── Incoming call handler ─────────────────────────────────────────────────
+  //
+  // The socket callback fires outside the Flutter zone on Flutter Web (DDC).
+  // Calling MaterialPageRoute directly from there causes:
+  //   "dart_rti.instanceType(...)[_eval] is not a function"
+  //
+  // Fix: schedule the navigation on the next frame so Flutter's zone owns
+  // the execution context.
   void _handleIncomingCall(CallInvite invite) {
-    // CallService already deduplicates — _callRouteOpen guards only against
-    // a second *different* call arriving while one is already on screen.
+    if (_callRouteOpen) return;
+
+    // Always hop back into the Flutter zone before touching the widget tree
+    // or the navigator. This is safe even when already on the main thread.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pushCallPage(invite);
+    });
+  }
+
+  void _pushCallPage(CallInvite invite) {
     if (_callRouteOpen) return;
 
     final nav = appNavigatorKey.currentState;
     if (nav == null) {
+      // Navigator not mounted yet — retry on next frame.
       WidgetsBinding.instance
-          .addPostFrameCallback((_) => _handleIncomingCall(invite));
+          .addPostFrameCallback((_) => _pushCallPage(invite));
       return;
     }
 
     appMessengerKey.currentState?.clearSnackBars();
     _callRouteOpen = true;
 
-    nav.push<void>(
-      MaterialPageRoute<void>(
-        fullscreenDialog: true,
-        builder: (_) => CallPage(invite: invite),
-      ),
-    ).whenComplete(() {
+    nav
+        .push<void>(
+          MaterialPageRoute<void>(
+            fullscreenDialog: true,
+            builder: (_) => CallPage(invite: invite),
+          ),
+        )
+        .whenComplete(() {
       _callRouteOpen = false;
       CallService.I.clearCall(invite.emergencyId);
     });
   }
 
+  // ── Locale ────────────────────────────────────────────────────────────────
   Future<void> _loadSavedLocale() async {
     final prefs = await SharedPreferences.getInstance();
     final langCode = prefs.getString('language_code');
@@ -80,10 +122,11 @@ class _MyAppState extends State<MyApp> {
     if (mounted) setState(() => _locale = value);
   }
 
+  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey: appNavigatorKey,
+      navigatorKey:         appNavigatorKey,
       scaffoldMessengerKey: appMessengerKey,
       debugShowCheckedModeBanner: false,
       title: 'BahirLink',
@@ -102,14 +145,14 @@ class _MyAppState extends State<MyApp> {
         fontFamily: 'Poppins',
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF1A3BAA),
-          primary: const Color(0xFF1A3BAA),
+          primary:   const Color(0xFF1A3BAA),
         ),
         useMaterial3: true,
         appBarTheme: const AppBarTheme(
-          centerTitle: true,
+          centerTitle:     true,
           backgroundColor: Color(0xFF1A3BAA),
           foregroundColor: Colors.white,
-          elevation: 0,
+          elevation:       0,
         ),
       ),
       home: const HomePage(),
