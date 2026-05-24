@@ -59,6 +59,10 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   bool  _isLoadingKebeles = true;
 
   // ── Location / time / media ────────────────────────────────────────────────
+  // These hold the raw values picked from MapPickerPage.
+  // They are passed DIRECTLY to UserEmergencyService as named parameters
+  // and are intentionally NOT passed into EmergencyReportModel, so there
+  // is only one code-path that writes latitude/longitude into the request.
   double?   _latitude;
   double?   _longitude;
   DateTime? _selectedTime;
@@ -72,9 +76,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   int? _userId;
 
   /// Synced with the global language switcher via SharedPreferences.
-  /// Forwarded to [UserEmergencyService.sendUserEmergency] as the
-  /// Accept-Language header, and used to display Kebele names in the
-  /// correct language.
   String _currentLang = 'en';
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -117,9 +118,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     }
   }
 
-  /// Fetches Kebeles and extracts the name in [lang].
-  /// The backend stores Kebele names as `{ "en": "...", "am": "..." }` JSONB.
-  /// We flatten the name here so the dropdown always shows the right language.
   Future<void> _fetchKebeles({String? lang}) async {
     final useLang = lang ?? _currentLang;
     try {
@@ -127,7 +125,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
       if (!mounted) return;
       setState(() {
         _kebeles = fetched.map((k) {
-          // Flatten localised name: { en, am } → String
           final rawName = k['name'];
           String displayName;
           if (rawName is Map) {
@@ -203,12 +200,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   }
 
   // ── Submit ─────────────────────────────────────────────────────────────────
-  /// The description text is sent as-is (plain string) to the backend.
-  /// `autoTranslate()` on the server detects the input language automatically:
-  ///   • User types in Amharic → stored as { am: "...", en: "<translated>" }
-  ///   • User types in English  → stored as { en: "...", am: "<translated>" }
-  /// The [_currentLang] header tells the backend which locale to use when
-  /// returning localised responses, but does NOT affect translation direction.
   Future<void> _submitReport() async {
     if (_descriptionController.text.isEmpty ||
         _selectedKebeleId == null ||
@@ -223,28 +214,36 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
 
     setState(() => _isLoading = true);
 
+    // ── Build model WITHOUT lat/lng ────────────────────────────────────────
+    // Coordinates are intentionally omitted from the model so they don't
+    // end up in toJsonForUser() and conflict with the named params below.
+    // The service is the single place that writes latitude/longitude into
+    // the multipart request.
     final report = EmergencyReportModel(
       emergencyTypeId: widget.emergencyTypeId,
       categoryId:      widget.categoryId,
-      description:     _descriptionController.text,   // plain string — backend auto-translates
+      description:     _descriptionController.text, // backend auto-translates
       userId:          _userId!,
       kebele:          _selectedKebeleId.toString(),
-      subdivision:     _subdivisionController.text,    // plain string — backend auto-translates
+      subdivision:     _subdivisionController.text,  // backend auto-translates
       street:          _streetController.text,
-      latitude:        _latitude,
-      longitude:       _longitude,
+      latitude:        null,   // ← always null here; sent via named param
+      longitude:       null,   // ← always null here; sent via named param
       time:            _selectedTime ?? DateTime.now(),
       mediaUrl:        null,
       mediaType:       null,
     );
 
+    // ── Send — coordinates flow through named params only ──────────────────
     final success = await UserEmergencyService.sendUserEmergency(
       userId:     _userId!,
       report:     report,
+      latitude:   _latitude,    // from MapPickerPage result
+      longitude:  _longitude,   // from MapPickerPage result
       mediaBytes: _selectedMediaBytes,
       mediaFile:  _selectedFile,
       mediaName:  _selectedFileName,
-      lang:       _currentLang,   // drives Accept-Language header + response locale
+      lang:       _currentLang,
     );
 
     if (mounted) setState(() => _isLoading = false);
@@ -371,7 +370,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Language notice banner ─────────────────────────────────────────
         _buildLangBanner(isAm),
         const SizedBox(height: 20),
 
@@ -380,11 +378,9 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
         const SizedBox(height: 10),
         _buildTextField(
           _descriptionController,
-          // Hint adapts to current language so the user knows they can type
-          // in either language — the backend will auto-translate either way.
           isAm
-              ? 'ምን እየተፈጠረ እንደሆነ ያስረዱ...'   // Amharic hint
-              : l10n.reportDescriptionHint,        // English hint from ARB
+              ? 'ምን እየተፈጠረ እንደሆነ ያስረዱ...'
+              : l10n.reportDescriptionHint,
           maxLines: 4,
           icon: Icons.edit_note,
         ),
@@ -421,11 +417,17 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
           onTap: _pickTime,
         ),
         const SizedBox(height: 12),
+
+        // ── GPS pin row ────────────────────────────────────────────────────
+        // Shows green "Location pinned" with coordinates when set,
+        // otherwise prompts the user to tap and open the map.
         _buildPickerRow(
-          icon:       Icons.my_location,
-          label:      l10n.reportPinLocation,
-          value:      _latitude != null
-              ? l10n.reportLocationPinned
+          icon:  Icons.my_location,
+          label: l10n.reportPinLocation,
+          value: _latitude != null && _longitude != null
+              ? "${l10n.reportLocationPinned} "
+                "(${_latitude!.toStringAsFixed(4)}, "
+                "${_longitude!.toStringAsFixed(4)})"
               : l10n.reportTapToOpenMap,
           valueColor: _latitude != null ? _T.green : null,
           onTap: () async {
@@ -433,11 +435,17 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
               context,
               MaterialPageRoute(builder: (_) => const MapPickerPage()),
             );
+            // MapPickerPage must return an object with .latitude / .longitude.
+            // We store both in state; they travel to the service as named params.
             if (pickedLocation != null) {
               setState(() {
                 _latitude  = pickedLocation.latitude;
                 _longitude = pickedLocation.longitude;
               });
+              debugPrint(
+                "📍 Location picked: lat=${pickedLocation.latitude}, "
+                "lng=${pickedLocation.longitude}",
+              );
             }
           },
         ),
@@ -462,8 +470,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
   }
 
   // ── Language notice banner ─────────────────────────────────────────────────
-  /// Informs the user they can write in either language and it will be
-  /// auto-translated by the backend.
   Widget _buildLangBanner(bool isAm) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -527,7 +533,6 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
                       color: _T.accent, size: 20),
                   border: InputBorder.none,
                 ),
-                // Uses pre-flattened `displayName` in the current language
                 items: _kebeles.map((kebele) {
                   return DropdownMenuItem<int>(
                     value: kebele['id'] as int?,
@@ -621,11 +626,16 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
                       color:      _T.textDark),
                 ),
               ),
-              Text(
-                value,
-                style: TextStyle(
-                  color:      valueColor ?? _T.accent,
-                  fontWeight: FontWeight.bold,
+              Flexible(
+                child: Text(
+                  value,
+                  overflow:   TextOverflow.ellipsis,
+                  textAlign:  TextAlign.end,
+                  style: TextStyle(
+                    color:      valueColor ?? _T.accent,
+                    fontWeight: FontWeight.bold,
+                    fontSize:   12,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),

@@ -17,9 +17,6 @@ class UserEmergencyService {
   }
 
   // ─── Shared headers ────────────────────────────────────────────────────────
-  /// Mirrors EmergencyService._headers() — always sends Accept-Language so the
-  /// backend's autoTranslate() detects the input language and persists both
-  /// { en, am } regardless of which language the user typed in.
   static Map<String, String> _headers(String lang) => {
         'Accept': 'application/json',
         'Accept-Language': lang,
@@ -36,12 +33,6 @@ class UserEmergencyService {
 
   // ══════════════════════════════════════════════════════════════════════════
   // SEND USER EMERGENCY
-  //
-  // [lang] must be the current app locale ('en' or 'am'), loaded from
-  // SharedPreferences with key 'language_code' — the same key the dashboard
-  // language switcher writes to.  It is forwarded as the Accept-Language
-  // header so the backend returns localised responses and autoTranslate()
-  // knows the caller's locale context.
   // ══════════════════════════════════════════════════════════════════════════
   static Future<bool> sendUserEmergency({
     required int userId,
@@ -51,7 +42,7 @@ class UserEmergencyService {
     Uint8List? mediaBytes,
     File? mediaFile,
     String? mediaName,
-    String lang = 'en',       // ← new: mirrors EmergencyService pattern
+    String lang = 'en',
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -75,18 +66,33 @@ class UserEmergencyService {
       final data = report.toJsonForUser();
 
       // Map 'kebele' from model → 'kebeleId' expected by backend
-      request.fields['kebeleId']   = report.kebele?.toString() ?? "";
+      request.fields['kebeleId']    = report.kebele?.toString() ?? "";
       request.fields['subdivision'] = report.subdivision ?? "";
 
-      // Add remaining fields, skipping the ones already set above
+      // Add remaining fields, skipping keys handled separately
+      // Also skip latitude/longitude from model — coordinates come exclusively
+      // from the named parameters below to avoid duplication or conflicts.
       data.forEach((key, value) {
-        if (value != null && key != 'kebele' && key != 'subdivision') {
+        if (value != null &&
+            key != 'kebele' &&
+            key != 'subdivision' &&
+            key != 'latitude' &&
+            key != 'longitude') {
           request.fields[key] = value.toString();
         }
       });
 
-      if (latitude != null)  request.fields["latitude"]  = latitude.toString();
-      if (longitude != null) request.fields["longitude"] = longitude.toString();
+      // ── Coordinates (single source of truth) ───────────────────────────────
+      // These come exclusively from the named parameters, not from the model,
+      // so the backend's createUserEmergency() always receives a clean pair
+      // and never falls back to location = null.
+      if (latitude != null && longitude != null) {
+        request.fields["latitude"]  = latitude.toString();
+        request.fields["longitude"] = longitude.toString();
+        debugPrint("📍 Location attached: lat=$latitude, lng=$longitude");
+      } else {
+        debugPrint("⚠️ No location attached — user did not pin a location");
+      }
 
       // ── Media ──────────────────────────────────────────────────────────────
       if (kIsWeb) {
@@ -98,11 +104,11 @@ class UserEmergencyService {
       }
 
       debugPrint("🚀 Requesting: POST $uri");
-      debugPrint("📦 Payload: ${request.fields}");
+      debugPrint("📦 Payload fields: ${request.fields}");
       debugPrint("🌐 Lang header: $lang");
 
-      final streamed  = await request.send();
-      final response  = await http.Response.fromStream(streamed);
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         debugPrint("🎉 Emergency report successful");
@@ -118,8 +124,6 @@ class UserEmergencyService {
   }
 
   // ── Private media helpers ──────────────────────────────────────────────────
-  // Mirrors EmergencyService._addBytesFile / _addPathFile exactly.
-
   static void _addBytesFile(
       http.MultipartRequest request, Uint8List bytes, String fileName) {
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
