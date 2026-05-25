@@ -17,9 +17,9 @@ class CallInvite {
   factory CallInvite.fromMap(Map data) {
     final m = Map<String, dynamic>.from(data);
     return CallInvite(
-      emergencyId:    int.tryParse('${m['emergencyId']}') ?? 0,
-      fromSocketId:   '${m['fromSocketId'] ?? ''}',
-      fromIdentity:   m['fromIdentity'] is Map
+      emergencyId: int.tryParse('${m['emergencyId']}') ?? 0,
+      fromSocketId: '${m['fromSocketId'] ?? ''}',
+      fromIdentity: m['fromIdentity'] is Map
           ? Map<String, dynamic>.from(m['fromIdentity'] as Map)
           : null,
       reporterUserId: m['reporterUserId'] == null
@@ -31,8 +31,7 @@ class CallInvite {
   String get fingerprint => '$emergencyId|$fromSocketId';
 
   @override
-  String toString() =>
-      'CallInvite(emergencyId: $emergencyId, '
+  String toString() => 'CallInvite(emergencyId: $emergencyId, '
       'fromSocketId: $fromSocketId, '
       'reporterUserId: $reporterUserId)';
 }
@@ -49,30 +48,28 @@ class CallService {
   String? _apiBaseUrl;
   String? _cleanedToken;
 
-  CallInvite?          pendingInvite;
+  CallInvite? pendingInvite;
   IncomingCallHandler? onIncomingCall;
 
   bool _connecting = false;
-  int  _sessionId  = 0;
 
-  // Dedup set scoped to the current listener registration only.
-  // Cleared every time _registerIncomingListener is called, which happens:
-  //   • on every new physical connection (onConnect)
-  //   • never persisted across page reloads that reuse an existing socket
-  //
-  // This means:
-  //   BLOCKED  — same event arriving twice within one listener lifetime
-  //   ALLOWED  — same fingerprint after page reload / reconnect / clearCall
+  // FIX #8: _sessionId is now only reset in disconnect() (full logout), NOT in
+  // _destroySocket(). Previously _destroySocket() set _sessionId = 0, which
+  // made isConfigured() return false immediately after socket teardown, allowing
+  // a rapid second call to connect() to race through and create a duplicate
+  // socket while the first was still in the process of being destroyed.
+  int _sessionId = 0;
+
   Set<String> _seenInCurrentRegistration = {};
 
   // ── Public getters ────────────────────────────────────────────────────────
-  bool get isConnected  => _socket?.connected == true;
+  bool get isConnected => _socket?.connected == true;
   bool get isConfigured => _sessionId > 0;
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  String _cleanToken(String token) =>
-      token.replaceFirst(RegExp(r'^Bearer\s+', caseSensitive: false), '')
-           .trim();
+  String _cleanToken(String token) => token
+      .replaceFirst(RegExp(r'^Bearer\s+', caseSensitive: false), '')
+      .trim();
 
   // ── connect ───────────────────────────────────────────────────────────────
   void connect({required String apiBaseUrl, required String token}) {
@@ -90,8 +87,8 @@ class CallService {
       return;
     }
 
-    _connecting   = true;
-    _apiBaseUrl   = apiBaseUrl;
+    _connecting = true;
+    _apiBaseUrl = apiBaseUrl;
     _cleanedToken = clean;
     _sessionId++;
 
@@ -147,6 +144,10 @@ class CallService {
   // ── disconnect ────────────────────────────────────────────────────────────
   void disconnect() {
     _destroySocket();
+    // FIX #8: _sessionId reset belongs here (full logout), not in _destroySocket.
+    // This way intermediate teardowns (e.g. during socket recreation) don't
+    // accidentally clear the "configured" flag and open the door to duplicates.
+    _sessionId = 0;
     pendingInvite = null;
     _seenInCurrentRegistration = {};
     debugPrint('📞 CallService disconnected (logout)');
@@ -166,19 +167,13 @@ class CallService {
       _socket?.disconnect();
       _socket?.dispose();
     } catch (_) {}
-    _socket     = null;
+    _socket = null;
     _connecting = false;
-    _sessionId  = 0;
+    // NOTE: _sessionId intentionally NOT reset here. See FIX #8 above.
   }
 
   void _registerIncomingListener(IO.Socket s) {
-    // Always remove the old listener first.
     s.off('call:incoming');
-
-    // Fresh set for this registration — old fingerprints are gone.
-    // This is the key fix: a page reload that calls connect() with an
-    // already-connected socket reaches here and wipes the stale set,
-    // so the responder's unchanged socketId is no longer blocked.
     _seenInCurrentRegistration = {};
 
     debugPrint('📞 _registerIncomingListener — socket.id: ${s.id}');
@@ -207,8 +202,7 @@ class CallService {
       _seenInCurrentRegistration.add(invite.fingerprint);
       pendingInvite = invite;
 
-      debugPrint(
-          '📞 onIncomingCall is '
+      debugPrint('📞 onIncomingCall is '
           '${onIncomingCall == null ? "NULL ❌" : "set ✅"}');
       debugPrint('📞 call:incoming dispatching: $invite');
 
@@ -224,49 +218,48 @@ class CallService {
   }
 
   void sendOffer({
-    required int     emergencyId,
+    required int emergencyId,
     required String? toSocketId,
     required Map<String, dynamic> sdp,
   }) {
     if (toSocketId == null || toSocketId.isEmpty) return;
     _socket?.emit('call:offer', {
       'emergencyId': emergencyId,
-      'toSocketId':  toSocketId,
-      'sdp':         sdp,
+      'toSocketId': toSocketId,
+      'sdp': sdp,
     });
   }
 
   void sendAnswer({
-    required int     emergencyId,
+    required int emergencyId,
     required String? toSocketId,
     required Map<String, dynamic> sdp,
   }) {
     if (toSocketId == null || toSocketId.isEmpty) return;
     _socket?.emit('call:answer', {
       'emergencyId': emergencyId,
-      'toSocketId':  toSocketId,
-      'sdp':         sdp,
+      'toSocketId': toSocketId,
+      'sdp': sdp,
     });
   }
 
   void sendIce({
-    required int     emergencyId,
+    required int emergencyId,
     required String? toSocketId,
     required Map<String, dynamic> candidate,
   }) {
     if (toSocketId == null || toSocketId.isEmpty) return;
     _socket?.emit('call:ice', {
       'emergencyId': emergencyId,
-      'toSocketId':  toSocketId,
-      'candidate':   candidate,
+      'toSocketId': toSocketId,
+      'candidate': candidate,
     });
   }
 
   void hangup({required int emergencyId, String? toSocketId}) {
     _socket?.emit('call:hangup', {
       'emergencyId': emergencyId,
-      if (toSocketId != null && toSocketId.isNotEmpty)
-        'toSocketId': toSocketId,
+      if (toSocketId != null && toSocketId.isNotEmpty) 'toSocketId': toSocketId,
     });
     clearCall(emergencyId);
   }

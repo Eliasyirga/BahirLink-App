@@ -5,21 +5,21 @@ import '../dashboard/dashboard_page.dart';
 import '../dashboard/guest_dashboard_page.dart';
 import '../../services/auth_service.dart';
 import '../../services/call_services.dart';
+import '../call/call_page.dart';
 import 'forgot_password_page.dart';
 import 'package:first_app/l10n/app_localizations.dart';
 import 'package:first_app/main.dart';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 class _T {
-  static const primary    = Color(0xFF1A3BAA);
+  static const primary = Color(0xFF1A3BAA);
   static const primaryMid = Color(0xFF2252CC);
-  static const accent     = Color(0xFF4B83F0);
+  static const accent = Color(0xFF4B83F0);
   static const accentSoft = Color(0xFFD6E4FF);
-  static const textMid    = Color(0xFF5569A0);
+  static const textMid = Color(0xFF5569A0);
 }
 
-// ─── Server base URL ─────────────────────────────────────────────────────────
-// Single source of truth — update this if your backend moves.
+// ─── Server base URL ──────────────────────────────────────────────────────────
 const _kApiBaseUrl = 'http://localhost:5000';
 
 class LoginPage extends StatefulWidget {
@@ -31,23 +31,22 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _emailController    = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  bool _isLoading         = false;
+  bool _isLoading = false;
   bool _isPasswordVisible = false;
 
   // ── Language state ──────────────────────────────────────────────────────────
-  String _currentLang     = 'en';
-  bool   _isSwitchingLang = false;
+  String _currentLang = 'en';
+  bool _isSwitchingLang = false;
 
   // ── Pulse animation (logo rings) ────────────────────────────────────────────
-  late final AnimationController _pulseCtrl =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))
-        ..repeat(reverse: true);
-  late final Animation<double> _pulseAnim =
-      Tween<double>(begin: 0.88, end: 1.0).animate(
-          CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+  late final AnimationController _pulseCtrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1400))
+    ..repeat(reverse: true);
+  late final Animation<double> _pulseAnim = Tween<double>(begin: 0.88, end: 1.0)
+      .animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
 
   @override
   void initState() {
@@ -77,7 +76,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     if (!mounted) return;
     MyApp.of(context)?.setLocale(Locale(langCode));
     setState(() {
-      _currentLang     = langCode;
+      _currentLang = langCode;
       _isSwitchingLang = true;
     });
     await Future.delayed(const Duration(milliseconds: 400));
@@ -102,10 +101,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         ),
         child: _isSwitchingLang
             ? const SizedBox(
-                width: 22, height: 14,
+                width: 22,
+                height: 14,
                 child: Center(
                   child: SizedBox(
-                    width: 12, height: 12,
+                    width: 12,
+                    height: 12,
                     child: CircularProgressIndicator(
                         strokeWidth: 1.5,
                         valueColor:
@@ -116,9 +117,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             : Text(
                 isAmharic ? 'EN' : 'አማ',
                 style: const TextStyle(
-                    color:         Colors.white,
-                    fontSize:      11,
-                    fontWeight:    FontWeight.w800,
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
                     letterSpacing: 0.3),
               ),
       ),
@@ -131,13 +132,41 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     return t.startsWith('Bearer ') ? t.substring(7) : t;
   }
 
+  // ── Incoming call overlay (shown from any screen after login) ───────────────
+  //
+  // FIX (ordering): onIncomingCall MUST be wired here, BEFORE connect() is
+  // called, so the handler is in place before the socket can fire call:incoming.
+  //
+  // The handler uses the root navigator (rootNavigator: true) so it works even
+  // when the user is deep inside a nested navigator (ChatPage, etc.).
+  void _wireIncomingCallHandler() {
+    CallService.I.onIncomingCall = (CallInvite invite) {
+      // Use the app-level navigator key so the overlay appears on top of
+      // everything regardless of which page is currently active.
+      final ctx = appNavigatorKey.currentContext;
+      if (ctx == null) {
+        // Context not ready yet — store as pending and let DashboardPage
+        // or ChatPage pick it up via pendingInvite.
+        debugPrint(
+            '📞 onIncomingCall: no context yet, stored as pendingInvite');
+        return;
+      }
+      Navigator.of(ctx, rootNavigator: true).push(
+        MaterialPageRoute<void>(
+          builder: (_) => CallPage(invite: invite),
+          fullscreenDialog: true,
+        ),
+      );
+    };
+  }
+
   // ── Auth logic ──────────────────────────────────────────────────────────────
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
       final result = await AuthService.login(
-        email:    _emailController.text.trim(),
+        email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
       if (!mounted) return;
@@ -151,24 +180,36 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           userIdRaw != null) {
         final token = _cleanToken(accessTokenRaw);
 
-        // ── FIX: connect CallService BEFORE navigating ───────────────────────
-        // This creates the persistent socket that listens for call:incoming
-        // for the lifetime of the session. Must happen here, right after login,
-        // so the identity room (identity_user_<id>) is joined on the server
-        // before any responder can initiate a call.
+        // ── FIX (ordering): wire onIncomingCall FIRST, then connect ─────────
         //
-        // CallService.I.connect() stores apiBaseUrl + token internally, so
-        // ensureConnected() called later by ChatPage is a safe no-op.
+        // The original code connected the socket without ever setting
+        // onIncomingCall in LoginPage, relying solely on _MyAppState to wire
+        // the handler. But _MyAppState.onIncomingCall is set asynchronously
+        // after the widget tree rebuilds, so there was a window where
+        // call:incoming could arrive on the socket with no handler attached
+        // and be silently dropped.
+        //
+        // Correct order:
+        //   1. _wireIncomingCallHandler() — handler is ready
+        //   2. CallService.I.connect()    — socket starts; handler guaranteed
+        //      to exist before any call:incoming can fire
+        //   3. Navigator.pushReplacement  — navigate to Dashboard
+        //
+        // DashboardPage._ensureCallServiceConnected() will see isConnected==true
+        // and skip a redundant connect(). ChatPage.initState() calls
+        // ensureConnected() which is also a safe no-op.
+        _wireIncomingCallHandler();
+
         CallService.I.connect(
           apiBaseUrl: _kApiBaseUrl,
-          token:      token, // already stripped of "Bearer " prefix
+          token: token,
         );
 
-        // Persist credentials for cold-start reconnect (handled in main.dart).
+        // Persist for cold-start reconnect.
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('accessToken', token);
-        await prefs.setString('token',       token);
-        await prefs.setString('userId',      userIdRaw);
+        await prefs.setString('token', token);
+        await prefs.setString('userId', userIdRaw);
 
         if (!mounted) return;
 
@@ -191,8 +232,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content:         Text(message),
-        behavior:        SnackBarBehavior.floating,
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
         backgroundColor: const Color(0xFFEF4444),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -219,26 +260,26 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     Text(
                       l10n.loginWelcomeBack,
                       style: const TextStyle(
-                        fontSize:   24,
+                        fontSize: 24,
                         fontWeight: FontWeight.w600,
-                        color:      Color(0xFF0C1A45),
+                        color: Color(0xFF0C1A45),
                       ),
                     ),
                     const SizedBox(height: 30),
                     _buildTextField(
                       controller: _emailController,
-                      hint:       l10n.loginUsernameHint,
-                      icon:       Icons.person_outline,
-                      validator:  (v) =>
+                      hint: l10n.loginUsernameHint,
+                      icon: Icons.person_outline,
+                      validator: (v) =>
                           v!.isEmpty ? l10n.loginEnterUsername : null,
                     ),
                     const SizedBox(height: 15),
                     _buildTextField(
-                      controller:      _passwordController,
-                      hint:            l10n.loginPasswordHint,
-                      icon:            Icons.lock_outline,
-                      isPassword:      true,
-                      obscureText:     !_isPasswordVisible,
+                      controller: _passwordController,
+                      hint: l10n.loginPasswordHint,
+                      icon: Icons.lock_outline,
+                      isPassword: true,
+                      obscureText: !_isPasswordVisible,
                       onSuffixPressed: () => setState(
                           () => _isPasswordVisible = !_isPasswordVisible),
                       validator: (v) =>
@@ -271,19 +312,20 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           clipper: _WaveClipper(),
           child: Container(
             height: 240,
-            width:  double.infinity,
+            width: double.infinity,
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
-                stops:  [0.0, 0.5, 1.0],
-                begin:  Alignment.topLeft,
-                end:    Alignment.bottomRight,
+                stops: [0.0, 0.5, 1.0],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
             ),
           ),
         ),
         Positioned(
-          top: 44, left: 12,
+          top: 44,
+          left: 12,
           child: SafeArea(
             child: IconButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -294,26 +336,31 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
         ),
         Positioned(
-          top: 44, right: 12,
+          top: 44,
+          right: 12,
           child: SafeArea(child: _buildLangToggle()),
         ),
         Positioned(
-          top: 52, left: 0, right: 0,
+          top: 52,
+          left: 0,
+          right: 0,
           child: Column(
             children: [
               ScaleTransition(
                 scale: _pulseAnim,
                 child: Stack(alignment: Alignment.center, children: [
                   Container(
-                    width: 110, height: 110,
+                    width: 110,
+                    height: 110,
                     decoration: BoxDecoration(
-                      shape:  BoxShape.circle,
+                      shape: BoxShape.circle,
                       border: Border.all(
                           color: Colors.white.withOpacity(0.10), width: 2),
                     ),
                   ),
                   Container(
-                    width: 88, height: 88,
+                    width: 88,
+                    height: 88,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.white.withOpacity(0.07),
@@ -322,15 +369,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     ),
                   ),
                   Container(
-                    width: 66, height: 66,
+                    width: 66,
+                    height: 66,
                     decoration: BoxDecoration(
-                      color:  Colors.white,
-                      shape:  BoxShape.circle,
+                      color: Colors.white,
+                      shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color:      Colors.black.withOpacity(0.22),
+                          color: Colors.black.withOpacity(0.22),
                           blurRadius: 20,
-                          offset:     const Offset(0, 8),
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
@@ -340,8 +388,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         child: Image.asset(
                           'assets/images/logo.webp',
                           fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => Icon(
-                              Icons.hub_rounded,
+                          errorBuilder: (_, __, ___) => Icon(Icons.hub_rounded,
                               color: _T.primary, size: 32),
                         ),
                       ),
@@ -353,9 +400,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               const Text(
                 'BAHIR LINK',
                 style: TextStyle(
-                  color:       Colors.white,
-                  fontSize:    20,
-                  fontWeight:  FontWeight.bold,
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
                   letterSpacing: 3,
                 ),
               ),
@@ -376,11 +423,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     String? Function(String?)? validator,
   }) {
     return TextFormField(
-      controller:  controller,
+      controller: controller,
       obscureText: obscureText,
-      validator:   validator,
+      validator: validator,
       decoration: InputDecoration(
-        hintText:  hint,
+        hintText: hint,
         hintStyle: const TextStyle(color: _T.textMid, fontSize: 14),
         prefixIcon: Icon(icon, color: _T.primary, size: 20),
         suffixIcon: isPassword
@@ -388,21 +435,22 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 icon: Icon(
                   obscureText ? Icons.visibility_off : Icons.visibility,
                   color: _T.textMid,
-                  size:  18,
+                  size: 18,
                 ),
                 onPressed: onSuffixPressed,
               )
             : null,
-        filled:         true,
-        fillColor:      _T.accentSoft.withOpacity(0.35),
-        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+        filled: true,
+        fillColor: _T.accentSoft.withOpacity(0.35),
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(30),
-          borderSide:   BorderSide.none,
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(30),
-          borderSide:   const BorderSide(color: _T.accent, width: 1.5),
+          borderSide: const BorderSide(color: _T.accent, width: 1.5),
         ),
       ),
     );
@@ -419,8 +467,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         child: Text(
           l10n.loginForgotPassword,
           style: const TextStyle(
-            color:      _T.accent,
-            fontSize:   13,
+            color: _T.accent,
+            fontSize: 13,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -437,22 +485,23 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         style: ElevatedButton.styleFrom(
           backgroundColor: _T.primary,
           foregroundColor: Colors.white,
-          side:  const BorderSide(color: _T.primary, width: 1.5),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(30)),
+          side: const BorderSide(color: _T.primary, width: 1.5),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
           elevation: 0,
         ),
         child: _isLoading
             ? const SizedBox(
-                height: 20, width: 20,
+                height: 20,
+                width: 20,
                 child: CircularProgressIndicator(
                     strokeWidth: 2, color: Colors.white))
             : Text(
                 l10n.loginButton,
                 style: const TextStyle(
-                    color:      Colors.white,
+                    color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize:   16),
+                    fontSize: 16),
               ),
       ),
     );
@@ -466,8 +515,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       ),
       child: Text(
         l10n.loginContinueAsGuest,
-        style: const TextStyle(
-            color: _T.textMid, fontWeight: FontWeight.w500),
+        style: const TextStyle(color: _T.textMid, fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -476,8 +524,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(l10n.loginNewUser,
-            style: const TextStyle(color: _T.textMid)),
+        Text(l10n.loginNewUser, style: const TextStyle(color: _T.textMid)),
         GestureDetector(
           onTap: () => Navigator.push(
             context,
@@ -485,8 +532,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
           child: Text(
             l10n.loginSignUp,
-            style: const TextStyle(
-                color: _T.primary, fontWeight: FontWeight.bold),
+            style:
+                const TextStyle(color: _T.primary, fontWeight: FontWeight.bold),
           ),
         ),
       ],
@@ -498,13 +545,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 class _WaveClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
-    var path = Path();
+    final path = Path();
     path.lineTo(0, size.height - 60);
     path.quadraticBezierTo(
-        size.width / 4, size.height,
-        size.width / 2.25, size.height - 30);
-    path.quadraticBezierTo(
-        size.width - (size.width / 3.25), size.height - 65,
+        size.width / 4, size.height, size.width / 2.25, size.height - 30);
+    path.quadraticBezierTo(size.width - (size.width / 3.25), size.height - 65,
         size.width, size.height - 20);
     path.lineTo(size.width, 0);
     path.close();

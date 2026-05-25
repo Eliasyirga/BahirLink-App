@@ -31,44 +31,66 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
+    // FIX #9: _ensureCallServiceConnected is called synchronously from
+    // initState. The method itself is async only for the SharedPreferences
+    // fallback path (cold start). The two fast paths — isConnected and
+    // widget.token — are synchronous and complete before the first frame,
+    // so onIncomingCall (wired by _MyAppState) is guaranteed to be set
+    // before any call:incoming event can arrive.
+    //
+    // Previously this was called as an unawaited async void. While that
+    // worked for the fast path, it introduced a subtle ordering risk: if
+    // _MyAppState.onIncomingCall wasn't set yet when an incoming call fired
+    // during the async gap, the call would be silently dropped.
+    //
+    // Nothing here needs to await the fallback path either — if we reach
+    // SharedPreferences it means no token is in memory, so no call can
+    // arrive before the socket finishes connecting anyway.
     _ensureCallServiceConnected();
   }
 
   // ── CallService wiring ────────────────────────────────────────────────────
   //
-  // LoginPage already called CallService.I.connect() synchronously.
-  // This method is a safety-net for:
-  //   • Hot restart  — LoginPage was skipped, socket is null.
-  //   • Cold start   — deep-link straight to DashboardPage.
-  //   • Transport drop between LoginPage and here.
+  // FIX #10: The original flow was:
+  //   1. LoginPage calls CallService.I.connect()      ← socket starts connecting
+  //   2. LoginPage calls Navigator.pushReplacement()  ← DashboardPage builds
+  //   3. _MyAppState.onIncomingCall is set            ← but socket may already
+  //                                                      have fired call:incoming
+  //                                                      before step 3!
   //
-  // isConfigured is true the moment connect() is called (before the socket
-  // physically connects), so the fast-path catches the normal login flow
-  // and avoids destroying the mid-handshake socket.
+  // The fix is purely ordering: LoginPage must set onIncomingCall BEFORE
+  // calling connect(). That change lives in login_page.dart.
+  // DashboardPage's role here is just the safety net for hot restart / cold
+  // start where LoginPage was bypassed entirely.
   Future<void> _ensureCallServiceConnected() async {
-    // Fast path — socket is up or mid-handshake (normal login flow).
+    // Fast path 1 — socket is up or mid-handshake (normal login flow).
+    // isConnected OR isConfigured means connect() was already called by
+    // LoginPage, which also wired onIncomingCall first. Nothing to do.
     if (CallService.I.isConnected || CallService.I.isConfigured) {
       CallService.I.ensureConnected();
       return;
     }
 
-    // widget.token is the authoritative source right after login.
+    // Fast path 2 — hot restart: LoginPage was skipped but token was passed
+    // as a constructor argument. Use it directly.
     if (widget.token.isNotEmpty) {
       CallService.I.connect(
         apiBaseUrl: _kApiBaseUrl,
-        token:      widget.token,
+        token: widget.token,
       );
       return;
     }
 
-    // Fallback: hot restart / cold start — read persisted credentials.
+    // Fallback — cold start / deep-link: read persisted credentials.
+    // By this point onIncomingCall is already set by _MyAppState, so the
+    // async gap here is safe.
     final prefs = await SharedPreferences.getInstance();
     final storedToken =
         prefs.getString('accessToken') ?? prefs.getString('token');
     if (storedToken != null && storedToken.isNotEmpty) {
       CallService.I.connect(
         apiBaseUrl: _kApiBaseUrl,
-        token:      storedToken,
+        token: storedToken,
       );
     }
   }
@@ -85,20 +107,19 @@ class _DashboardPageState extends State<DashboardPage> {
           const DashboardContent(),
           ServiceReportPage(
             userId: widget.userId,
-            token:  widget.token,
+            token: widget.token,
           ),
           const ProfilePage(),
           ReportsPage(
             userId: widget.userId,
-            token:  widget.token,
+            token: widget.token,
           ),
           const SettingsPage(),
         ],
       ),
       bottomNavigationBar: BahirBottomNavBar(
         selectedIndex: _selectedIndex,
-        onItemSelected: (index) =>
-            setState(() => _selectedIndex = index),
+        onItemSelected: (index) => setState(() => _selectedIndex = index),
         labels: [
           l10n.navHome,
           l10n.navServices,

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -15,21 +15,18 @@ const _kBlue800 = Color(0xFF1E40AF);
 const _kBlue600 = Color(0xFF2563EB);
 const _kBlue400 = Color(0xFF60A5FA);
 const _kBlue100 = Color(0xFFDBEAFE);
-const _kDark    = Color(0xFF060D1A);
-const _kDark2   = Color(0xFF0B1629);
-const _kDark3   = Color(0xFF111D33);
+const _kDark = Color(0xFF060D1A);
+const _kDark2 = Color(0xFF0B1629);
+const _kDark3 = Color(0xFF111D33);
 const _kSurface = Color(0xFF152040);
-const _kWhite   = Colors.white;
-const _kGreen   = Color(0xFF22C55E);
-const _kRed     = Color(0xFFEF4444);
+const _kWhite = Colors.white;
+const _kGreen = Color(0xFF22C55E);
+const _kRed = Color(0xFFEF4444);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Single-device testing flag.
-// When true, Flutter knows React is using screen-share and will NOT wait for
-// a call:flutter-ready delay — it goes straight for the camera.
-// Set false for production / separate physical devices.
-// ─────────────────────────────────────────────────────────────────────────────
-const _kTestMode = true;
+// FIX #1 (corrected): Import both kIsWeb and kDebugMode from flutter/foundation.
+// _kTestMode is driven by kDebugMode so it cannot ship as `true` in release.
+// The old file only imported kIsWeb, causing a compile error on kDebugMode.
+const _kTestMode = kDebugMode;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CallPage
@@ -43,44 +40,44 @@ class CallPage extends StatefulWidget {
 }
 
 class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
-
   // ── Renderers ──────────────────────────────────────────────────────────────
-  final RTCVideoRenderer _local  = RTCVideoRenderer();
+  final RTCVideoRenderer _local = RTCVideoRenderer();
   final RTCVideoRenderer _remote = RTCVideoRenderer();
   bool _renderersInitialized = false;
 
   // ── WebRTC ─────────────────────────────────────────────────────────────────
   RTCPeerConnection? _pc;
-  MediaStream?       _localStream;
-  MediaStream?       _remoteStream;
+  MediaStream? _localStream;
+  MediaStream? _remoteStream;
 
   // ── Call state ─────────────────────────────────────────────────────────────
-  bool   _accepted           = false;
-  bool   _starting           = false;
-  bool   _remoteOfferApplied = false;
-  bool   _cleanedUp          = false;
-  bool   _popping            = false;
-  bool   _micMuted           = false;
-  bool   _camOff             = false;
-  bool   _speakerOn          = true;
-  String _status             = 'Incoming call…';
+  bool _accepted = false;
+  bool _starting = false;
+  // FIX #2: _remoteOfferApplied is reset in _resetForReOffer() so that a
+  // peer reconnect / re-offer is processed instead of silently dropped.
+  bool _remoteOfferApplied = false;
+  bool _cleanedUp = false;
+  bool _popping = false;
+  bool _micMuted = false;
+  bool _camOff = false;
+  bool _speakerOn = true;
+  String _status = 'Incoming call…';
   String? _peerSocketId;
   final List<RTCIceCandidate> _pendingIce = [];
 
-  // Buffer for offer events that race _accept() setup.
   Map<String, dynamic>? _pendingOffer;
 
   // ── Animations ─────────────────────────────────────────────────────────────
   late AnimationController _pulseCtrl;
-  late Animation<double>   _pulseAnim;
+  late Animation<double> _pulseAnim;
   late AnimationController _fadeCtrl;
-  late Animation<double>   _fadeAnim;
+  late Animation<double> _fadeAnim;
   late AnimationController _ringCtrl;
-  late Animation<double>   _ringAnim;
+  late Animation<double> _ringAnim;
 
   // ── Timer ──────────────────────────────────────────────────────────────────
   Timer? _callTimer;
-  int    _callSeconds = 0;
+  int _callSeconds = 0;
 
   dynamic get _socket => CallService.I.socket;
 
@@ -91,19 +88,22 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
     _peerSocketId = widget.invite.fromSocketId;
 
     _pulseCtrl = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1400),
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
     _pulseAnim = Tween<double>(begin: 1.0, end: 1.08).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
 
     _fadeCtrl = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 400),
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
     );
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
 
     _ringCtrl = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1800),
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
     )..repeat();
     _ringAnim = CurvedAnimation(parent: _ringCtrl, curve: Curves.easeOut);
 
@@ -120,7 +120,9 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
     _ringCtrl.dispose();
     _callTimer?.cancel();
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
-    unawaited(_cleanup());
+    // FIX #4: Only clean up if not already done by _endAndPop / _hangup,
+    // preventing a double-cleanup race where _pc?.close() fires twice.
+    if (!_cleanedUp) unawaited(_cleanup());
     super.dispose();
   }
 
@@ -135,7 +137,7 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
 
   String get _timerLabel {
     final m = _callSeconds ~/ 60;
-    final s = _callSeconds  % 60;
+    final s = _callSeconds % 60;
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
@@ -159,7 +161,7 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
 
   RTCSessionDescription? _parseSdp(dynamic raw) {
     if (raw is! Map) return null;
-    final m   = Map<String, dynamic>.from(raw as Map);
+    final m = Map<String, dynamic>.from(raw as Map);
     final sdp = m['sdp']?.toString();
     final typ = m['type']?.toString();
     if (sdp == null || typ == null) return null;
@@ -202,8 +204,10 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
       _onCallOffer(data);
     });
 
-    s.on('call:ice',       _onCallIce);
-    s.on('call:hangup',    _onHangupOrPeerLeft);
+    s.on('call:ice', _onCallIce);
+    // FIX #5: _onHangupOrPeerLeft checks _cleanedUp before acting, preventing
+    // a second teardown if hangup fires while we're already cleaning.
+    s.on('call:hangup', _onHangupOrPeerLeft);
     s.on('call:peer-left', _onHangupOrPeerLeft);
   }
 
@@ -216,22 +220,37 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
     s.off('call:peer-left');
   }
 
-  void _onHangupOrPeerLeft(dynamic _) => unawaited(_endAndPop());
+  // FIX #5: Guard against double-invocation. The server can emit both
+  // call:hangup AND call:peer-left for the same event, and _endAndPop()
+  // is async — a second event can arrive before cleanup finishes.
+  void _onHangupOrPeerLeft(dynamic _) {
+    if (_cleanedUp) return;
+    unawaited(_endAndPop());
+  }
 
   // ── call:offer ─────────────────────────────────────────────────────────────
   Future<void> _onCallOffer(dynamic data) async {
-    if (!_accepted || _pc == null || _remoteOfferApplied) return;
+    if (!_accepted || _pc == null) return;
     if (data is! Map) return;
 
     final incomingId = _readEmergencyId(data);
     if (incomingId != null && incomingId != widget.invite.emergencyId) return;
 
-    final map  = Map<String, dynamic>.from(data as Map);
+    final map = Map<String, dynamic>.from(data as Map);
     final from = map['fromSocketId']?.toString();
     if (from != null && from.isNotEmpty) _peerSocketId = from;
 
+    // FIX #2: If we already applied a remote offer but the peer sends a new
+    // one (e.g. their page reloaded), reset so we can process the fresh offer.
+    if (_remoteOfferApplied) {
+      debugPrint(
+          '📞 _onCallOffer: re-offer received — resetting for renegotiation');
+      _remoteOfferApplied = false;
+      _pendingIce.clear();
+    }
+
     final rawSdp = map.containsKey('sdp') ? map['sdp'] : map;
-    final offer  = _parseSdp(rawSdp);
+    final offer = _parseSdp(rawSdp);
     if (offer == null) {
       if (mounted) setState(() => _status = 'Invalid offer SDP');
       return;
@@ -242,10 +261,17 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
       await _pc!.setRemoteDescription(offer);
       _remoteOfferApplied = true;
 
-      for (final c in List<RTCIceCandidate>.from(_pendingIce)) {
-        try { await _pc!.addCandidate(c); } catch (_) {}
-      }
+      // FIX #3: Drain ICE buffer with individual try/catch so one bad
+      // candidate doesn't abort the rest.
+      final iceCopy = List<RTCIceCandidate>.from(_pendingIce);
       _pendingIce.clear();
+      for (final c in iceCopy) {
+        try {
+          await _pc!.addCandidate(c);
+        } catch (e) {
+          debugPrint('📞 ICE candidate skipped: $e');
+        }
+      }
 
       final answer = await _pc!.createAnswer();
       await _pc!.setLocalDescription(answer);
@@ -258,8 +284,8 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
 
       CallService.I.sendAnswer(
         emergencyId: widget.invite.emergencyId,
-        toSocketId:  to,
-        sdp:         answer.toMap(),
+        toSocketId: to,
+        sdp: answer.toMap(),
       );
 
       if (mounted) {
@@ -279,9 +305,9 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
     final incomingId = _readEmergencyId(data);
     if (incomingId != null && incomingId != widget.invite.emergencyId) return;
 
-    final map     = Map<String, dynamic>.from(data as Map);
+    final map = Map<String, dynamic>.from(data as Map);
     final rawCand = map.containsKey('candidate') ? map['candidate'] : map;
-    final cand    = _parseIce(rawCand);
+    final cand = _parseIce(rawCand);
     if (cand == null) return;
 
     final pc = _pc;
@@ -291,7 +317,12 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
       _pendingIce.add(cand);
       return;
     }
-    try { await pc.addCandidate(cand); } catch (_) {}
+    // FIX #3: Individual guard — one stale candidate won't block others.
+    try {
+      await pc.addCandidate(cand);
+    } catch (e) {
+      debugPrint('📞 addCandidate error (ignored): $e');
+    }
   }
 
   // ── Accept ─────────────────────────────────────────────────────────────────
@@ -300,7 +331,7 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
     setState(() {
       _accepted = true;
       _starting = true;
-      _status   = 'Initialising…';
+      _status = 'Initialising…';
     });
 
     try {
@@ -308,7 +339,7 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
       await _remote.initialize();
       _renderersInitialized = true;
 
-      _remoteStream     = await createLocalMediaStream('remote');
+      _remoteStream = await createLocalMediaStream('remote');
       _remote.srcObject = _remoteStream;
 
       _pc = await createPeerConnection({
@@ -317,10 +348,10 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
           {'urls': 'stun:stun1.l.google.com:19302'},
           {'urls': 'stun:stun2.l.google.com:19302'},
         ],
-        'sdpSemantics':       'unified-plan',
+        'sdpSemantics': 'unified-plan',
         'iceTransportPolicy': 'all',
-        'bundlePolicy':       'max-bundle',
-        'rtcpMuxPolicy':      'require',
+        'bundlePolicy': 'max-bundle',
+        'rtcpMuxPolicy': 'require',
       });
 
       _attachListeners();
@@ -345,8 +376,8 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
         if (to == null || to.isEmpty) return;
         CallService.I.sendIce(
           emergencyId: widget.invite.emergencyId,
-          toSocketId:  to,
-          candidate:   c.toMap(),
+          toSocketId: to,
+          candidate: c.toMap(),
         );
       };
 
@@ -381,24 +412,17 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
         }
       };
 
-      // ── SINGLE-DEVICE FIX ──────────────────────────────────────────────────
-      // In TEST_MODE: React is using screen share, so the camera is already free.
-      // We still emit flutter-ready as a handshake, but use a much shorter delay
-      // (200ms instead of 800ms) just to let the socket event propagate.
-      //
-      // In production (_kTestMode = false): React holds the real camera briefly.
-      // We wait 1200ms after emitting flutter-ready to give React's stopStream()
-      // time to run before we call getUserMedia.
-      // ──────────────────────────────────────────────────────────────────────
-
       if (mounted) setState(() => _status = 'Signalling ready…');
       CallService.I.socket?.emit('call:flutter-ready', {
         'emergencyId': widget.invite.emergencyId,
       });
 
+      // FIX #1: Camera wait duration uses _kTestMode (kDebugMode).
+      // Release builds use the full 1 200 ms to give React time to release
+      // its camera lock; debug builds use 200 ms for faster iteration.
       final readyWait = _kTestMode
-          ? const Duration(milliseconds: 200)   // React already using screen share
-          : const Duration(milliseconds: 1200);  // Wait for React to stop camera
+          ? const Duration(milliseconds: 200)
+          : const Duration(milliseconds: 1200);
 
       await Future<void>.delayed(readyWait);
 
@@ -418,7 +442,7 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
       if (mounted) {
         setState(() {
           _starting = false;
-          _status   = 'Waiting for offer…';
+          _status = 'Waiting for offer…';
         });
       }
 
@@ -431,7 +455,7 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
       if (mounted) {
         setState(() {
           _starting = false;
-          _status   = 'Setup failed: $e';
+          _status = 'Setup failed: $e';
         });
       }
     }
@@ -451,7 +475,9 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
     if (_localStream == null) return;
     try {
       for (final t in _localStream!.getTracks()) {
-        try { t.stop(); } catch (_) {}
+        try {
+          t.stop();
+        } catch (_) {}
       }
       await Future<void>.delayed(const Duration(milliseconds: 350));
     } catch (_) {}
@@ -468,16 +494,13 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
         msg.contains('not readable');
   }
 
-  // SINGLE-DEVICE FIX: In test mode React uses screen share so the camera
-  // should be free immediately. We still do the retry chain but with shorter
-  // delays (400ms instead of 1200ms) since we don't expect a busy camera.
   Future<void> _openLocalMediaWeb() async {
     final constraints = [
       {
         'audio': true,
         'video': {
-          'width':     {'ideal': 640},
-          'height':    {'ideal': 480},
+          'width': {'ideal': 640},
+          'height': {'ideal': 480},
           'frameRate': {'ideal': 30},
         },
       },
@@ -485,7 +508,6 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
       {'audio': true, 'video': false},
     ];
 
-    // In test mode camera should be free; shorter retry interval.
     final retryDelay = _kTestMode
         ? const Duration(milliseconds: 400)
         : const Duration(milliseconds: 1200);
@@ -497,7 +519,6 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
       } catch (e) {
         final hasVideo = c['video'] != false;
         if (!hasVideo) rethrow;
-
         if (_isDeviceBusy(e)) {
           if (mounted) setState(() => _status = 'Waiting for camera…');
           await Future<void>.delayed(retryDelay);
@@ -527,13 +548,16 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
         'audio': true,
         'video': {
           'facingMode': 'user',
-          'width':      {'ideal': 640},
-          'height':     {'ideal': 480},
+          'width': {'ideal': 640},
+          'height': {'ideal': 480},
         },
       },
       {
         'audio': true,
-        'video': {'width': {'ideal': 320}, 'height': {'ideal': 240}},
+        'video': {
+          'width': {'ideal': 320},
+          'height': {'ideal': 240}
+        },
       },
       {'audio': true, 'video': false},
     ];
@@ -541,7 +565,9 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
     for (final c in constraints) {
       try {
         _localStream = await navigator.mediaDevices.getUserMedia(c);
-        try { await Helper.setSpeakerphoneOn(_speakerOn); } catch (_) {}
+        try {
+          await Helper.setSpeakerphoneOn(_speakerOn);
+        } catch (_) {}
         return;
       } catch (e) {
         if (c['video'] == false) rethrow;
@@ -550,7 +576,9 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
           await Future<void>.delayed(retryDelay);
           try {
             _localStream = await navigator.mediaDevices.getUserMedia(c);
-            try { await Helper.setSpeakerphoneOn(_speakerOn); } catch (_) {}
+            try {
+              await Helper.setSpeakerphoneOn(_speakerOn);
+            } catch (_) {}
             return;
           } catch (_) {
             continue;
@@ -575,7 +603,9 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
 
   void _toggleSpeaker() {
     setState(() => _speakerOn = !_speakerOn);
-    try { Helper.setSpeakerphoneOn(_speakerOn); } catch (_) {}
+    try {
+      Helper.setSpeakerphoneOn(_speakerOn);
+    } catch (_) {}
   }
 
   void _flipCamera() {
@@ -585,27 +615,28 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
   }
 
   // ── Reject / Hangup ────────────────────────────────────────────────────────
-  void _reject() {
+  // FIX #4: _reject() no longer uses addPostFrameCallback. Calls _cleanup()
+  // directly then _safePop() to avoid double-cleanup race.
+  Future<void> _reject() async {
     CallService.I.hangup(
       emergencyId: widget.invite.emergencyId,
-      toSocketId:  widget.invite.fromSocketId,
+      toSocketId: widget.invite.fromSocketId,
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) => _safePop());
+    await _cleanup();
+    if (mounted) _safePop();
   }
 
   void _hangup() {
     CallService.I.hangup(
       emergencyId: widget.invite.emergencyId,
-      toSocketId:  _peerSocketId,
+      toSocketId: _peerSocketId,
     );
     unawaited(_endAndPop());
   }
 
   Future<void> _endAndPop() async {
     await _cleanup();
-    if (mounted) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _safePop());
-    }
+    if (mounted) _safePop();
   }
 
   // ── Cleanup ────────────────────────────────────────────────────────────────
@@ -616,22 +647,30 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
     _pendingIce.clear();
     _pendingOffer = null;
     _detachListeners();
-    try { await _pc?.close(); } catch (_) {}
+    try {
+      await _pc?.close();
+    } catch (_) {}
     _pc = null;
     try {
       for (final t in _localStream?.getTracks() ?? []) {
-        try { t.stop(); } catch (_) {}
+        try {
+          t.stop();
+        } catch (_) {}
       }
     } catch (_) {}
-    _localStream  = null;
+    _localStream = null;
     _remoteStream = null;
     try {
-      _local.srcObject  = null;
+      _local.srcObject = null;
       _remote.srcObject = null;
     } catch (_) {}
     if (_renderersInitialized) {
-      try { await _local.dispose();  } catch (_) {}
-      try { await _remote.dispose(); } catch (_) {}
+      try {
+        await _local.dispose();
+      } catch (_) {}
+      try {
+        await _remote.dispose();
+      } catch (_) {}
       _renderersInitialized = false;
     }
   }
@@ -641,9 +680,9 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
-        statusBarColor:                    Colors.transparent,
-        statusBarIconBrightness:           Brightness.light,
-        systemNavigationBarColor:          _kDark,
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: _kDark,
         systemNavigationBarIconBrightness: Brightness.light,
       ),
       child: _accepted ? _buildCallUI() : _buildIncomingUI(),
@@ -659,7 +698,9 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
           fit: StackFit.expand,
           children: [
             Positioned(
-              top: -80, left: 0, right: 0,
+              top: -80,
+              left: 0,
+              right: 0,
               child: Container(
                 height: 360,
                 decoration: const BoxDecoration(
@@ -674,14 +715,14 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
             Column(
               children: [
                 const SizedBox(height: 48),
+                // ── Status badge ──────────────────────────────────────────
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   decoration: BoxDecoration(
-                    color:        _kBlue800.withOpacity(0.25),
+                    color: _kBlue800.withOpacity(0.25),
                     borderRadius: BorderRadius.circular(20),
-                    border:       Border.all(
-                        color: _kBlue600.withOpacity(0.4)),
+                    border: Border.all(color: _kBlue600.withOpacity(0.4)),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -691,9 +732,9 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                       Text(
                         'BahirLink · Emergency Call',
                         style: TextStyle(
-                          color:         _kBlue100,
-                          fontSize:      12,
-                          fontWeight:    FontWeight.w600,
+                          color: _kBlue100,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                           letterSpacing: .4,
                         ),
                       ),
@@ -701,20 +742,22 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                   ),
                 ),
                 const SizedBox(height: 40),
+                // ── Ring animation ────────────────────────────────────────
                 SizedBox(
-                  width: 200, height: 200,
+                  width: 200,
+                  height: 200,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
                       AnimatedBuilder(
                         animation: _ringAnim,
                         builder: (_, __) => Opacity(
-                          opacity: (1 - _ringAnim.value).clamp(0, 1),
+                          opacity: (1 - _ringAnim.value).clamp(0.0, 1.0),
                           child: Container(
-                            width:  180 + 40 * _ringAnim.value,
+                            width: 180 + 40 * _ringAnim.value,
                             height: 180 + 40 * _ringAnim.value,
                             decoration: BoxDecoration(
-                              shape:  BoxShape.circle,
+                              shape: BoxShape.circle,
                               border: Border.all(
                                 color: _kBlue600.withOpacity(.35),
                                 width: 1.5,
@@ -728,12 +771,12 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                         builder: (_, __) {
                           final t = (_ringAnim.value + 0.3) % 1.0;
                           return Opacity(
-                            opacity: (1 - t).clamp(0, 1),
+                            opacity: (1 - t).clamp(0.0, 1.0),
                             child: Container(
-                              width:  160 + 40 * t,
+                              width: 160 + 40 * t,
                               height: 160 + 40 * t,
                               decoration: BoxDecoration(
-                                shape:  BoxShape.circle,
+                                shape: BoxShape.circle,
                                 border: Border.all(
                                   color: _kBlue600.withOpacity(.25),
                                   width: 1.5,
@@ -744,10 +787,11 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                         },
                       ),
                       Container(
-                        width: 120, height: 120,
+                        width: 120,
+                        height: 120,
                         decoration: BoxDecoration(
-                          shape:  BoxShape.circle,
-                          color:  _kBlue800.withOpacity(.3),
+                          shape: BoxShape.circle,
+                          color: _kBlue800.withOpacity(.3),
                           border: Border.all(
                             color: _kBlue600.withOpacity(.6),
                             width: 1.5,
@@ -757,18 +801,19 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                       ScaleTransition(
                         scale: _pulseAnim,
                         child: Container(
-                          width: 96, height: 96,
+                          width: 96,
+                          height: 96,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: const LinearGradient(
-                              begin:  Alignment.topLeft,
-                              end:    Alignment.bottomRight,
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
                               colors: [_kBlue600, _kBlue900],
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color:        _kBlue600.withOpacity(.45),
-                                blurRadius:   24,
+                                color: _kBlue600.withOpacity(.45),
+                                blurRadius: 24,
                                 spreadRadius: 2,
                               ),
                             ],
@@ -776,7 +821,7 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                           child: const Icon(
                             Icons.videocam_rounded,
                             color: _kWhite,
-                            size:  40,
+                            size: 40,
                           ),
                         ),
                       ),
@@ -787,35 +832,36 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                 const Text(
                   'Incoming Video Call',
                   style: TextStyle(
-                    color:         _kWhite,
-                    fontSize:      24,
-                    fontWeight:    FontWeight.w700,
+                    color: _kWhite,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: -.3,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   decoration: BoxDecoration(
-                    color:        _kSurface,
+                    color: _kSurface,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     'Case #${widget.invite.emergencyId}',
                     style: const TextStyle(
-                      color:         _kBlue400,
-                      fontSize:      13,
-                      fontWeight:    FontWeight.w600,
+                      color: _kBlue400,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                       letterSpacing: .3,
                     ),
                   ),
                 ),
                 const SizedBox(height: 10),
+                // FIX (label): This is the Flutter app (reporter side).
+                // The call is initiated by the Responder Dashboard.
                 const Text(
-                  'Responder Dashboard',
-                  style: TextStyle(
-                      color: Color(0xFF64748B), fontSize: 13),
+                  'From: Responder Dashboard',
+                  style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
                 ),
                 const Spacer(),
                 Padding(
@@ -824,21 +870,23 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _RoundCallButton(
-                        icon:   Icons.call_end_rounded,
-                        label:  'Decline',
-                        bg:     _kRed.withOpacity(.15),
+                        icon: Icons.call_end_rounded,
+                        label: 'Decline',
+                        bg: _kRed.withOpacity(.15),
                         border: _kRed.withOpacity(.5),
                         iconBg: _kRed,
-                        onTap:  _reject,
+                        // FIX #4: _reject is async; wrap so button can fire
+                        // without awaiting inline.
+                        onTap: () => unawaited(_reject()),
                       ),
                       _RoundCallButton(
-                        icon:   Icons.videocam_rounded,
-                        label:  'Accept',
-                        bg:     _kGreen.withOpacity(.12),
+                        icon: Icons.videocam_rounded,
+                        label: 'Accept',
+                        bg: _kGreen.withOpacity(.12),
                         border: _kGreen.withOpacity(.5),
                         iconBg: _kGreen,
-                        onTap:  _accept,
-                        large:  true,
+                        onTap: _accept,
+                        large: true,
                       ),
                     ],
                   ),
@@ -864,8 +912,8 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          begin:  Alignment.topCenter,
-          end:    Alignment.bottomCenter,
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
           colors: [_kDark, _kDark2],
         ),
       ),
@@ -874,10 +922,11 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 80, height: 80,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
-                shape:  BoxShape.circle,
-                color:  _kBlue800.withOpacity(.2),
+                shape: BoxShape.circle,
+                color: _kBlue800.withOpacity(.2),
                 border: Border.all(
                   color: _kBlue600.withOpacity(.4),
                   width: 1.5,
@@ -885,7 +934,7 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
               ),
               child: const Center(
                 child: CircularProgressIndicator(
-                  color:       _kBlue400,
+                  color: _kBlue400,
                   strokeWidth: 2.5,
                 ),
               ),
@@ -894,29 +943,28 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
             Text(
               _status,
               style: const TextStyle(
-                color:      _kWhite,
-                fontSize:   18,
+                color: _kWhite,
+                fontSize: 18,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 10),
             Text(
               'Case #${widget.invite.emergencyId}',
-              style: const TextStyle(
-                  color: Color(0xFF64748B), fontSize: 13),
+              style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
             ),
-            // Test mode badge
             if (_kTestMode) ...[
               const SizedBox(height: 20),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0x1FFCD34D),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: const Color(0x3FFCD34D)),
                 ),
                 child: const Text(
-                  'TEST MODE · Camera should be free',
+                  'DEBUG MODE · Camera should be free',
                   style: TextStyle(
                     color: Color(0xFFFCD34D),
                     fontSize: 11,
@@ -933,11 +981,6 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
   }
 
   Widget _buildVideoCall() {
-    // ── ROLE LABELS FIX ────────────────────────────────────────────────────
-    // Flutter is the REPORTER (answerer). So:
-    //   _remote renderer = Responder (React / dashboard) — BIG background view
-    //   _local  renderer = Reporter (this Flutter app)  — small PiP top-right
-    // ──────────────────────────────────────────────────────────────────────
     final hasLocalVideo = _localStream != null &&
         _localStream!.getVideoTracks().isNotEmpty &&
         _localStream!.getVideoTracks().any((t) => t.enabled) &&
@@ -946,11 +989,13 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Big background = RESPONDER (React)
+        // ── Remote (Responder Dashboard) full-screen ──────────────────────
         RTCVideoView(
           _remote,
           objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
         ),
+
+        // ── Waiting overlay ───────────────────────────────────────────────
         if (_status != 'In call')
           Container(
             color: _kDark.withOpacity(.75),
@@ -959,10 +1004,11 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    width: 56, height: 56,
+                    width: 56,
+                    height: 56,
                     child: CircularProgressIndicator(
-                      color:           _kBlue400,
-                      strokeWidth:     2.5,
+                      color: _kBlue400,
+                      strokeWidth: 2.5,
                       backgroundColor: _kBlue800.withOpacity(.2),
                     ),
                   ),
@@ -970,8 +1016,8 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                   Text(
                     _status,
                     style: const TextStyle(
-                      color:      _kWhite,
-                      fontSize:   16,
+                      color: _kWhite,
+                      fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -980,39 +1026,40 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
             ),
           ),
 
-        // Top bar
+        // ── Top bar ───────────────────────────────────────────────────────
         Positioned(
-          top: 0, left: 0, right: 0,
+          top: 0,
+          left: 0,
+          right: 0,
           child: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                begin:  Alignment.topCenter,
-                end:    Alignment.bottomCenter,
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
                 colors: [Color(0xCC000000), Colors.transparent],
               ),
             ),
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color:        _kBlue800.withOpacity(.6),
+                        color: _kBlue800.withOpacity(.6),
                         borderRadius: BorderRadius.circular(8),
-                        border:       Border.all(
-                            color: _kBlue600.withOpacity(.5)),
+                        border: Border.all(color: _kBlue600.withOpacity(.5)),
                       ),
                       child: const Text(
                         'BahirLink',
                         style: TextStyle(
-                          color:         _kWhite,
-                          fontSize:      11,
-                          fontWeight:    FontWeight.w800,
+                          color: _kWhite,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: .3,
                         ),
                       ),
@@ -1021,7 +1068,8 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                     Text(
                       'Case #${widget.invite.emergencyId}',
                       style: const TextStyle(
-                        color: Color(0xAAFFFFFF), fontSize: 12,
+                        color: Color(0xAAFFFFFF),
+                        fontSize: 12,
                       ),
                     ),
                     const Spacer(),
@@ -1029,27 +1077,24 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color:        Colors.black54,
+                        color: Colors.black54,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           _PulseDot(
-                            color:   _status == 'In call'
-                                ? _kGreen
-                                : Colors.orange,
-                            size:    6,
+                            color:
+                                _status == 'In call' ? _kGreen : Colors.orange,
+                            size: 6,
                             animate: _status != 'In call',
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            _status == 'In call'
-                                ? _timerLabel
-                                : _status,
+                            _status == 'In call' ? _timerLabel : _status,
                             style: const TextStyle(
-                              color:      _kWhite,
-                              fontSize:   12,
+                              color: _kWhite,
+                              fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -1063,23 +1108,24 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
           ),
         ),
 
-        // ── LOCAL PiP — top-right ──────────────────────────────────────────
-        // This is the REPORTER (you, on Flutter).
-        // Label corrected from "You" to make the role clearer.
+        // ── Local PIP (reporter / this device) ───────────────────────────
         Positioned(
-          right: 16, top: 100, width: 104, height: 148,
+          right: 16,
+          top: 100,
+          width: 104,
+          height: 148,
           child: Stack(
             children: [
               AnimatedOpacity(
-                opacity:  hasLocalVideo ? 1.0 : 0.0,
+                opacity: hasLocalVideo ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 300),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
                     decoration: BoxDecoration(
-                      color:        _kDark3,
+                      color: _kDark3,
                       borderRadius: BorderRadius.circular(14),
-                      border:       Border.all(
+                      border: Border.all(
                         color: _kBlue600.withOpacity(.5),
                         width: 1.5,
                       ),
@@ -1087,7 +1133,7 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                     child: hasLocalVideo
                         ? RTCVideoView(
                             _local,
-                            mirror:    true,
+                            mirror: true,
                             objectFit: RTCVideoViewObjectFit
                                 .RTCVideoViewObjectFitCover,
                           )
@@ -1095,15 +1141,13 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-
-              // "Camera off" state — only when not camOff from user toggle
               if (!hasLocalVideo && !_starting)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
                     decoration: BoxDecoration(
-                      color:        _kDark3,
-                      border:       Border.all(
+                      color: _kDark3,
+                      border: Border.all(
                         color: _kBlue600.withOpacity(.3),
                         width: 1.5,
                       ),
@@ -1125,14 +1169,16 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-
-              // Role label pinned at bottom of PiP
+              // FIX (label): PIP is this device = the Reporter (caller in
+              // the emergency). The full-screen feed is the Responder.
               Positioned(
-                bottom: 6, left: 0, right: 0,
+                bottom: 6,
+                left: 0,
+                right: 0,
                 child: Center(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
                       color: Colors.black54,
                       borderRadius: BorderRadius.circular(6),
@@ -1140,8 +1186,8 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                     child: const Text(
                       '📱 You (Reporter)',
                       style: TextStyle(
-                        color:      _kWhite,
-                        fontSize:   8,
+                        color: _kWhite,
+                        fontSize: 8,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1152,34 +1198,38 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
           ),
         ),
 
-        // Remote label — bottom-left of the big view (Responder / React)
+        // ── Remote label ──────────────────────────────────────────────────
         Positioned(
-          bottom: 100, left: 16,
+          bottom: 100,
+          left: 16,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: Colors.black54,
               borderRadius: BorderRadius.circular(8),
             ),
+            // FIX (label): The full-screen feed is the Responder Dashboard.
             child: const Text(
               '🖥  Responder (Dashboard)',
               style: TextStyle(
-                color:      _kWhite,
-                fontSize:   10,
+                color: _kWhite,
+                fontSize: 10,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ),
         ),
 
-        // Bottom controls
+        // ── Controls bar ─────────────────────────────────────────────────
         Positioned(
-          bottom: 0, left: 0, right: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
           child: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                begin:  Alignment.bottomCenter,
-                end:    Alignment.topCenter,
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
                 colors: [Color(0xEE000000), Colors.transparent],
               ),
             ),
@@ -1191,32 +1241,32 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _ControlButton(
-                      icon:   _micMuted
-                          ? Icons.mic_off_rounded
-                          : Icons.mic_rounded,
-                      label:  _micMuted ? 'Unmute' : 'Mute',
+                      icon:
+                          _micMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                      label: _micMuted ? 'Unmute' : 'Mute',
                       active: _micMuted,
-                      onTap:  _toggleMic,
+                      onTap: _toggleMic,
                     ),
                     _ControlButton(
-                      icon:   _camOff
+                      icon: _camOff
                           ? Icons.videocam_off_rounded
                           : Icons.videocam_rounded,
-                      label:  _camOff ? 'Cam on' : 'Cam off',
+                      label: _camOff ? 'Cam on' : 'Cam off',
                       active: _camOff,
-                      onTap:  _toggleCam,
+                      onTap: _toggleCam,
                     ),
                     GestureDetector(
                       onTap: _hangup,
                       child: Container(
-                        width: 64, height: 64,
+                        width: 64,
+                        height: 64,
                         decoration: BoxDecoration(
-                          color:  _kRed,
-                          shape:  BoxShape.circle,
+                          color: _kRed,
+                          shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color:        _kRed.withOpacity(.5),
-                              blurRadius:   16,
+                              color: _kRed.withOpacity(.5),
+                              blurRadius: 16,
                               spreadRadius: 1,
                             ),
                           ],
@@ -1224,27 +1274,27 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
                         child: const Icon(
                           Icons.call_end_rounded,
                           color: _kWhite,
-                          size:  28,
+                          size: 28,
                         ),
                       ),
                     ),
                     if (!kIsWeb)
                       _ControlButton(
-                        icon:  Icons.flip_camera_ios_rounded,
+                        icon: Icons.flip_camera_ios_rounded,
                         label: 'Flip',
                         onTap: _flipCamera,
                       )
                     else
                       _ControlButton(
-                        icon:   _speakerOn
+                        icon: _speakerOn
                             ? Icons.volume_up_rounded
                             : Icons.volume_off_rounded,
-                        label:  _speakerOn ? 'Speaker' : 'Earpiece',
+                        label: _speakerOn ? 'Speaker' : 'Earpiece',
                         active: !_speakerOn,
-                        onTap:  _toggleSpeaker,
+                        onTap: _toggleSpeaker,
                       ),
                     _ControlButton(
-                      icon:  Icons.info_outline_rounded,
+                      icon: Icons.info_outline_rounded,
                       label: 'Info',
                       onTap: _showCallInfo,
                     ),
@@ -1260,7 +1310,7 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
 
   void _showCallInfo() {
     showModalBottomSheet<void>(
-      context:         context,
+      context: context,
       backgroundColor: _kDark2,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1268,25 +1318,25 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
       builder: (_) => Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisSize:       MainAxisSize.min,
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
               'Call info',
               style: TextStyle(
-                color:      _kWhite,
-                fontSize:   17,
+                color: _kWhite,
+                fontSize: 17,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 16),
-            _InfoRow('Case',        '#${widget.invite.emergencyId}'),
-            _InfoRow('My role',     'Reporter (answerer)'),
-            _InfoRow('Status',      _status),
-            _InfoRow('Duration',    _timerLabel),
+            _InfoRow('Case', '#${widget.invite.emergencyId}'),
+            _InfoRow('My role', 'Reporter (answerer)'),
+            _InfoRow('Status', _status),
+            _InfoRow('Duration', _timerLabel),
             _InfoRow('Peer socket', _peerSocketId ?? '—'),
-            _InfoRow('My socket',   CallService.I.socket?.id ?? '—'),
-            _InfoRow('Test mode',   _kTestMode ? 'ON' : 'OFF'),
+            _InfoRow('My socket', CallService.I.socket?.id ?? '—'),
+            _InfoRow('Test mode', _kTestMode ? 'ON (debug)' : 'OFF (release)'),
             const SizedBox(height: 8),
           ],
         ),
@@ -1300,9 +1350,9 @@ class _CallPageState extends State<CallPage> with TickerProviderStateMixin {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _PulseDot extends StatefulWidget {
-  final Color  color;
+  final Color color;
   final double size;
-  final bool   animate;
+  final bool animate;
   const _PulseDot(
       {required this.color, required this.size, this.animate = true});
   @override
@@ -1316,19 +1366,24 @@ class _PulseDotState extends State<_PulseDot>
   void initState() {
     super.initState();
     _c = AnimationController(
-      vsync:    this,
+      vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
   }
+
   @override
-  void dispose() { _c.dispose(); super.dispose(); }
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!widget.animate) {
       return Container(
-        width: widget.size, height: widget.size,
-        decoration: BoxDecoration(
-            color: widget.color, shape: BoxShape.circle),
+        width: widget.size,
+        height: widget.size,
+        decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
       );
     }
     return AnimatedBuilder(
@@ -1336,9 +1391,10 @@ class _PulseDotState extends State<_PulseDot>
       builder: (_, __) => Opacity(
         opacity: 0.5 + _c.value * 0.5,
         child: Container(
-          width: widget.size, height: widget.size,
-          decoration: BoxDecoration(
-              color: widget.color, shape: BoxShape.circle),
+          width: widget.size,
+          height: widget.size,
+          decoration:
+              BoxDecoration(color: widget.color, shape: BoxShape.circle),
         ),
       ),
     );
@@ -1346,13 +1402,13 @@ class _PulseDotState extends State<_PulseDot>
 }
 
 class _RoundCallButton extends StatelessWidget {
-  final IconData     icon;
-  final String       label;
-  final Color        bg;
-  final Color        border;
-  final Color        iconBg;
+  final IconData icon;
+  final String label;
+  final Color bg;
+  final Color border;
+  final Color iconBg;
   final VoidCallback onTap;
-  final bool         large;
+  final bool large;
   const _RoundCallButton({
     required this.icon,
     required this.label,
@@ -1372,16 +1428,17 @@ class _RoundCallButton extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: size, height: size,
+            width: size,
+            height: size,
             decoration: BoxDecoration(
-              shape:  BoxShape.circle,
-              color:  bg,
+              shape: BoxShape.circle,
+              color: bg,
               border: Border.all(color: border, width: 1.5),
               boxShadow: large
                   ? [
                       BoxShadow(
-                        color:        iconBg.withOpacity(.35),
-                        blurRadius:   18,
+                        color: iconBg.withOpacity(.35),
+                        blurRadius: 18,
                         spreadRadius: 1,
                       ),
                     ]
@@ -1393,8 +1450,8 @@ class _RoundCallButton extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color:      large ? _kWhite : const Color(0xFF94A3B8),
-              fontSize:   13,
+              color: large ? _kWhite : const Color(0xFF94A3B8),
+              fontSize: 13,
               fontWeight: large ? FontWeight.w600 : FontWeight.w400,
             ),
           ),
@@ -1405,9 +1462,9 @@ class _RoundCallButton extends StatelessWidget {
 }
 
 class _ControlButton extends StatelessWidget {
-  final IconData     icon;
-  final String       label;
-  final bool         active;
+  final IconData icon;
+  final String label;
+  final bool active;
   final VoidCallback onTap;
   const _ControlButton({
     required this.icon,
@@ -1424,7 +1481,8 @@ class _ControlButton extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 50, height: 50,
+            width: 50,
+            height: 50,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: active
@@ -1437,18 +1495,14 @@ class _ControlButton extends StatelessWidget {
                 width: 1.2,
               ),
             ),
-            child: Icon(
-              icon,
-              color: active ? _kBlue100 : _kWhite,
-              size:  22,
-            ),
+            child: Icon(icon, color: active ? _kBlue100 : _kWhite, size: 22),
           ),
           const SizedBox(height: 5),
           Text(
             label,
             style: const TextStyle(
-              color:      Color(0xBBFFFFFF),
-              fontSize:   10,
+              color: Color(0xBBFFFFFF),
+              fontSize: 10,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -1472,16 +1526,15 @@ class _InfoRow extends StatelessWidget {
             width: 96,
             child: Text(
               label,
-              style: const TextStyle(
-                  color: Color(0xFF64748B), fontSize: 13),
+              style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
             ),
           ),
           Expanded(
             child: Text(
               value,
               style: const TextStyle(
-                color:      _kWhite,
-                fontSize:   13,
+                color: _kWhite,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
             ),

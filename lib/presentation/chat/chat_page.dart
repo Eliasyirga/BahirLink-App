@@ -17,28 +17,28 @@ import '../../main.dart' show appMessengerKey;
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 class _T {
-  static const primary    = Color(0xFF1A3BAA);
+  static const primary = Color(0xFF1A3BAA);
   static const primaryMid = Color(0xFF2252CC);
-  static const accent     = Color(0xFF4B83F0);
+  static const accent = Color(0xFF4B83F0);
   static const accentSoft = Color(0xFFD6E4FF);
-  static const surface    = Color(0xFFFFFFFF);
-  static const bg         = Color(0xFFF2F6FF);
-  static const textDark   = Color(0xFF0C1A45);
-  static const textMid    = Color(0xFF5569A0);
-  static const divider    = Color(0xFFE5ECFF);
-  static const green      = Color(0xFF0DB87A);
-  static const orange     = Color(0xFFF59E0B);
-  static const red        = Color(0xFFEF4444);
-  static const bubbleMe   = Color(0xFF1A3BAA);
+  static const surface = Color(0xFFFFFFFF);
+  static const bg = Color(0xFFF2F6FF);
+  static const textDark = Color(0xFF0C1A45);
+  static const textMid = Color(0xFF5569A0);
+  static const divider = Color(0xFFE5ECFF);
+  static const green = Color(0xFF0DB87A);
+  static const orange = Color(0xFFF59E0B);
+  static const red = Color(0xFFEF4444);
+  static const bubbleMe = Color(0xFF1A3BAA);
   static const bubbleThem = Color(0xFFFFFFFF);
-  static const chatBg     = Color(0xFFF0F5FF);
+  static const chatBg = Color(0xFFF0F5FF);
 }
 
 // ─── ChatPage ─────────────────────────────────────────────────────────────────
 class ChatPage extends StatefulWidget {
-  final int    emergencyId;
+  final int emergencyId;
   final String token;
-  final int    userId;
+  final int userId;
 
   const ChatPage({
     super.key,
@@ -58,12 +58,12 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
 
   IO.Socket? _socket;
 
-  bool   _isLoading     = true;
-  String _status        = 'idle';
-  bool   _isChatEnabled = false;
-  bool   _isComposing   = false;
-  bool   _isRecording   = false;
-  bool   _isUploading   = false;
+  bool _isLoading = true;
+  String _status = 'idle';
+  bool _isChatEnabled = false;
+  bool _isComposing = false;
+  bool _isRecording = false;
+  bool _isUploading = false;
 
   String? _recordingPath;
 
@@ -74,8 +74,8 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   final List<Map<String, dynamic>> _messages = [];
   final Set<dynamic> _seenIds = {};
 
-  final TextEditingController _msgCtrl    = TextEditingController();
-  final ScrollController      _scrollCtrl = ScrollController();
+  final TextEditingController _msgCtrl = TextEditingController();
+  final ScrollController _scrollCtrl = ScrollController();
 
   late final AnimationController _fadeCtrl = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 400));
@@ -92,17 +92,17 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
       url.startsWith('http') ? url : '$_serverUrl$url';
 
   Color _statusColor() => switch (_status) {
-        'ready'      => _isChatEnabled ? _T.green : _T.orange,
+        'ready' => _isChatEnabled ? _T.green : _T.orange,
         'connecting' => _T.orange,
-        'error'      => _T.red,
-        _            => _T.textMid,
+        'error' => _T.red,
+        _ => _T.textMid,
       };
 
   String _statusLabel() => switch (_status) {
-        'ready'      => _isChatEnabled ? 'Online' : 'Waiting for responder…',
+        'ready' => _isChatEnabled ? 'Online' : 'Waiting for responder…',
         'connecting' => 'Connecting…',
-        'error'      => 'Offline',
-        _            => 'Idle',
+        'error' => 'Offline',
+        _ => 'Idle',
       };
 
   bool _isMe(Map<String, dynamic> msg) =>
@@ -113,8 +113,10 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
       (msg['audioUrl'] != null && msg['audioUrl'].toString().isNotEmpty);
 
   DateTime? _parseTime(Map<String, dynamic> msg) {
-    final raw = msg['createdAt'] ?? msg['created_at'] ??
-                msg['timestamp'] ?? msg['time'];
+    final raw = msg['createdAt'] ??
+        msg['created_at'] ??
+        msg['timestamp'] ??
+        msg['time'];
     if (raw == null) return null;
     if (raw is int) {
       return raw > 1000000000000
@@ -125,7 +127,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   }
 
   String _formatTime(DateTime dt) {
-    final h  = dt.hour;
+    final h = dt.hour;
     final hh = ((h + 11) % 12) + 1;
     final mm = dt.minute.toString().padLeft(2, '0');
     return '$hh:$mm ${h >= 12 ? 'PM' : 'AM'}';
@@ -134,12 +136,11 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   void _showError(String message) {
     if (_disposed || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content:         Text(message,
-          style: const TextStyle(fontWeight: FontWeight.w600)),
-      behavior:        SnackBarBehavior.floating,
+      content:
+          Text(message, style: const TextStyle(fontWeight: FontWeight.w600)),
+      behavior: SnackBarBehavior.floating,
       backgroundColor: _T.textDark,
-      shape:           RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.all(16),
     ));
   }
@@ -152,7 +153,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
           : _scrollCtrl.animateTo(
               _scrollCtrl.position.maxScrollExtent,
               duration: const Duration(milliseconds: 260),
-              curve:    Curves.easeOut,
+              curve: Curves.easeOut,
             );
     });
   }
@@ -191,14 +192,16 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     if (_disposed) return;
     _disposed = true;
     final s = _socket;
-    _socket  = null;
+    _socket = null;
     s?.clearListeners();
     s?.disconnect();
     s?.dispose();
   }
 
   void _safePop() {
-    try { appMessengerKey.currentState?.clearSnackBars(); } catch (_) {}
+    try {
+      appMessengerKey.currentState?.clearSnackBars();
+    } catch (_) {}
     _teardownSocket();
     Navigator.of(context).pop();
   }
@@ -208,14 +211,8 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    // Keep the CallService socket alive. Do NOT register onIncomingCall here —
-    // _MyAppState owns that callback exclusively and handles all CallPage
-    // navigation. ChatPage must never overwrite it.
     CallService.I.ensureConnected();
 
-    // Consume a pending invite that arrived before this screen opened
-    // (e.g. call fired during page transition). Route it through the
-    // root handler so _MyAppState does the push, not ChatPage.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_disposed || !mounted) return;
       final pending = CallService.I.pendingInvite;
@@ -243,16 +240,14 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
 
   @override
   void deactivate() {
-    // Do NOT tear down the socket here. deactivate() fires whenever any route
-    // is pushed on top of ChatPage (including CallPage), which would kill the
-    // chat connection mid-call. Teardown belongs only in dispose().
-    try { appMessengerKey.currentState?.clearSnackBars(); } catch (_) {}
+    try {
+      appMessengerKey.currentState?.clearSnackBars();
+    } catch (_) {}
     super.deactivate();
   }
 
   @override
   void dispose() {
-    // Never touch onIncomingCall — it belongs to _MyAppState.
     _teardownSocket();
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
@@ -265,21 +260,25 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   // ── Init ──────────────────────────────────────────────────────────────────
   Future<void> _initChat() async {
     if (_disposed || !mounted) return;
-    setState(() { _isLoading = true; _status = 'connecting'; });
+    setState(() {
+      _isLoading = true;
+      _status = 'connecting';
+    });
 
     try {
       final res = await http.get(
         Uri.parse('$_serverUrl/api/message/${widget.emergencyId}'),
         headers: {
           'Authorization': 'Bearer $_cleanToken',
-          'Content-Type':  'application/json',
+          'Content-Type': 'application/json',
         },
       );
       if (_disposed || !mounted) return;
 
       final body = jsonDecode(res.body) as Map<String, dynamic>;
       if (res.statusCode != 200 || body['success'] != true) {
-        _showError(body['message']?.toString() ?? 'Failed to load chat history');
+        _showError(
+            body['message']?.toString() ?? 'Failed to load chat history');
         setState(() => _status = 'error');
         return;
       }
@@ -293,7 +292,8 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         if (id != null) _seenIds.add(id);
       }
 
-      final alreadyEnabled = list.any((m) => m['senderType'] == 'responderTeam');
+      final alreadyEnabled =
+          list.any((m) => m['senderType'] == 'responderTeam');
 
       setState(() {
         _messages
@@ -315,7 +315,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     }
   }
 
-  // ── Chat socket (separate from CallService socket) ────────────────────────
+  // ── Chat socket ───────────────────────────────────────────────────────────
   void _connectSocket() {
     final old = _socket;
     _socket = null;
@@ -336,22 +336,21 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
 
     s.onConnect((_) {
       if (_disposed || !mounted) return;
-      s.emit('chat:join',      {'emergencyId': widget.emergencyId});
+      s.emit('chat:join', {'emergencyId': widget.emergencyId});
       s.emit('join_emergency', widget.emergencyId);
     });
 
     s.on('chat:joined', (data) {
       if (_disposed || !mounted) return;
-      final map = data is Map
-          ? Map<String, dynamic>.from(data)
-          : <String, dynamic>{};
+      final map =
+          data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
       setState(() {
         _status = 'ready';
         if (map['isChatEnabled'] == true) _isChatEnabled = true;
       });
     });
 
-    s.on('chat:new',        _onIncoming);
+    s.on('chat:new', _onIncoming);
     s.on('receive_message', _onIncoming);
 
     s.on('chat:enabled', (_) {
@@ -376,19 +375,50 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     s.connect();
   }
 
+  // FIX #6: The refresh button previously called _connectSocket() directly,
+  // which tears down and rebuilds the entire socket connection. This is
+  // needlessly destructive during an active session — it drops in-flight events
+  // and resets the status to 'connecting', clearing the chat-enabled state.
+  //
+  // The new _refreshConnection() method:
+  //   • If connected: just re-emit chat:join to resync server-side room state.
+  //   • If disconnected / error state: reconnect the socket fully.
+  // This preserves all local message state and chat-enabled status.
+  void _refreshConnection() {
+    if (_disposed) return;
+    final s = _socket;
+    if (s != null && s.connected) {
+      // Already connected — just re-join the room to resync server state.
+      s.emit('chat:join', {'emergencyId': widget.emergencyId});
+      s.emit('join_emergency', widget.emergencyId);
+      debugPrint('💬 ChatPage: re-joined room (socket was already connected)');
+    } else {
+      // Socket is gone or disconnected — do a full reconnect.
+      debugPrint('💬 ChatPage: socket disconnected — reconnecting…');
+      _connectSocket();
+    }
+  }
+
   void _onIncoming(dynamic data) {
     if (_disposed || !mounted) return;
     try {
       final msg = Map<String, dynamic>.from(data as Map);
       if (!_isChatEnabled) setState(() => _isChatEnabled = true);
 
-      final isOwnTextEcho =
-          msg['senderId']   == widget.userId &&
-          msg['senderType'] == 'user'        &&
-          msg['messageType'] != 'audio'      &&
-          (msg['audioUrl'] == null ||
-           msg['audioUrl'].toString().isEmpty);
-      if (isOwnTextEcho) return;
+      // FIX #7: The original suppression only filtered out own text messages.
+      // Own audio messages uploaded via _uploadAudio() are confirmed locally
+      // in _handleAudioUploadResponse() → _confirmMessage(), but the server
+      // also broadcasts them back via chat:new / receive_message.
+      // Without the audio check here, own audio would appear twice:
+      // once from _confirmMessage() and once from the socket echo.
+      //
+      // The correct rule: suppress ALL own messages (text AND audio) that
+      // arrive via socket, regardless of type. The user's messages are always
+      // added optimistically (text via _sendMessage, audio via _confirmMessage),
+      // so the server echo is always a duplicate.
+      final isOwnEcho =
+          msg['senderId'] == widget.userId && msg['senderType'] == 'user';
+      if (isOwnEcho) return;
 
       _addMessage(msg);
       _scrollToBottom();
@@ -415,14 +445,14 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
 
     final tempKey = 'opt_${DateTime.now().millisecondsSinceEpoch}';
     _addMessage(<String, dynamic>{
-      'id':          tempKey,
+      'id': tempKey,
       'emergencyId': widget.emergencyId,
-      'senderId':    widget.userId,
-      'senderType':  'user',
+      'senderId': widget.userId,
+      'senderType': 'user',
       'messageType': 'text',
-      'text':        text,
-      'audioUrl':    null,
-      'createdAt':   DateTime.now().toIso8601String(),
+      'text': text,
+      'audioUrl': null,
+      'createdAt': DateTime.now().toIso8601String(),
     });
 
     s.emit('chat:send', {'emergencyId': widget.emergencyId, 'text': text});
@@ -430,14 +460,11 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     _scrollToBottom();
   }
 
-  // ── Video call button (manual fallback) ───────────────────────────────────
-  // The automatic path is handled by _MyAppState.onIncomingCall.
-  // This button lets the user open a call they may have missed.
+  // ── Video call button ─────────────────────────────────────────────────────
   void _openCallOrExplain() {
     final invite = CallService.I.pendingInvite;
     if (invite != null && invite.emergencyId == widget.emergencyId) {
       CallService.I.pendingInvite = null;
-      // Route through the root handler so dedup state stays consistent.
       CallService.I.onIncomingCall?.call(invite);
       return;
     }
@@ -450,7 +477,10 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
       _showError('Chat not yet opened by a responder. Please wait.');
       return;
     }
-    if (_status != 'ready') { _showError('Chat not connected yet.'); return; }
+    if (_status != 'ready') {
+      _showError('Chat not connected yet.');
+      return;
+    }
     if (_isUploading) return;
     _isRecording ? await _stopAndSend() : await _startRecording();
   }
@@ -472,20 +502,20 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
       final RecordConfig config;
 
       if (kIsWeb) {
-        path   = 'recording_${DateTime.now().millisecondsSinceEpoch}.webm';
+        path = 'recording_${DateTime.now().millisecondsSinceEpoch}.webm';
         config = const RecordConfig(
-          encoder:    AudioEncoder.opus,
-          bitRate:    128000,
+          encoder: AudioEncoder.opus,
+          bitRate: 128000,
           sampleRate: 44100,
         );
       } else {
         final dir = await getTemporaryDirectory();
         path = '${dir.path}/bahirlink_'
-               '${widget.emergencyId}_'
-               '${DateTime.now().millisecondsSinceEpoch}.m4a';
+            '${widget.emergencyId}_'
+            '${DateTime.now().millisecondsSinceEpoch}.m4a';
         config = const RecordConfig(
-          encoder:    AudioEncoder.aacLc,
-          bitRate:    128000,
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
           sampleRate: 44100,
         );
       }
@@ -552,7 +582,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     setState(() => _isUploading = true);
 
     try {
-      final file     = File(path);
+      final file = File(path);
       final filename = path.split('/').last;
 
       final req = http.MultipartRequest(
@@ -560,13 +590,13 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         Uri.parse('$_serverUrl/api/message/audio'),
       )
         ..headers['Authorization'] = 'Bearer $_cleanToken'
-        ..fields['emergencyId']    = widget.emergencyId.toString()
+        ..fields['emergencyId'] = widget.emergencyId.toString()
         ..files.add(
           http.MultipartFile(
             'audio',
             file.openRead(),
             file.lengthSync(),
-            filename:    filename,
+            filename: filename,
             contentType: MediaType('audio', 'mp4'),
           ),
         );
@@ -577,7 +607,9 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
       final res = await http.Response.fromStream(streamed);
       await _handleAudioUploadResponse(res);
 
-      try { file.deleteSync(); } catch (_) {}
+      try {
+        file.deleteSync();
+      } catch (_) {}
     } catch (e) {
       _showError('Failed to upload audio: $e');
     } finally {
@@ -604,12 +636,12 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         Uri.parse('$_serverUrl/api/message/audio'),
       )
         ..headers['Authorization'] = 'Bearer $_cleanToken'
-        ..fields['emergencyId']    = widget.emergencyId.toString()
+        ..fields['emergencyId'] = widget.emergencyId.toString()
         ..files.add(
           http.MultipartFile.fromBytes(
             'audio',
             blobResponse.bodyBytes,
-            filename:    filename,
+            filename: filename,
             contentType: MediaType('audio', 'webm'),
           ),
         );
@@ -681,8 +713,8 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final canType     = _status == 'ready' && _isChatEnabled &&
-                        !_isRecording && !_isUploading;
+    final canType =
+        _status == 'ready' && _isChatEnabled && !_isRecording && !_isUploading;
     final sendEnabled = canType && _isComposing;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -693,12 +725,11 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
           _buildHeader(),
           if (_isUploading)
             LinearProgressIndicator(
-              minHeight:       2,
-              color:           _T.accent,
+              minHeight: 2,
+              color: _T.accent,
               backgroundColor: _T.accentSoft,
             ),
-          if (_status == 'ready' && !_isChatEnabled)
-            _buildChatDisabledBanner(),
+          if (_status == 'ready' && !_isChatEnabled) _buildChatDisabledBanner(),
           Expanded(
             child: _isLoading
                 ? _buildSplash()
@@ -719,9 +750,9 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   }
 
   Widget _buildChatDisabledBanner() => Container(
-        width:   double.infinity,
+        width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        color:   _T.orange.withOpacity(0.12),
+        color: _T.orange.withOpacity(0.12),
         child: const Row(children: [
           Icon(Icons.hourglass_top_rounded, color: _T.orange, size: 16),
           SizedBox(width: 8),
@@ -729,10 +760,10 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
             child: Text(
               'Waiting for a responder to open this chat before you can send messages.',
               style: TextStyle(
-                color:      _T.orange,
-                fontSize:   12,
+                color: _T.orange,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
-                height:     1.4,
+                height: 1.4,
               ),
             ),
           ),
@@ -745,21 +776,19 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          begin:  Alignment.topLeft,
-          end:    Alignment.bottomRight,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
-          stops:  [0.0, 0.5, 1.0],
+          stops: [0.0, 0.5, 1.0],
         ),
         borderRadius: BorderRadius.only(
-          bottomLeft:  Radius.circular(26),
+          bottomLeft: Radius.circular(26),
           bottomRight: Radius.circular(26),
         ),
       ),
       child: Stack(children: [
-        Positioned(top: -30, right: -20,
-            child: _blob(110, Colors.white, 0.05)),
-        Positioned(bottom: -14, left: -20,
-            child: _blob(80, _T.accent, 0.12)),
+        Positioned(top: -30, right: -20, child: _blob(110, Colors.white, 0.05)),
+        Positioned(bottom: -14, left: -20, child: _blob(80, _T.accent, 0.12)),
         SafeArea(
           bottom: false,
           child: Padding(
@@ -772,10 +801,11 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
               ),
               const SizedBox(width: 12),
               Container(
-                width: 42, height: 42,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
-                  color:  Colors.white.withOpacity(0.18),
-                  shape:  BoxShape.circle,
+                  color: Colors.white.withOpacity(0.18),
+                  shape: BoxShape.circle,
                   border: Border.all(
                       color: Colors.white.withOpacity(0.35), width: 1.5),
                 ),
@@ -789,23 +819,24 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                   children: [
                     Text('Case #${widget.emergencyId}',
                         style: const TextStyle(
-                          color:         Colors.white,
-                          fontSize:      16,
-                          fontWeight:    FontWeight.w800,
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: -0.2,
                         )),
                     const SizedBox(height: 3),
                     Row(children: [
                       Container(
-                        width: 7, height: 7,
+                        width: 7,
+                        height: 7,
                         decoration: BoxDecoration(
                             color: sColor, shape: BoxShape.circle),
                       ),
                       const SizedBox(width: 5),
                       Text(_statusLabel(),
                           style: TextStyle(
-                            color:      Colors.white.withOpacity(0.75),
-                            fontSize:   11,
+                            color: Colors.white.withOpacity(0.75),
+                            fontSize: 11,
                             fontWeight: FontWeight.w600,
                           )),
                       if (_isRecording) ...[
@@ -814,13 +845,13 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
-                            color:        _T.red.withOpacity(0.22),
+                            color: _T.red.withOpacity(0.22),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: const Text('● REC',
                               style: TextStyle(
-                                color:      _T.red,
-                                fontSize:   9,
+                                color: _T.red,
+                                fontSize: 9,
                                 fontWeight: FontWeight.w800,
                               )),
                         ),
@@ -829,8 +860,8 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                         const SizedBox(width: 8),
                         Text('Uploading…',
                             style: TextStyle(
-                              color:      Colors.white.withOpacity(0.6),
-                              fontSize:   10,
+                              color: Colors.white.withOpacity(0.6),
+                              fontSize: 10,
                               fontWeight: FontWeight.w600,
                             )),
                       ],
@@ -844,8 +875,10 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                     color: Colors.white, size: 18),
               ),
               const SizedBox(width: 8),
+              // FIX #6: Refresh button now calls _refreshConnection() instead
+              // of _connectSocket(). See _refreshConnection() for rationale.
               _headerBtn(
-                onTap: _connectSocket,
+                onTap: _refreshConnection,
                 child: const Icon(Icons.refresh_rounded,
                     color: Colors.white, size: 18),
               ),
@@ -860,33 +893,32 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
       GestureDetector(
         onTap: onTap,
         child: Container(
-          width: 38, height: 38,
+          width: 38,
+          height: 38,
           decoration: BoxDecoration(
-            color:        Colors.white.withOpacity(0.11),
+            color: Colors.white.withOpacity(0.11),
             borderRadius: BorderRadius.circular(12),
-            border:       Border.all(
-                color: Colors.white.withOpacity(0.2), width: 1),
+            border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
           ),
           child: child,
         ),
       );
 
   Widget _blob(double size, Color color, double opacity) => Container(
-        width: size, height: size,
-        decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color.withOpacity(opacity)));
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+          shape: BoxShape.circle, color: color.withOpacity(opacity)));
 
   Widget _buildSplash() => const Center(
-        child: CircularProgressIndicator(
-            color: _T.primary, strokeWidth: 2.5));
+      child: CircularProgressIndicator(color: _T.primary, strokeWidth: 2.5));
 
   Widget _buildBgPattern() => IgnorePointer(
         child: Opacity(
           opacity: 0.04,
           child: CustomPaint(
             painter: _BgPatternPainter(),
-            size:    Size.infinite,
+            size: Size.infinite,
           ),
         ),
       );
@@ -894,9 +926,10 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   Widget _buildEmptyState() => Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(
-            width: 72, height: 72,
+            width: 72,
+            height: 72,
             decoration: BoxDecoration(
-              color:        _T.accentSoft,
+              color: _T.accentSoft,
               borderRadius: BorderRadius.circular(22),
             ),
             child: const Icon(Icons.chat_bubble_outline_rounded,
@@ -905,9 +938,9 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
           const SizedBox(height: 16),
           const Text('No messages yet',
               style: TextStyle(
-                color:      _T.textDark,
+                color: _T.textDark,
                 fontWeight: FontWeight.w800,
-                fontSize:   16,
+                fontSize: 16,
               )),
           const SizedBox(height: 6),
           Text(
@@ -923,21 +956,20 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
 
   Widget _buildMessageList() => ListView.builder(
         controller: _scrollCtrl,
-        padding:    const EdgeInsets.fromLTRB(14, 16, 14, 16),
-        itemCount:  _messages.length,
+        padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+        itemCount: _messages.length,
         itemBuilder: (context, i) {
-          final msg     = _messages[i];
+          final msg = _messages[i];
           final playKey = msg['id'] ?? i;
-          final sentAt  = _parseTime(msg);
+          final sentAt = _parseTime(msg);
           return _ChatBubble(
-            isMe:         _isMe(msg),
-            time:         sentAt == null ? '' : _formatTime(sentAt.toLocal()),
-            isAudio:      _isAudio(msg),
-            text:         (msg['text'] ?? '').toString(),
-            isPlaying:    _playingKey == playKey,
-            onPlayToggle: _isAudio(msg)
-                ? () => _togglePlay(msg, playKey)
-                : null,
+            isMe: _isMe(msg),
+            time: sentAt == null ? '' : _formatTime(sentAt.toLocal()),
+            isAudio: _isAudio(msg),
+            text: (msg['text'] ?? '').toString(),
+            isPlaying: _playingKey == playKey,
+            onPlayToggle:
+                _isAudio(msg) ? () => _togglePlay(msg, playKey) : null,
           );
         },
       );
@@ -946,13 +978,13 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color:  _T.surface,
+        color: _T.surface,
         border: const Border(top: BorderSide(color: _T.divider, width: 1)),
         boxShadow: [
           BoxShadow(
-            color:      _T.primary.withOpacity(0.04),
+            color: _T.primary.withOpacity(0.04),
             blurRadius: 12,
-            offset:     const Offset(0, -3),
+            offset: const Offset(0, -3),
           ),
         ],
       ),
@@ -965,7 +997,8 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                 : null,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 220),
-              width: 44, height: 44,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
                 color: _isRecording ? _T.red : _T.accentSoft,
                 shape: BoxShape.circle,
@@ -973,7 +1006,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
               child: Icon(
                 _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
                 color: _isRecording ? Colors.white : _T.primary,
-                size:  20,
+                size: 20,
               ),
             ),
           ),
@@ -982,15 +1015,15 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color:        _T.bg,
+                color: _T.bg,
                 borderRadius: BorderRadius.circular(24),
-                border:       Border.all(color: _T.divider, width: 1),
+                border: Border.all(color: _T.divider, width: 1),
               ),
               child: TextField(
                 controller: _msgCtrl,
-                enabled:    canType,
-                minLines:   1,
-                maxLines:   5,
+                enabled: canType,
+                minLines: 1,
+                maxLines: 5,
                 style: const TextStyle(
                     color: _T.textDark, fontSize: 14, height: 1.4),
                 decoration: InputDecoration(
@@ -1003,10 +1036,9 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                               : canType
                                   ? 'Type a message…'
                                   : 'Connecting…',
-                  hintStyle:      const TextStyle(
-                      color: _T.textMid, fontSize: 14),
-                  border:         InputBorder.none,
-                  isDense:        true,
+                  hintStyle: const TextStyle(color: _T.textMid, fontSize: 14),
+                  border: InputBorder.none,
+                  isDense: true,
                   contentPadding: EdgeInsets.zero,
                 ),
                 onSubmitted: (_) => _sendMessage(),
@@ -1018,30 +1050,30 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
             onTap: sendEnabled ? _sendMessage : null,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 220),
-              width: 46, height: 46,
+              width: 46,
+              height: 46,
               decoration: BoxDecoration(
                 gradient: sendEnabled
                     ? const LinearGradient(
                         colors: [_T.primary, _T.primaryMid],
-                        begin:  Alignment.topLeft,
-                        end:    Alignment.bottomRight,
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       )
                     : null,
-                color:     sendEnabled ? null : _T.divider,
-                shape:     BoxShape.circle,
+                color: sendEnabled ? null : _T.divider,
+                shape: BoxShape.circle,
                 boxShadow: sendEnabled
                     ? [
                         BoxShadow(
-                          color:      _T.primary.withOpacity(0.30),
+                          color: _T.primary.withOpacity(0.30),
                           blurRadius: 12,
-                          offset:     const Offset(0, 4),
+                          offset: const Offset(0, 4),
                         ),
                       ]
                     : [],
               ),
               child: Icon(Icons.send_rounded,
-                  color: sendEnabled ? Colors.white : _T.textMid,
-                  size:  20),
+                  color: sendEnabled ? Colors.white : _T.textMid, size: 20),
             ),
           ),
         ]),
@@ -1052,11 +1084,11 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
 
 // ─── Chat Bubble ──────────────────────────────────────────────────────────────
 class _ChatBubble extends StatelessWidget {
-  final bool          isMe;
-  final String        time;
-  final bool          isAudio;
-  final String        text;
-  final bool          isPlaying;
+  final bool isMe;
+  final String time;
+  final bool isAudio;
+  final String text;
+  final bool isPlaying;
   final VoidCallback? onPlayToggle;
 
   const _ChatBubble({
@@ -1070,33 +1102,31 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bubbleColor = isMe ? _T.bubbleMe   : _T.bubbleThem;
-    final textColor   = isMe ? Colors.white  : _T.textDark;
-    final metaColor   = isMe ? Colors.white60 : _T.textMid;
+    final bubbleColor = isMe ? _T.bubbleMe : _T.bubbleThem;
+    final textColor = isMe ? Colors.white : _T.textDark;
+    final metaColor = isMe ? Colors.white60 : _T.textMid;
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin:      const EdgeInsets.symmetric(vertical: 4),
-        padding:     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.76),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        constraints:
+            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.76),
         decoration: BoxDecoration(
           color: bubbleColor,
           borderRadius: BorderRadius.only(
-            topLeft:     const Radius.circular(20),
-            topRight:    const Radius.circular(20),
-            bottomLeft:  Radius.circular(isMe ? 20 : 5),
-            bottomRight: Radius.circular(isMe ? 5  : 20),
+            topLeft: const Radius.circular(20),
+            topRight: const Radius.circular(20),
+            bottomLeft: Radius.circular(isMe ? 20 : 5),
+            bottomRight: Radius.circular(isMe ? 5 : 20),
           ),
-          border: isMe
-              ? null
-              : Border.all(color: _T.divider, width: 1),
+          border: isMe ? null : Border.all(color: _T.divider, width: 1),
           boxShadow: [
             BoxShadow(
-              color:      _T.primary.withOpacity(isMe ? 0.22 : 0.05),
+              color: _T.primary.withOpacity(isMe ? 0.22 : 0.05),
               blurRadius: 12,
-              offset:     const Offset(0, 4),
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -1108,11 +1138,11 @@ class _ChatBubble extends StatelessWidget {
                 GestureDetector(
                   onTap: onPlayToggle,
                   child: Container(
-                    width: 38, height: 38,
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
-                      color: isMe
-                          ? Colors.white.withOpacity(0.18)
-                          : _T.accentSoft,
+                      color:
+                          isMe ? Colors.white.withOpacity(0.18) : _T.accentSoft,
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -1120,7 +1150,7 @@ class _ChatBubble extends StatelessWidget {
                           ? Icons.pause_rounded
                           : Icons.play_arrow_rounded,
                       color: isMe ? Colors.white : _T.primary,
-                      size:  22,
+                      size: 22,
                     ),
                   ),
                 ),
@@ -1133,8 +1163,8 @@ class _ChatBubble extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text('Voice message',
                           style: TextStyle(
-                            fontSize:   11,
-                            color:      metaColor,
+                            fontSize: 11,
+                            color: metaColor,
                             fontWeight: FontWeight.w600,
                           )),
                     ],
@@ -1144,9 +1174,9 @@ class _ChatBubble extends StatelessWidget {
             else
               Text(text,
                   style: TextStyle(
-                    color:      textColor,
-                    fontSize:   15,
-                    height:     1.35,
+                    color: textColor,
+                    fontSize: 15,
+                    height: 1.35,
                     fontWeight: FontWeight.w500,
                   )),
             const SizedBox(height: 5),
@@ -1154,15 +1184,14 @@ class _ChatBubble extends StatelessWidget {
               if (time.isNotEmpty)
                 Text(time,
                     style: TextStyle(
-                      color:      metaColor,
-                      fontSize:   10,
+                      color: metaColor,
+                      fontSize: 10,
                       fontWeight: FontWeight.w600,
                     )),
               if (isMe) ...[
                 const SizedBox(width: 5),
                 Icon(Icons.done_all_rounded,
-                    size:  13,
-                    color: Colors.white.withOpacity(0.8)),
+                    size: 13, color: Colors.white.withOpacity(0.8)),
               ],
             ]),
           ],
@@ -1175,7 +1204,7 @@ class _ChatBubble extends StatelessWidget {
 // ─── Waveform Bars ────────────────────────────────────────────────────────────
 class _WaveformBars extends StatelessWidget {
   final Color color;
-  final int   bars;
+  final int bars;
 
   const _WaveformBars({required this.color, this.bars = 22});
 
@@ -1183,7 +1212,11 @@ class _WaveformBars extends StatelessWidget {
   Widget build(BuildContext context) {
     final heights = List<double>.generate(
       bars,
-      (i) => i % 5 == 0 ? 0.85 : i % 3 == 0 ? 0.65 : 0.45,
+      (i) => i % 5 == 0
+          ? 0.85
+          : i % 3 == 0
+              ? 0.65
+              : 0.45,
     );
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -1195,7 +1228,7 @@ class _WaveformBars extends StatelessWidget {
               width: 3,
               height: 18 * h,
               decoration: BoxDecoration(
-                color:        color.withOpacity(0.8),
+                color: color.withOpacity(0.8),
                 borderRadius: BorderRadius.circular(999),
               ),
             ),
@@ -1210,15 +1243,14 @@ class _BgPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color       = _T.primary
-      ..style       = PaintingStyle.stroke
+      ..color = _T.primary
+      ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
     const spacing = 48.0;
     for (double y = -spacing; y < size.height + spacing; y += spacing) {
       for (double x = -spacing; x < size.width + spacing; x += spacing) {
-        final r = Rect.fromCenter(
-            center: Offset(x, y), width: 14, height: 14);
+        final r = Rect.fromCenter(center: Offset(x, y), width: 14, height: 14);
         canvas.drawRRect(
             RRect.fromRectAndRadius(r, const Radius.circular(4)), paint);
       }
