@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
@@ -9,17 +10,27 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../model/service_report_model.dart';
 
 class UserServiceService {
+  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
+  static const bool useLocalBackup = false;
+
+  // ─── Base URL ──────────────────────────────────────────────────────────────
   static String get baseUrl {
+    if (!useLocalBackup) {
+      return "https://bahirlink-backend-1.onrender.com/api";
+    }
     if (kIsWeb) return "http://localhost:5000/api";
-    if (Platform.isAndroid) return "http://10.0.2.2:5000/api";
-    return "http://localhost:5000/api";
+    if (Platform.isAndroid)
+      return "http://10.0.2.2:5000/api"; // Android Emulator address
+    return "http://localhost:5000/api"; // iOS Simulator or Desktop
   }
 
+  // ─── Shared headers ────────────────────────────────────────────────────────
   static Map<String, String> _headers(String lang) => {
         'Accept': 'application/json',
-        'Accept-Language': lang,
+        'Accept-Language': lang, // Crucial for localization mapping (en/am)
       };
 
+  // ─── Get stored user ID ────────────────────────────────────────────────────
   static Future<int?> getUserId() async {
     final prefs = await SharedPreferences.getInstance();
     final rawId = prefs.get("userId");
@@ -28,6 +39,9 @@ class UserServiceService {
     return null;
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // SEND USER SERVICE REQUEST
+  // ══════════════════════════════════════════════════════════════════════════
   static Future<bool> sendUserService({
     required int userId,
     required ServiceReportModel report,
@@ -53,13 +67,13 @@ class UserServiceService {
         'Authorization': 'Bearer $token',
       });
 
-      request.fields['name']              = "Service Req: ${report.subdivision}";
-      request.fields['description']       = report.description;
-      request.fields['serviceTypeId']     = report.serviceTypeId;
+      request.fields['name'] = "Service Req: ${report.subdivision}";
+      request.fields['description'] = report.description;
+      request.fields['serviceTypeId'] = report.serviceTypeId;
       request.fields['serviceCategoryId'] = report.serviceCategoryId;
-      request.fields['kebeleId']          = report.kebeleId.toString();
-      request.fields['subdivision']       = report.subdivision;
-      request.fields['street']            = report.street;
+      request.fields['kebeleId'] = report.kebeleId.toString();
+      request.fields['subdivision'] = report.subdivision;
+      request.fields['street'] = report.street;
 
       if (report.latitude != null) {
         request.fields['latitude'] = report.latitude.toString();
@@ -68,10 +82,8 @@ class UserServiceService {
         request.fields['longitude'] = report.longitude.toString();
       }
 
-      request.fields['time'] = report.time
-          .toIso8601String()
-          .split('T')[1]
-          .split('.')[0];
+      request.fields['time'] =
+          report.time.toIso8601String().split('T')[1].split('.')[0];
 
       if (kIsWeb) {
         if (mediaBytes != null && mediaName != null) {
@@ -85,8 +97,10 @@ class UserServiceService {
       debugPrint("📦 PAYLOAD SENT: ${request.fields}");
       debugPrint("🌐 Lang header: $lang");
 
-      final streamed  = await request.send().timeout(const Duration(seconds: 25));
-      final response  = await http.Response.fromStream(streamed);
+      // 60s timeout accommodates large file streams and Render free-tier environment cold starts
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamed);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         debugPrint("🎉 Service Submission Successful");
@@ -95,21 +109,26 @@ class UserServiceService {
         debugPrint("❌ Server Error ${response.statusCode}: ${response.body}");
         return false;
       }
+    } on SocketException {
+      debugPrint(
+          "❌ Connection Error: Service server is completely unreachable");
+      return false;
     } catch (e) {
       debugPrint("❌ UserServiceService Exception: $e");
       return false;
     }
   }
 
+  // ── Private media helpers ──────────────────────────────────────────────────
   static void _addBytesFile(
       http.MultipartRequest request, Uint8List bytes, String fileName) {
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
-    final parts    = mimeType.split('/');
+    final parts = mimeType.split('/');
     request.fields['mediaType'] = parts.first == 'video' ? 'video' : 'photo';
     request.files.add(http.MultipartFile.fromBytes(
       'media',
       bytes,
-      filename:    fileName,
+      filename: fileName,
       contentType: MediaType(parts[0], parts[1]),
     ));
   }
@@ -118,7 +137,7 @@ class UserServiceService {
       http.MultipartRequest request, File file) async {
     final fileName = path.basename(file.path);
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
-    final parts    = mimeType.split('/');
+    final parts = mimeType.split('/');
     request.fields['mediaType'] = parts.first == 'video' ? 'video' : 'photo';
     request.files.add(await http.MultipartFile.fromPath(
       'media',

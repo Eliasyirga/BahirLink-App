@@ -1,12 +1,28 @@
 import 'dart:convert';
-import 'dart:io'; // Import for Platform check
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class CaseReportService {
-  // 10.0.2.2 is the special alias to your host loopback interface for Android Emulators
-  // Use your actual IP address if testing on a physical device
-  final String baseUrl = "http://localhost:5000/api/caseReports";
+  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
+  static const bool useLocalBackup = false;
 
+  // 🌍 Dynamic URL Routing matching your other core services
+  String get baseUrl {
+    if (!useLocalBackup) {
+      return "https://bahirlink-backend-1.onrender.com/api/caseReports";
+    }
+
+    if (kIsWeb) {
+      return "http://localhost:5000/api/caseReports";
+    } else if (Platform.isAndroid) {
+      return "http://10.0.2.2:5000/api/caseReports"; // Android Emulator address
+    } else {
+      return "http://localhost:5000/api/caseReports"; // iOS Simulator or Desktop
+    }
+  }
+
+  // -------------------- CREATE REPORT --------------------
   Future<bool> createReport(Map<String, dynamic> reportData) async {
     try {
       final response = await http
@@ -15,12 +31,13 @@ class CaseReportService {
             headers: {"Content-Type": "application/json"},
             body: json.encode(reportData),
           )
-          .timeout(const Duration(seconds: 10)); // Added timeout for better UX
+          // Increased from 10s to 60s to accommodate Render's free tier sleep cycle wake-up time
+          .timeout(const Duration(seconds: 60));
 
-      if (response.statusCode == 201) {
+      if (response.statusCode == 201 || response.statusCode == 200) {
         return true;
       } else {
-        // This is where you'll see the "Association" error if the backend isn't fixed
+        // Keeps your diagnostic logging intact for validation
         print("Backend Error (${response.statusCode}): ${response.body}");
         return false;
       }

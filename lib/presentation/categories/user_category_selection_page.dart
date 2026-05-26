@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import '../reporting/user_emergency_report_page.dart';
 import '../../services/category_service.dart';
 
-// ─── Dashboard Color Tokens ───────────────────────────────────────────────────
+// ─── Design Tokens ────────────────────────────────────────────────────────────
 class _T {
-  static const primary     = Color(0xFF1A3BAA);
+  static const primary = Color(0xFF1A3BAA);
   static const primaryMid = Color(0xFF2252CC);
-  static const accent      = Color(0xFF4B83F0);
+  static const accent = Color(0xFF4B83F0);
   static const accentSoft = Color(0xFFD6E4FF);
-  static const bg          = Color(0xFFF2F6FF);
-  static const textDark   = Color(0xFF0C1A45);
-  static const textMid     = Color(0xFF5569A0);
+  static const bg = Color(0xFFF2F6FF);
+  static const textDark = Color(0xFF0C1A45);
+  static const textMid = Color(0xFF5569A0);
 }
 
 class UserCategorySelectionPage extends StatefulWidget {
@@ -28,57 +28,72 @@ class UserCategorySelectionPage extends StatefulWidget {
       _UserCategorySelectionPageState();
 }
 
-class _UserCategorySelectionPageState
-    extends State<UserCategorySelectionPage> {
-  bool isLoading = true;
-  List<Map<String, dynamic>> categories = [];
+class _UserCategorySelectionPageState extends State<UserCategorySelectionPage> {
+  bool _isLoading = true;
+  String _currentLang = 'en';
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Fetch categories here to ensure context is ready for Localization
-    fetchCategories();
+  // Each item has at minimum: id, displayName (resolved), and raw name map.
+  List<Map<String, dynamic>> _categories = [];
+
+  // ── Locale-aware fetch ──────────────────────────────────────────────────────
+  // Called both on first load (didChangeDependencies) and whenever the locale
+  // changes (also via didChangeDependencies if the widget stays in the tree).
+  Future<void> _fetchCategories() async {
+    // Read current locale from Flutter's localisation system
+    final lang = Localizations.localeOf(context).languageCode;
+
+    // Skip re-fetch if language hasn't changed and we already have data
+    if (lang == _currentLang && _categories.isNotEmpty) return;
+
+    setState(() {
+      _isLoading = true;
+      _currentLang = lang;
+    });
+
+    try {
+      final raw = await CategoryService.getCategories(
+        widget.emergencyTypeId,
+        lang: lang,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _categories = _sortCategories(raw);
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Category fetch error: $e");
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
   }
 
-  List<Map<String, dynamic>> _sortCategories(
-      List<Map<String, dynamic>> list) {
-    List<Map<String, dynamic>> sorted = List.from(list);
+  // ── Sort: push "Other/Others" to the end, rest alphabetically ──────────────
+  List<Map<String, dynamic>> _sortCategories(List<Map<String, dynamic>> list) {
+    final sorted = List<Map<String, dynamic>>.from(list);
     sorted.sort((a, b) {
-      String nameA = a["name"].toString().toLowerCase();
-      String nameB = b["name"].toString().toLowerCase();
-      bool isAOther = nameA == "others" || nameA == "other";
-      bool isBOther = nameB == "others" || nameB == "other";
-      if (isAOther && !isBOther) return 1;
-      if (!isAOther && isBOther) return -1;
+      // Use the already-resolved displayName for sorting
+      final nameA = (a['displayName'] as String).toLowerCase();
+      final nameB = (b['displayName'] as String).toLowerCase();
+      final aOther = nameA == 'others' || nameA == 'other';
+      final bOther = nameB == 'others' || nameB == 'other';
+      if (aOther && !bOther) return 1;
+      if (!aOther && bOther) return -1;
       return nameA.compareTo(nameB);
     });
     return sorted;
   }
 
-  Future<void> fetchCategories() async {
-    try {
-      // ─── LANGUAGE SWITCH LOGIC ───
-      // Automatically detect the current locale (am/en)
-      final String currentLang = Localizations.localeOf(context).languageCode;
-
-      final response = await CategoryService.getCategories(
-        widget.emergencyTypeId,
-        lang: currentLang, // Pass the detected language to the service
-      );
-      
-      if (!mounted) return;
-      setState(() {
-        categories =
-            _sortCategories(List<Map<String, dynamic>>.from(response));
-        isLoading = false;
-      });
-    } catch (e) {
-      debugPrint("Category fetch error: $e");
-      if (!mounted) return;
-      setState(() => isLoading = false);
-    }
+  // didChangeDependencies fires both on first build AND when inherited widgets
+  // (including locale) change — perfect for reactive language switching.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _fetchCategories();
   }
 
+  // ── Build ───────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -87,13 +102,10 @@ class _UserCategorySelectionPageState
         children: [
           _buildHeader(),
           Expanded(
-            child: isLoading
+            child: _isLoading
                 ? const Center(
                     child: CircularProgressIndicator(
-                      color: _T.primary,
-                      strokeWidth: 2,
-                    ),
-                  )
+                        color: _T.primary, strokeWidth: 2))
                 : _buildGrid(),
           ),
         ],
@@ -101,6 +113,7 @@ class _UserCategorySelectionPageState
     );
   }
 
+  // ── Header ──────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
@@ -128,36 +141,29 @@ class _UserCategorySelectionPageState
                 color: Colors.white.withOpacity(0.15),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.arrow_back_ios_new,
-                color: Colors.white,
-                size: 12,
-              ),
+              child: const Icon(Icons.arrow_back_ios_new,
+                  color: Colors.white, size: 12),
             ),
           ),
           const SizedBox(height: 16),
           Text(
             widget.emergencyTypeName,
             style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+                fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           Text(
             "Select a specific category",
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
-              fontSize: 12,
-            ),
+            style:
+                TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
           ),
         ],
       ),
     );
   }
 
+  // ── Grid ────────────────────────────────────────────────────────────────────
   Widget _buildGrid() {
-    if (categories.isEmpty) {
+    if (_categories.isEmpty) {
       return const Center(child: Text("No categories available"));
     }
 
@@ -170,18 +176,22 @@ class _UserCategorySelectionPageState
         mainAxisSpacing: 12,
         childAspectRatio: 1.2,
       ),
-      itemCount: categories.length,
+      itemCount: _categories.length,
       itemBuilder: (context, index) {
-        final cat = categories[index];
-        return _buildCategoryCard(
-            cat["name"].toString(), cat["id"].toString());
+        final cat = _categories[index];
+        // Use the resolved displayName — already in the right language
+        final displayName = cat['displayName'] as String;
+        final id = cat['id'].toString();
+        return _buildCategoryCard(displayName, id, cat);
       },
     );
   }
 
-  Widget _buildCategoryCard(String name, String id) {
-    bool isOther =
-        name.toLowerCase() == "others" || name.toLowerCase() == "other";
+  // ── Category card ───────────────────────────────────────────────────────────
+  Widget _buildCategoryCard(
+      String displayName, String id, Map<String, dynamic> cat) {
+    final isOther = displayName.toLowerCase() == 'others' ||
+        displayName.toLowerCase() == 'other';
 
     return Container(
       decoration: BoxDecoration(
@@ -189,10 +199,9 @@ class _UserCategorySelectionPageState
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: _T.primary.withOpacity(0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+              color: _T.primary.withOpacity(0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 4)),
         ],
       ),
       child: Material(
@@ -207,7 +216,9 @@ class _UserCategorySelectionPageState
                   emergencyTypeId: widget.emergencyTypeId,
                   emergencyTypeName: widget.emergencyTypeName,
                   categoryId: id,
-                  categoryName: name,
+                  // Pass the displayName so the report page shows the
+                  // already-localised name without needing to re-resolve it.
+                  categoryName: displayName,
                 ),
               ),
             );
@@ -221,9 +232,7 @@ class _UserCategorySelectionPageState
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: isOther
-                        ? const Color(0xFFF1F5F9)
-                        : _T.accentSoft,
+                    color: isOther ? const Color(0xFFF1F5F9) : _T.accentSoft,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -233,15 +242,14 @@ class _UserCategorySelectionPageState
                   ),
                 ),
                 Text(
-                  name,
+                  displayName,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: _T.textDark,
-                    height: 1.1,
-                  ),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _T.textDark,
+                      height: 1.1),
                 ),
               ],
             ),

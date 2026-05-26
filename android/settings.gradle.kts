@@ -23,11 +23,13 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "first_app"
+// Updated root name to match project
+rootProject.name = "BahirLink-App"
 include(":app")
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    id("com.android.application") version "8.1.1" apply false
+    // Upgraded AGP to 8.6.0 to support modern plugin architectures and eliminate warnings
+    id("com.android.application") version "8.6.0" apply false
     id("org.jetbrains.kotlin.android") version "2.2.0" apply false
 }

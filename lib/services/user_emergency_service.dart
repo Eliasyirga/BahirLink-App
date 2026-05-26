@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
@@ -9,17 +10,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../model/emergency_report_model.dart';
 
 class UserEmergencyService {
+  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
+  static const bool useLocalBackup = false;
+
   // ─── Base URL ──────────────────────────────────────────────────────────────
   static String get baseUrl {
+    if (!useLocalBackup) {
+      return "https://bahirlink-backend-1.onrender.com/api";
+    }
     if (kIsWeb) return "http://localhost:5000/api";
-    if (Platform.isAndroid) return "http://10.0.2.2:5000/api";
-    return "http://localhost:5000/api";
+    if (Platform.isAndroid)
+      return "http://10.0.2.2:5000/api"; // Android Emulator address
+    return "http://localhost:5000/api"; // iOS Simulator or Desktop
   }
 
   // ─── Shared headers ────────────────────────────────────────────────────────
   static Map<String, String> _headers(String lang) => {
         'Accept': 'application/json',
-        'Accept-Language': lang,
+        'Accept-Language': lang, // Crucial for localization layers (en/am)
       };
 
   // ─── Get stored user ID ────────────────────────────────────────────────────
@@ -66,12 +74,10 @@ class UserEmergencyService {
       final data = report.toJsonForUser();
 
       // Map 'kebele' from model → 'kebeleId' expected by backend
-      request.fields['kebeleId']    = report.kebele?.toString() ?? "";
+      request.fields['kebeleId'] = report.kebele?.toString() ?? "";
       request.fields['subdivision'] = report.subdivision ?? "";
 
       // Add remaining fields, skipping keys handled separately
-      // Also skip latitude/longitude from model — coordinates come exclusively
-      // from the named parameters below to avoid duplication or conflicts.
       data.forEach((key, value) {
         if (value != null &&
             key != 'kebele' &&
@@ -83,11 +89,8 @@ class UserEmergencyService {
       });
 
       // ── Coordinates (single source of truth) ───────────────────────────────
-      // These come exclusively from the named parameters, not from the model,
-      // so the backend's createUserEmergency() always receives a clean pair
-      // and never falls back to location = null.
       if (latitude != null && longitude != null) {
-        request.fields["latitude"]  = latitude.toString();
+        request.fields["latitude"] = latitude.toString();
         request.fields["longitude"] = longitude.toString();
         debugPrint("📍 Location attached: lat=$latitude, lng=$longitude");
       } else {
@@ -107,7 +110,9 @@ class UserEmergencyService {
       debugPrint("📦 Payload fields: ${request.fields}");
       debugPrint("🌐 Lang header: $lang");
 
-      final streamed = await request.send();
+      // 60s timeout accommodates large file streams and Render free-tier environment cold starts
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 60));
       final response = await http.Response.fromStream(streamed);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -117,6 +122,9 @@ class UserEmergencyService {
         debugPrint("❌ Server Error ${response.statusCode}: ${response.body}");
         return false;
       }
+    } on SocketException {
+      debugPrint("❌ Connection Error: Server is completely unreachable");
+      return false;
     } catch (e) {
       debugPrint("❌ UserEmergencyService Exception: $e");
       return false;
@@ -127,12 +135,12 @@ class UserEmergencyService {
   static void _addBytesFile(
       http.MultipartRequest request, Uint8List bytes, String fileName) {
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
-    final parts    = mimeType.split('/');
+    final parts = mimeType.split('/');
     request.fields['mediaType'] = parts.first == 'video' ? 'video' : 'photo';
     request.files.add(http.MultipartFile.fromBytes(
       'media',
       bytes,
-      filename:    fileName,
+      filename: fileName,
       contentType: MediaType(parts[0], parts[1]),
     ));
   }
@@ -141,7 +149,7 @@ class UserEmergencyService {
       http.MultipartRequest request, File file) async {
     final fileName = path.basename(file.path);
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
-    final parts    = mimeType.split('/');
+    final parts = mimeType.split('/');
     request.fields['mediaType'] = parts.first == 'video' ? 'video' : 'photo';
     request.files.add(await http.MultipartFile.fromPath(
       'media',

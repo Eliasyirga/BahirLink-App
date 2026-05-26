@@ -11,18 +11,18 @@ import '../chat/chat_page.dart';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 class _T {
-  static const primary    = Color(0xFF1A3BAA);
+  static const primary = Color(0xFF1A3BAA);
   static const primaryMid = Color(0xFF2252CC);
-  static const accent     = Color(0xFF4B83F0);
+  static const accent = Color(0xFF4B83F0);
   static const accentSoft = Color(0xFFD6E4FF);
-  static const surface    = Color(0xFFFFFFFF);
-  static const bg         = Color(0xFFF2F6FF);
-  static const textDark   = Color(0xFF0C1A45);
-  static const textMid    = Color(0xFF5569A0);
-  static const divider    = Color(0xFFE5ECFF);
-  static const green      = Color(0xFF0DB87A);
-  static const orange     = Color(0xFFF59E0B);
-  static const red        = Color(0xFFEF4444);
+  static const surface = Color(0xFFFFFFFF);
+  static const bg = Color(0xFFF2F6FF);
+  static const textDark = Color(0xFF0C1A45);
+  static const textMid = Color(0xFF5569A0);
+  static const divider = Color(0xFFE5ECFF);
+  static const green = Color(0xFF0DB87A);
+  static const orange = Color(0xFFF59E0B);
+  static const red = Color(0xFFEF4444);
 }
 
 class ReportDetailsPage extends StatefulWidget {
@@ -43,13 +43,12 @@ class ReportDetailsPage extends StatefulWidget {
 
 class _ReportDetailsPageState extends State<ReportDetailsPage>
     with TickerProviderStateMixin {
-
-  File?      _mediaFile;
+  File? _mediaFile;
   Uint8List? _webBytes;
-  String     _currentLang = 'en';
+  String _currentLang = 'en';
 
-  late final AnimationController _fadeCtrl =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
+  late final AnimationController _fadeCtrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 500));
   late final Animation<double> _fadeAnim =
       CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
 
@@ -83,7 +82,8 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
 
   // ── Status helpers ────────────────────────────────────────────────────────
   Color _statusColor(String status) {
-    if (status.contains('RESOLVED') || status.contains('COMPLETED')) return _T.green;
+    if (status.contains('RESOLVED') || status.contains('COMPLETED'))
+      return _T.green;
     if (status.contains('REJECTED')) return _T.red;
     return _T.orange;
   }
@@ -120,10 +120,10 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
   // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final e      = widget.emergency;
+    final e = widget.emergency;
     final status = safe(e['status']).toUpperCase();
     final sColor = _statusColor(status);
-    final sIcon  = _statusIcon(status);
+    final sIcon = _statusIcon(status);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
@@ -147,19 +147,19 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
                       Text(
                         _categoryName,
                         style: const TextStyle(
-                            fontSize:      26,
-                            fontWeight:    FontWeight.w800,
-                            color:         _T.textDark,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: _T.textDark,
                             letterSpacing: -0.5,
-                            height:        1.1),
+                            height: 1.1),
                       ),
                       const SizedBox(height: 5),
                       Text(
                         // ✅ was: "Reported at ${safe(e['time'])}"
                         l10n.rdReportedAt(safe(e['time'])),
                         style: const TextStyle(
-                            color:      _T.textMid,
-                            fontSize:   13,
+                            color: _T.textMid,
+                            fontSize: 13,
                             fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(height: 24),
@@ -215,20 +215,20 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
             colors: [Color(0xFF0D2580), _T.primary, _T.primaryMid],
           ),
           borderRadius: BorderRadius.only(
-            bottomLeft:  Radius.circular(32),
+            bottomLeft: Radius.circular(32),
             bottomRight: Radius.circular(32),
           ),
         ),
         child: ClipRRect(
           borderRadius: const BorderRadius.only(
-            bottomLeft:  Radius.circular(32),
+            bottomLeft: Radius.circular(32),
             bottomRight: Radius.circular(32),
           ),
           child: Stack(fit: StackFit.expand, children: [
-            Positioned(top: -40, right: -25,
-                child: _blob(140, Colors.white, 0.055)),
-            Positioned(bottom: -18, left: -28,
-                child: _blob(105, _T.accent, 0.14)),
+            Positioned(
+                top: -40, right: -25, child: _blob(140, Colors.white, 0.055)),
+            Positioned(
+                bottom: -18, left: -28, child: _blob(105, _T.accent, 0.14)),
             _buildHeroImage(e['mediaUrl']),
             // Gradient overlay
             Container(
@@ -259,7 +259,8 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
                         GestureDetector(
                           onTap: () => Navigator.pop(context),
                           child: Container(
-                            width: 38, height: 38,
+                            width: 38,
+                            height: 38,
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.15),
                               borderRadius: BorderRadius.circular(12),
@@ -286,8 +287,8 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
                             const SizedBox(width: 5),
                             Text(status,
                                 style: TextStyle(
-                                    color:      sColor,
-                                    fontSize:   10,
+                                    color: sColor,
+                                    fontSize: 10,
                                     fontWeight: FontWeight.w800)),
                           ]),
                         ),
@@ -297,8 +298,8 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
                   const Spacer(),
                   // Type badge
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 5),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.16),
                       borderRadius: BorderRadius.circular(8),
@@ -308,9 +309,9 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
                     child: Text(
                       _typeName.toUpperCase(),
                       style: const TextStyle(
-                          color:         Colors.white,
-                          fontSize:      9,
-                          fontWeight:    FontWeight.w800,
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: 0.8),
                     ),
                   ),
@@ -319,8 +320,8 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
                   Text(
                     l10n.rdEmergencyReport,
                     style: TextStyle(
-                        color:      Colors.white.withOpacity(0.55),
-                        fontSize:   12,
+                        color: Colors.white.withOpacity(0.55),
+                        fontSize: 12,
                         fontWeight: FontWeight.w500),
                   ),
                 ],
@@ -333,9 +334,10 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
   }
 
   Widget _blob(double size, Color color, double opacity) => Container(
-        width: size, height: size,
-        decoration: BoxDecoration(
-            shape: BoxShape.circle, color: color.withOpacity(opacity)));
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+          shape: BoxShape.circle, color: color.withOpacity(opacity)));
 
   Widget _buildHeroImage(String? mediaUrl) {
     if (kIsWeb && _webBytes != null)
@@ -362,17 +364,17 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
         border: Border.all(color: _T.divider, width: 1),
         boxShadow: [
           BoxShadow(
-              color:      _T.primary.withOpacity(0.06),
+              color: _T.primary.withOpacity(0.06),
               blurRadius: 14,
-              offset:     const Offset(0, 4)),
+              offset: const Offset(0, 4)),
         ],
       ),
       child: Row(children: [
         Container(
-          width: 44, height: 44,
+          width: 44,
+          height: 44,
           decoration: BoxDecoration(
-              color:        _T.accentSoft,
-              borderRadius: BorderRadius.circular(13)),
+              color: _T.accentSoft, borderRadius: BorderRadius.circular(13)),
           child: const Icon(Icons.location_on_rounded,
               color: _T.primary, size: 20),
         ),
@@ -385,17 +387,17 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
               Text(
                 l10n.rdLocationSubtitle,
                 style: const TextStyle(
-                    fontSize:      9,
-                    fontWeight:    FontWeight.w700,
-                    color:         _T.textMid,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: _T.textMid,
                     letterSpacing: 0.8),
               ),
               const SizedBox(height: 3),
               Text(_kebeleName,
                   style: const TextStyle(
-                      fontSize:   16,
+                      fontSize: 16,
                       fontWeight: FontWeight.w800,
-                      color:      _T.textDark)),
+                      color: _T.textDark)),
             ],
           ),
         ),
@@ -413,15 +415,15 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
             padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                  colors:     [_T.primary, _T.primaryMid],
-                  begin:      Alignment.centerLeft,
-                  end:        Alignment.centerRight),
+                  colors: [_T.primary, _T.primaryMid],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight),
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                    color:      _T.primary.withOpacity(0.28),
+                    color: _T.primary.withOpacity(0.28),
                     blurRadius: 14,
-                    offset:     const Offset(0, 5)),
+                    offset: const Offset(0, 5)),
               ],
             ),
             child: Row(
@@ -433,9 +435,9 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
                 Text(
                   l10n.rdUpdateDetails,
                   style: const TextStyle(
-                      color:      Colors.white,
+                      color: Colors.white,
                       fontWeight: FontWeight.w700,
-                      fontSize:   14),
+                      fontSize: 14),
                 ),
               ],
             ),
@@ -446,16 +448,17 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
       GestureDetector(
         onTap: () => _confirmLocalClear(id),
         child: Container(
-          width: 52, height: 52,
+          width: 52,
+          height: 52,
           decoration: BoxDecoration(
-            color:        _T.surface,
+            color: _T.surface,
             borderRadius: BorderRadius.circular(16),
-            border:       Border.all(color: _T.divider, width: 1),
+            border: Border.all(color: _T.divider, width: 1),
             boxShadow: [
               BoxShadow(
-                  color:      _T.primary.withOpacity(0.06),
+                  color: _T.primary.withOpacity(0.06),
                   blurRadius: 10,
-                  offset:     const Offset(0, 3)),
+                  offset: const Offset(0, 3)),
             ],
           ),
           child: const Icon(Icons.archive_outlined, color: _T.accent, size: 20),
@@ -472,8 +475,8 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
         MaterialPageRoute(
           builder: (_) => ChatPage(
             emergencyId: int.tryParse(safe(e['id'])) ?? 0,
-            token:       widget.token,
-            userId:      int.tryParse(widget.userId) ?? 0,
+            token: widget.token,
+            userId: int.tryParse(widget.userId) ?? 0,
           ),
         ),
       ),
@@ -481,14 +484,14 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 17),
         decoration: BoxDecoration(
-          color:        _T.surface,
+          color: _T.surface,
           borderRadius: BorderRadius.circular(18),
-          border:       Border.all(color: _T.divider, width: 1),
+          border: Border.all(color: _T.divider, width: 1),
           boxShadow: [
             BoxShadow(
-                color:      _T.primary.withOpacity(0.06),
+                color: _T.primary.withOpacity(0.06),
                 blurRadius: 12,
-                offset:     const Offset(0, 3)),
+                offset: const Offset(0, 3)),
           ],
         ),
         child: Row(
@@ -501,9 +504,7 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
             Text(
               l10n.openChat,
               style: const TextStyle(
-                  color:      _T.primary,
-                  fontWeight: FontWeight.w800,
-                  fontSize:   15),
+                  color: _T.primary, fontWeight: FontWeight.w800, fontSize: 15),
             ),
           ],
         ),
@@ -517,16 +518,17 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
   Widget _sectionLabel(String text) {
     return Row(children: [
       Container(
-        width: 3, height: 14,
+        width: 3,
+        height: 14,
         decoration: BoxDecoration(
             color: _T.primary, borderRadius: BorderRadius.circular(2)),
       ),
       const SizedBox(width: 8),
       Text(text,
           style: const TextStyle(
-              color:         _T.textMid,
-              fontWeight:    FontWeight.w800,
-              fontSize:      10,
+              color: _T.textMid,
+              fontWeight: FontWeight.w800,
+              fontSize: 10,
               letterSpacing: 1.2)),
     ]);
   }
@@ -535,15 +537,13 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: _T.surface,
         // ✅ was: "Archive Report?" / "This report will be hidden..."
         title: Text(
           l10n.rdArchiveTitle,
           style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              color:      _T.textDark,
-              fontSize:   17),
+              fontWeight: FontWeight.w800, color: _T.textDark, fontSize: 17),
         ),
         content: Text(
           l10n.rdArchiveMessage,
@@ -556,8 +556,7 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
             child: Text(
               l10n.rdKeep,
               style: const TextStyle(
-                  color:      _T.textMid,
-                  fontWeight: FontWeight.w600),
+                  color: _T.textMid, fontWeight: FontWeight.w600),
             ),
           ),
           GestureDetector(
@@ -568,15 +567,15 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
               decoration: BoxDecoration(
-                  color:        _T.accentSoft,
+                  color: _T.accentSoft,
                   borderRadius: BorderRadius.circular(12)),
               // ✅ was: "Archive"
               child: Text(
                 l10n.rdArchive,
                 style: const TextStyle(
-                    color:      _T.primary,
+                    color: _T.primary,
                     fontWeight: FontWeight.w800,
-                    fontSize:   13),
+                    fontSize: 13),
               ),
             ),
           ),
@@ -586,21 +585,21 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
   }
 
   void _showEditDialog(String id) {
-    final descC   = TextEditingController(text: _description == 'N/A' ? '' : _description);
-    final kebeleC = TextEditingController(text: _kebeleName  == 'N/A' ? '' : _kebeleName);
+    final descC =
+        TextEditingController(text: _description == 'N/A' ? '' : _description);
+    final kebeleC =
+        TextEditingController(text: _kebeleName == 'N/A' ? '' : _kebeleName);
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: _T.surface,
         // ✅ was: "Update Report"
         title: Text(
           l10n.rdUpdateReport,
           style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              color:      _T.textDark,
-              fontSize:   17),
+              fontWeight: FontWeight.w800, color: _T.textDark, fontSize: 17),
         ),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           // ✅ was: "Kebele" / "Description" (hardcoded field labels)
@@ -614,18 +613,19 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
             child: Text(
               l10n.rdDiscard,
               style: const TextStyle(
-                  color:      _T.textMid,
-                  fontWeight: FontWeight.w600),
+                  color: _T.textMid, fontWeight: FontWeight.w600),
             ),
           ),
           GestureDetector(
             onTap: () async {
               final data = {
                 'description': descC.text,
-                'kebele':      kebeleC.text,
+                'kebele': kebeleC.text,
               };
               await ReportsService.updateEmergency(
-                widget.userId, id, data,
+                widget.userId,
+                id,
+                data,
                 lang: _currentLang,
               );
               if (mounted) {
@@ -636,16 +636,17 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
               decoration: BoxDecoration(
-                gradient:     const LinearGradient(colors: [_T.primary, _T.primaryMid]),
+                gradient:
+                    const LinearGradient(colors: [_T.primary, _T.primaryMid]),
                 borderRadius: BorderRadius.circular(12),
               ),
               // ✅ was: "Save Changes"
               child: Text(
                 l10n.rdSaveChanges,
                 style: const TextStyle(
-                    color:      Colors.white,
+                    color: Colors.white,
                     fontWeight: FontWeight.w800,
-                    fontSize:   13),
+                    fontSize: 13),
               ),
             ),
           ),
@@ -659,13 +660,13 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
       padding: const EdgeInsets.only(bottom: 14),
       child: TextField(
         controller: c,
-        maxLines:   maxLines,
+        maxLines: maxLines,
         style: const TextStyle(color: _T.textDark, fontSize: 14),
         decoration: InputDecoration(
-          labelText:  label,
+          labelText: label,
           labelStyle: const TextStyle(color: _T.textMid, fontSize: 13),
-          filled:     true,
-          fillColor:  _T.bg,
+          filled: true,
+          fillColor: _T.bg,
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide.none),

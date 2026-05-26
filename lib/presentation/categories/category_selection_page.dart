@@ -4,12 +4,12 @@ import '../reporting/guest_emergency_report_page.dart';
 
 // ─── Dashboard Color Tokens ───────────────────────────────────────────────────
 class _T {
-  static const primary    = Color(0xFF1A3BAA);
+  static const primary = Color(0xFF1A3BAA);
   static const primaryMid = Color(0xFF2252CC);
   static const accentSoft = Color(0xFFD6E4FF);
-  static const bg         = Color(0xFFF2F6FF);
-  static const textDark   = Color(0xFF0C1A45);
-  static const textMid    = Color(0xFF5569A0);
+  static const bg = Color(0xFFF2F6FF);
+  static const textDark = Color(0xFF0C1A45);
+  static const textMid = Color(0xFF5569A0);
 }
 
 class CategorySelectionPage extends StatefulWidget {
@@ -27,68 +27,59 @@ class CategorySelectionPage extends StatefulWidget {
 }
 
 class _CategorySelectionPageState extends State<CategorySelectionPage> {
-  bool isLoading = true;
-  List<Map<String, dynamic>> categories = [];
-  List<Map<String, dynamic>> filteredCategories = [];
-  final TextEditingController _searchController = TextEditingController();
+  bool _isLoading = true;
+  String _currentLang = 'en';
+  List<Map<String, dynamic>> _categories = [];
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _fetchCategories();
-  }
+  // ── Locale-aware fetch ──────────────────────────────────────────────────────
+  Future<void> _fetchCategories() async {
+    final lang = Localizations.localeOf(context).languageCode;
 
-  void _filterCategories(String query) {
+    if (lang == _currentLang && _categories.isNotEmpty) return;
+
     setState(() {
-      if (query.isEmpty) {
-        filteredCategories = categories;
-      } else {
-        filteredCategories = categories
-            .where((category) => category["name"]
-                .toString()
-                .toLowerCase()
-                .contains(query.toLowerCase()))
-            .toList();
-      }
+      _isLoading = true;
+      _currentLang = lang;
     });
+
+    try {
+      final raw = await CategoryService.getCategories(
+        widget.emergencyTypeId,
+        lang: lang,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _categories = _sortCategories(raw);
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Category fetch error: $e");
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
   }
 
+  // ── Sort: push "Other/Others" to the end, rest alphabetically ──────────────
   List<Map<String, dynamic>> _sortCategories(List<Map<String, dynamic>> list) {
-    List<Map<String, dynamic>> sorted = List.from(list);
+    final sorted = List<Map<String, dynamic>>.from(list);
     sorted.sort((a, b) {
-      String nameA = (a["name"] ?? "").toString().toLowerCase();
-      String nameB = (b["name"] ?? "").toString().toLowerCase();
-      bool isAOther = nameA == "others" || nameA == "other";
-      bool isBOther = nameB == "others" || nameB == "other";
-      if (isAOther && !isBOther) return 1;
-      if (!isAOther && isBOther) return -1;
+      final nameA = (a['displayName'] as String).toLowerCase();
+      final nameB = (b['displayName'] as String).toLowerCase();
+      final aOther = nameA == 'others' || nameA == 'other';
+      final bOther = nameB == 'others' || nameB == 'other';
+      if (aOther && !bOther) return 1;
+      if (!aOther && bOther) return -1;
       return nameA.compareTo(nameB);
     });
     return sorted;
   }
 
-  Future<void> _fetchCategories() async {
-    try {
-      final String currentLang = Localizations.localeOf(context).languageCode;
-
-      final data = await CategoryService.getCategories(
-        widget.emergencyTypeId,
-        lang: currentLang,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        categories = _sortCategories(
-          (data as List).map((e) => Map<String, dynamic>.from(e)).toList(),
-        );
-        filteredCategories = categories;
-        isLoading = false;
-      });
-    } catch (e) {
-      debugPrint("Error fetching categories: $e");
-      if (!mounted) return;
-      setState(() => isLoading = false);
-    }
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _fetchCategories();
   }
 
   @override
@@ -99,7 +90,7 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
         children: [
           _buildHeader(),
           Expanded(
-            child: isLoading
+            child: _isLoading
                 ? const Center(
                     child: CircularProgressIndicator(
                       color: _T.primary,
@@ -113,10 +104,11 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
     );
   }
 
+  // ── Header ──────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 50, 20, 25),
+      padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -143,7 +135,7 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
               child: const Icon(
                 Icons.arrow_back_ios_new,
                 color: Colors.white,
-                size: 14,
+                size: 12,
               ),
             ),
           ),
@@ -156,7 +148,6 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
               color: Colors.white,
             ),
           ),
-          const SizedBox(height: 4),
           Text(
             "Select a sub-category to report",
             style: TextStyle(
@@ -164,49 +155,15 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
               fontSize: 12,
             ),
           ),
-          const SizedBox(height: 20),
-          Container(
-            height: 45,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withOpacity(0.2)),
-            ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _filterCategories,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: "Search items...",
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  color: Colors.white70,
-                  size: 18,
-                ),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
 
+  // ── Grid ────────────────────────────────────────────────────────────────────
   Widget _buildGrid() {
-    if (filteredCategories.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search_off, size: 48, color: _T.textMid.withOpacity(0.4)),
-            const SizedBox(height: 12),
-            const Text("No matches found",
-                style: TextStyle(color: _T.textMid)),
-          ],
-        ),
-      );
+    if (_categories.isEmpty) {
+      return const Center(child: Text("No categories available"));
     }
 
     return GridView.builder(
@@ -216,19 +173,22 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
         crossAxisCount: 2,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        childAspectRatio: 1.25,
+        childAspectRatio: 1.2,
       ),
-      itemCount: filteredCategories.length,
+      itemCount: _categories.length,
       itemBuilder: (context, index) {
-        final cat = filteredCategories[index];
-        return _buildCategoryCard(
-            cat["name"].toString(), cat["id"].toString());
+        final cat = _categories[index];
+        final displayName = cat['displayName'] as String;
+        final id = cat['id'].toString();
+        return _buildCategoryCard(displayName, id);
       },
     );
   }
 
-  Widget _buildCategoryCard(String name, String id) {
-    bool isOther = name.toLowerCase() == "others" || name.toLowerCase() == "other";
+  // ── Category card ───────────────────────────────────────────────────────────
+  Widget _buildCategoryCard(String displayName, String id) {
+    final isOther = displayName.toLowerCase() == 'others' ||
+        displayName.toLowerCase() == 'other';
 
     return Container(
       decoration: BoxDecoration(
@@ -251,10 +211,10 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
               context,
               MaterialPageRoute(
                 builder: (_) => GuestEmergencyReportPage(
-                  emergencyTypeId: widget.emergencyTypeId.toString(),
+                  emergencyTypeId: widget.emergencyTypeId,
                   categoryId: id,
                   emergencyTypeName: widget.emergencyTypeName,
-                  categoryName: name,
+                  categoryName: displayName,
                 ),
               ),
             );
@@ -268,9 +228,7 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: isOther
-                        ? const Color(0xFFF1F5F9)
-                        : _T.accentSoft,
+                    color: isOther ? const Color(0xFFF1F5F9) : _T.accentSoft,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -280,7 +238,7 @@ class _CategorySelectionPageState extends State<CategorySelectionPage> {
                   ),
                 ),
                 Text(
-                  name,
+                  displayName,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(

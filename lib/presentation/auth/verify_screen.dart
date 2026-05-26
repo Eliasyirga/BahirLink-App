@@ -30,11 +30,11 @@ class _VerifyScreenState extends State<VerifyScreen> {
   Map<String, dynamic>? result;
 
   final ImagePicker _picker = ImagePicker();
-  final VerificationService _verificationService = VerificationService(
-    baseUrl: 'http://10.161.148.41:5000',
-  );
 
-  /// Compress image
+  // 🌍 Hooks directly into your global environment configuration router
+  final VerificationService _verificationService = VerificationService();
+
+  /// Compress image payload to minimize network pressure
   Future<File> _compressImage(File file) async {
     final String targetPath = file.path.replaceFirst(
       RegExp(r'\.(jpg|jpeg|png)$'),
@@ -43,16 +43,16 @@ class _VerifyScreenState extends State<VerifyScreen> {
 
     final XFile? compressedXFile =
         await FlutterImageCompress.compressAndGetFile(
-          file.path,
-          targetPath,
-          quality: 70,
-        );
+      file.path,
+      targetPath,
+      quality: 70,
+    );
 
     if (compressedXFile == null) return file;
     return File(compressedXFile.path);
   }
 
-  /// Pick image from camera
+  /// Pick image from camera capture frames
   Future<File?> _pickFromCamera({required CameraDevice camera}) async {
     final XFile? picked = await _picker.pickImage(
       source: ImageSource.camera,
@@ -78,11 +78,16 @@ class _VerifyScreenState extends State<VerifyScreen> {
   Future<void> submitVerification() async {
     if (idImage == null || selfie == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please capture both images')),
+        const SnackBar(
+          content:
+              Text('Please capture both your Government ID and Live Selfie'),
+          backgroundColor: kError,
+        ),
       );
       return;
     }
 
+    if (!mounted) return;
     setState(() {
       loading = true;
       result = null;
@@ -93,11 +98,17 @@ class _VerifyScreenState extends State<VerifyScreen> {
         idImage: idImage!,
         selfie: selfie!,
       );
-      setState(() => result = response);
+      if (mounted) {
+        setState(() => result = response);
+      }
     } catch (e) {
-      setState(() => result = {'success': false, 'error': e.toString()});
+      if (mounted) {
+        setState(() => result = {'success': false, 'error': e.toString()});
+      }
     } finally {
-      setState(() => loading = false);
+      if (mounted) {
+        setState(() => loading = false);
+      }
     }
   }
 
@@ -238,7 +249,6 @@ class _VerifyScreenState extends State<VerifyScreen> {
               ),
             ),
             const SizedBox(height: 24),
-
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -256,9 +266,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
                 ),
               ],
             ),
-
             const SizedBox(height: 36),
-
             SizedBox(
               width: double.infinity,
               height: 56,
@@ -283,7 +291,6 @@ class _VerifyScreenState extends State<VerifyScreen> {
                       ),
               ),
             ),
-
             _statusCard(),
           ],
         ),

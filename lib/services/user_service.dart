@@ -5,25 +5,31 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class UserService {
-  /// 🔥 Auto detect base URL
+  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
+  static const bool useLocalBackup = false;
+
+  // ─── Base URL Getter ───────────────────────────────────────────────────────
   static String get baseUrl {
+    if (!useLocalBackup) {
+      return "https://bahirlink-backend-1.onrender.com";
+    }
     if (kIsWeb) {
       return "http://localhost:5000";
     } else if (Platform.isAndroid) {
-      return "http://10.0.2.2:5000";
+      return "http://10.0.2.2:5000"; // Android Emulator address
     } else {
-      return "http://localhost:5000";
+      return "http://localhost:5000"; // iOS Simulator or Desktop
     }
   }
 
-  /// Get user profile
+  // ─── Get User Profile ──────────────────────────────────────────────────────
   static Future<Map<String, dynamic>?> getProfile() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("accessToken");
 
       if (token == null || token.isEmpty) {
-        print("❌ No token found");
+        debugPrint("❌ No token found in SharedPreferences");
         return null;
       }
 
@@ -33,10 +39,10 @@ class UserService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      );
+      ).timeout(const Duration(
+          seconds: 60)); // 60s timeout handles live server wakeup delays
 
-      print("GET STATUS: ${response.statusCode}");
-      print("GET BODY: ${response.body}");
+      debugPrint("GET STATUS: ${response.statusCode}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -44,13 +50,16 @@ class UserService {
       }
 
       return null;
+    } on SocketException {
+      debugPrint("❌ Connection Error: User profile server is unreachable");
+      return null;
     } catch (e) {
-      print("GET ERROR: $e");
+      debugPrint("GET ERROR: $e");
       return null;
     }
   }
 
-  /// Update user profile
+  // ─── Update User Profile ───────────────────────────────────────────────────
   static Future<Map<String, dynamic>?> updateProfile(
     Map<String, dynamic> updates,
   ) async {
@@ -59,18 +68,20 @@ class UserService {
       final token = prefs.getString("accessToken");
 
       if (token == null || token.isEmpty) {
-        print("❌ No token found");
+        debugPrint("❌ No token found in SharedPreferences");
         return null;
       }
 
-      final response = await http.put(
-        Uri.parse("$baseUrl/api/users/profile"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
-        body: jsonEncode(updates),
-      );
+      final response = await http
+          .put(
+            Uri.parse("$baseUrl/api/users/profile"),
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer $token",
+            },
+            body: jsonEncode(updates),
+          )
+          .timeout(const Duration(seconds: 60));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -78,18 +89,23 @@ class UserService {
       }
 
       return null;
+    } on SocketException {
+      debugPrint("❌ Connection Error: Update profile server is unreachable");
+      return null;
     } catch (e) {
-      print("UPDATE ERROR: $e");
+      debugPrint("UPDATE ERROR: $e");
       return null;
     }
   }
 
-  /// Logout
+  // ─── Logout ────────────────────────────────────────────────────────────────
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove("accessToken");
+    debugPrint("🔒 Token removed. Logout processed successfully.");
   }
 
+  // ─── Data Normalization ─────────────────────────────────────────────────────
   static Map<String, dynamic> _normalizeUserData(Map<String, dynamic> user) {
     final firstName = user['firstName'] ?? '';
     final lastName = user['lastName'] ?? '';
@@ -97,7 +113,8 @@ class UserService {
     return {
       'firstName': firstName,
       'lastName': lastName,
-      'name': (firstName + " " + lastName).trim(), // ✅ full name
+      'name':
+          (firstName + " " + lastName).trim(), // Aggregated display fallback
       'email': user['email'] ?? '',
       'phone': user['phone'] ?? '',
       'country': user['country'] ?? '',

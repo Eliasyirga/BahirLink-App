@@ -5,19 +5,27 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
 class ServiceReportService {
+  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
+  static const bool useLocalBackup = false;
+
   // ── Base URL ───────────────────────────────────────────────────────────────
   static String get serverUrl {
+    if (!useLocalBackup) {
+      return "https://bahirlink-backend-1.onrender.com";
+    }
     if (kIsWeb) return "http://localhost:5000";
-    if (Platform.isAndroid) return "http://10.0.2.2:5000";
-    return "http://localhost:5000";
+    if (Platform.isAndroid)
+      return "http://10.0.2.2:5000"; // Android Emulator address
+    return "http://localhost:5000"; // iOS Simulator or Desktop
   }
 
-  final String apiUrl = "$serverUrl/api/service";
+  // Adjusted to evaluate dynamically from the runtime getter
+  String get apiUrl => "$serverUrl/api/service";
 
   // ── Shared headers ─────────────────────────────────────────────────────────
   static Map<String, String> _headers(String lang) => {
         "Content-Type": "application/json",
-        "Accept-Language": lang,
+        "Accept-Language": lang, // Crucial for localization mapping (en/am)
       };
 
   // ── URL helper ─────────────────────────────────────────────────────────────
@@ -28,10 +36,6 @@ class ServiceReportService {
   }
 
   // ── Text extraction ────────────────────────────────────────────────────────
-  // FIX: Language keys (lang, 'en') are checked FIRST so that a bilingual
-  //      map like {en: "Water Supply", am: "የውሃ አቅርቦት"} is resolved to the
-  //      correct locale string instead of falling through to a missing
-  //      'name'/'title'/'label' key.
   static String extractText(
     dynamic field, {
     String lang = 'en',
@@ -40,13 +44,12 @@ class ServiceReportService {
     if (field == null) return fallback;
 
     if (field is String) {
-      // The string might still be a JSON-encoded bilingual map that the
-      // normalizer missed (e.g. nested inside an unexpected field).
       final t = field.trim();
       if (t.startsWith('{') && t.endsWith('}')) {
         try {
           final decoded = json.decode(t);
-          if (decoded is Map) return extractText(decoded, lang: lang, fallback: fallback);
+          if (decoded is Map)
+            return extractText(decoded, lang: lang, fallback: fallback);
         } catch (_) {}
       }
       return t.isEmpty ? fallback : t;
@@ -67,8 +70,7 @@ class ServiceReportService {
         }
       }
 
-      // 3. Accept any named key ('name', 'title', 'label') as a last resort
-      //    (e.g. non-translated legacy records).
+      // 3. Accept any named key as a last resort
       for (final key in ['name', 'title', 'label']) {
         final v = field[key];
         if (v != null && v.toString().trim().isNotEmpty) {
@@ -105,14 +107,14 @@ class ServiceReportService {
     try {
       final request = http.MultipartRequest('POST', Uri.parse(apiUrl));
 
-      request.fields['citizenId']         = userId;
-      request.fields['name']              = name;
-      request.fields['description']       = description;
-      request.fields['subdivision']       = subdivision;
-      request.fields['serviceTypeId']     = serviceTypeId;
+      request.fields['citizenId'] = userId;
+      request.fields['name'] = name;
+      request.fields['description'] = description;
+      request.fields['subdivision'] = subdivision;
+      request.fields['serviceTypeId'] = serviceTypeId;
       request.fields['serviceCategoryId'] = serviceCategoryId;
 
-      if (lat != null) request.fields['latitude']  = lat.toString();
+      if (lat != null) request.fields['latitude'] = lat.toString();
       if (lng != null) request.fields['longitude'] = lng.toString();
 
       if (imageFile != null) {
@@ -123,8 +125,10 @@ class ServiceReportService {
         ));
       }
 
-      final response = await request.send();
-      return response.statusCode == 201;
+      // 60-second window handles potential server spin-up overhead during multi-part stream uploads
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 60));
+      return streamed.statusCode == 201;
     } catch (e) {
       debugPrint("reportService error: $e");
       return false;
@@ -136,29 +140,43 @@ class ServiceReportService {
     String userId, {
     String lang = 'en',
   }) async {
-    final response = await http.get(
-      Uri.parse('$apiUrl/user/$userId'),
-      headers: _headers(lang),
-    );
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$apiUrl/user/$userId'),
+            headers: _headers(lang),
+          )
+          .timeout(const Duration(seconds: 30));
 
-    if (response.statusCode != 200) {
-      throw Exception("Server error: ${response.statusCode}");
+      if (response.statusCode != 200) {
+        debugPrint(
+            "Server error during getUserServices: ${response.statusCode}");
+        return [];
+      }
+
+      final dynamic decoded = json.decode(response.body);
+      final List<dynamic> raw = switch (decoded) {
+        List() => decoded,
+        Map(containsKey: _) => (decoded as Map)['data'] as List? ?? [],
+        _ => [],
+      };
+
+      return raw.map(_normalizeItem).toList();
+    } on SocketException {
+      debugPrint("❌ ServiceReportService: Server unreachable.");
+      return [];
+    } catch (e) {
+      debugPrint("getUserServices error: $e");
+      return [];
     }
-
-    final dynamic decoded = json.decode(response.body);
-    final List<dynamic> raw = switch (decoded) {
-      List()              => decoded,
-      Map(containsKey: _) => (decoded as Map)['data'] as List? ?? [],
-      _                   => [],
-    };
-
-    return raw.map(_normalizeItem).toList();
   }
 
   // ── DELETE ─────────────────────────────────────────────────────────────────
   Future<bool> deleteService(int serviceId) async {
     try {
-      final response = await http.delete(Uri.parse('$apiUrl/$serviceId'));
+      final response = await http
+          .delete(Uri.parse('$apiUrl/$serviceId'))
+          .timeout(const Duration(seconds: 30));
       return response.statusCode == 200;
     } catch (e) {
       debugPrint("deleteService error: $e");
@@ -167,18 +185,14 @@ class ServiceReportService {
   }
 
   // ── Normalization ──────────────────────────────────────────────────────────
-  // Decodes any double-stringified JSON fields so that extractText always
-  // receives either a plain String or a Map — never a JSON-encoded string.
   static Map<String, dynamic> _normalizeItem(dynamic raw) {
     if (raw is! Map) return {};
     final item = Map<String, dynamic>.from(raw);
 
-    // Top-level text fields.
     for (final key in ['name', 'description', 'subdivision', 'street']) {
       if (item.containsKey(key)) item[key] = _decodeIfJson(item[key]);
     }
 
-    // Nested objects whose 'name' may also be a bilingual map.
     for (final key in [
       'serviceType',
       'serviceCategory',
@@ -191,11 +205,9 @@ class ServiceReportService {
       final val = _decodeIfJson(item[key]);
       if (val is Map) {
         final nested = Map<String, dynamic>.from(val);
-        // FIX: decode nested 'name' so it becomes a Map{en,am}, not a string.
         if (nested.containsKey('name')) {
           nested['name'] = _decodeIfJson(nested['name']);
         }
-        // Also decode nested 'description' for completeness.
         if (nested.containsKey('description')) {
           nested['description'] = _decodeIfJson(nested['description']);
         }
@@ -214,7 +226,6 @@ class ServiceReportService {
     if (!t.startsWith('{') || !t.endsWith('}')) return value;
     try {
       final decoded = json.decode(t);
-      // Handle double-stringified JSON (a string whose value is also JSON).
       if (decoded is String) {
         final inner = decoded.trim();
         if (inner.startsWith('{') && inner.endsWith('}')) {

@@ -5,29 +5,43 @@ import 'dart:io' show Platform;
 class DeviceService {
   static final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
 
+  /// Fetches a unique hardware or platform identifier.
+  /// Crucial for tying anonymous case reports or notifications to a unique handset on Render.
   static Future<String?> getDeviceId() async {
     try {
+      // 🌐 WEB ROUTE
       if (kIsWeb) {
-        // ⚠️ better fallback web ID (stable per session)
-        return "web-user";
+        final webBrowserInfo = await _deviceInfo.webBrowserInfo;
+        // Using a combination of browser features to make a more stable, unique string
+        return "web-${webBrowserInfo.userAgent.hashCode}-${webBrowserInfo.vendor}";
       }
 
+      // 🤖 PHYSICAL OR EMULATED ANDROID ROUTE
       if (Platform.isAndroid) {
         final androidInfo = await _deviceInfo.androidInfo;
 
-        // safer fallback chain
-        return androidInfo.id ?? androidInfo.model ?? androidInfo.brand;
+        // 'androidId' or hardware 'id' are the gold standard for unique device tracking
+        // Fallback sequentially to model or hardware fingerprints if fields are null
+        return androidInfo.id ??
+            androidInfo.model ??
+            androidInfo.hardware ??
+            "unknown-android";
       }
 
+      // 🍏 PHYSICAL OR EMULATED IOS ROUTE
       if (Platform.isIOS) {
         final iosInfo = await _deviceInfo.iosInfo;
 
-        return iosInfo.identifierForVendor ?? iosInfo.name ?? iosInfo.model;
+        // identifierForVendor is steady, persistent, and survives app updates
+        return iosInfo.identifierForVendor ??
+            iosInfo.name ??
+            iosInfo.model ??
+            "unknown-ios";
       }
     } catch (e) {
-      debugPrint("Device ID Error: $e");
+      debugPrint("❌ Device Info Extraction Error: $e");
     }
 
-    return null;
+    return "fallback-device-id";
   }
 }

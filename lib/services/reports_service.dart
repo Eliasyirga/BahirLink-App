@@ -5,11 +5,18 @@ import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:http/http.dart' as http;
 
 class ReportsService {
+  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
+  static const bool useLocalBackup = false;
+
   // ── Base URL ───────────────────────────────────────────────────────────────
   static String get serverUrl {
+    if (!useLocalBackup) {
+      return "https://bahirlink-backend-1.onrender.com";
+    }
     if (kIsWeb) return "http://localhost:5000";
-    if (Platform.isAndroid) return "http://10.0.2.2:5000";
-    return "http://localhost:5000";
+    if (Platform.isAndroid)
+      return "http://10.0.2.2:5000"; // Android Emulator address
+    return "http://localhost:5000"; // iOS Simulator or Desktop
   }
 
   static String get baseUrl => "$serverUrl/api";
@@ -18,7 +25,7 @@ class ReportsService {
   static Map<String, String> _headers({String lang = 'en', String? token}) => {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Accept-Language': lang,
+        'Accept-Language': lang, // Crucial for localization mapping (en/am)
         if (token != null) 'Authorization': 'Bearer $token',
       };
 
@@ -30,10 +37,6 @@ class ReportsService {
   }
 
   // ── Text extraction ────────────────────────────────────────────────────────
-  /// Pulls a localised string from whatever shape the API returns:
-  ///   • `{"en": "Fire", "am": "እሳት"}` → picks [lang], then 'en', then any value
-  ///   • `"Fire"`                        → returned as-is
-  ///   • `null`                          → [fallback]
   static String extractText(
     dynamic field, {
     String lang = 'en',
@@ -56,34 +59,31 @@ class ReportsService {
   }
 
   // ── Fetch emergencies + categories in parallel, enrich with names ──────────
-  ///
-  /// Strategy (mirrors the original _localise approach):
-  ///   1. Fetch raw emergencies and ALL categories in parallel.
-  ///   2. Build a lookup map: categoryId → category doc.
-  ///   3. For each emergency resolve its category by whatever field the API
-  ///      uses (`categoryId` string, `categoryId` object, or `category` object).
-  ///   4. Write resolved, lang-aware strings into `categoryName` and `typeName`
-  ///      so the page just reads those flat fields — no further digging needed.
   static Future<List<Map<String, dynamic>>> fetchUserEmergencies(
     String id, {
     String lang = 'en',
     String? token,
     bool isGuest = false,
   }) async {
-    // ── 1. Parallel fetch ──────────────────────────────────────────────────
+    // ── 1. Parallel fetch with expanded timeouts for Render free-tier cold-starts ─────────────────────────
     final results = await Future.wait([
-      http.get(
-        Uri.parse('$baseUrl/emergencies/$id${isGuest ? '?guestId=true' : ''}'),
-        headers: _headers(lang: lang, token: token),
-      ),
-      http.get(
-        Uri.parse('$baseUrl/categories'),
-        headers: _headers(lang: lang, token: token),
-      ),
+      http
+          .get(
+            Uri.parse(
+                '$baseUrl/emergencies/$id${isGuest ? '?guestId=true' : ''}'),
+            headers: _headers(lang: lang, token: token),
+          )
+          .timeout(const Duration(seconds: 60)),
+      http
+          .get(
+            Uri.parse('$baseUrl/categories'),
+            headers: _headers(lang: lang, token: token),
+          )
+          .timeout(const Duration(seconds: 60)),
     ]);
 
     final emergencyResp = results[0];
-    final categoryResp  = results[1];
+    final categoryResp = results[1];
 
     if (emergencyResp.statusCode != 200) {
       throw Exception('Failed to load emergencies: ${emergencyResp.body}');
@@ -93,8 +93,8 @@ class ReportsService {
     final dynamic eDec = jsonDecode(emergencyResp.body);
     final List<dynamic> rawEmergencies = switch (eDec) {
       List() => eDec,
-      Map()  => (eDec as Map)['data'] as List? ?? [],
-      _      => [],
+      Map() => (eDec as Map)['data'] as List? ?? [],
+      _ => [],
     };
 
     // ── 3. Build category lookup map  id → category doc ───────────────────
@@ -102,9 +102,8 @@ class ReportsService {
 
     if (categoryResp.statusCode == 200) {
       final dynamic cDec = jsonDecode(categoryResp.body);
-      final List<dynamic> rawCats = cDec is List
-          ? cDec
-          : ((cDec as Map)['data'] as List? ?? []);
+      final List<dynamic> rawCats =
+          cDec is List ? cDec : ((cDec as Map)['data'] as List? ?? []);
 
       for (final c in rawCats) {
         if (c is! Map) continue;
@@ -115,8 +114,8 @@ class ReportsService {
       }
     }
 
-    debugPrint('📦 emergencies=${rawEmergencies.length} '
-        'categories=${catById.length}');
+    debugPrint(
+        '📦 emergencies=${rawEmergencies.length} categories=${catById.length}');
 
     // ── 4. Normalise + enrich each emergency ───────────────────────────────
     return rawEmergencies
@@ -136,40 +135,29 @@ class ReportsService {
     Map<String, Map<String, dynamic>> catById,
     String lang,
   ) {
-    // Decode stringified-JSON description
     if (item.containsKey('description')) {
       item['description'] = _decodeIfJson(item['description']);
     }
 
-    // Decode other nested objects the detail screen may need
     for (final key in ['location', 'kebele', 'Kebele', 'lastSeenLocation']) {
       if (item.containsKey(key)) {
         item[key] = _decodeIfJson(item[key]);
       }
     }
 
-    // ── Resolve the category document ──────────────────────────────────────
-    // The API may send any of:
-    //   A) categoryId: "abc123"                    (bare string ID)
-    //   B) categoryId: { id, name, emergencyType } (populated object)
-    //   C) category:   { id, name, emergencyType } (populated under different key)
     Map<String, dynamic>? catDoc;
-
     final rawCatField = item['categoryId'] ?? item['category'];
-    final decoded     = _decodeIfJson(rawCatField);
+    final decoded = _decodeIfJson(rawCatField);
 
     if (decoded is Map) {
-      // Shape B or C — already a populated object
       catDoc = Map<String, dynamic>.from(decoded);
       if (catDoc.containsKey('name')) {
         catDoc['name'] = _decodeIfJson(catDoc['name']);
       }
     } else if (decoded is String && decoded.isNotEmpty) {
-      // Shape A — bare ID, look up from the categories list we fetched
       catDoc = catById[decoded];
     }
 
-    // ── Write flat resolved fields the page reads directly ─────────────────
     if (catDoc != null) {
       item['categoryName'] = extractText(catDoc['name'], lang: lang);
 
@@ -184,11 +172,9 @@ class ReportsService {
         item['typeName'] = typeRaw;
       }
 
-      // Keep normalised category doc for detail pages
       item['category'] = catDoc;
     }
 
-    // ── Fallback: emergencyType may also arrive as a top-level field ────────
     if (item['typeName'] == null || item['typeName'].toString().isEmpty) {
       final typeRaw = _decodeIfJson(item['emergencyType']);
       if (typeRaw is Map) {
@@ -196,7 +182,7 @@ class ReportsService {
         if (typeMap.containsKey('name')) {
           typeMap['name'] = _decodeIfJson(typeMap['name']);
         }
-        item['typeName']      = extractText(typeMap['name'], lang: lang);
+        item['typeName'] = extractText(typeMap['name'], lang: lang);
         item['emergencyType'] = typeMap;
       }
     }
@@ -208,25 +194,32 @@ class ReportsService {
     return item;
   }
 
-  // ── Fetch Categories (standalone — used by other screens) ─────────────────
+  // ── Fetch Categories ───────────────────────────────────────────────────────
   static Future<List<Map<String, dynamic>>> fetchCategories({
     String lang = 'en',
     String? token,
   }) async {
-    final uri      = Uri.parse('$baseUrl/categories');
-    final response = await http.get(uri, headers: _headers(lang: lang, token: token));
+    try {
+      final uri = Uri.parse('$baseUrl/categories');
+      final response = await http
+          .get(uri, headers: _headers(lang: lang, token: token))
+          .timeout(const Duration(seconds: 30));
 
-    if (response.statusCode == 200) {
-      final decoded = jsonDecode(response.body);
-      final List<dynamic> raw =
-          decoded is List ? decoded : ((decoded as Map)['data'] as List? ?? []);
-      return raw
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        final List<dynamic> raw = decoded is List
+            ? decoded
+            : ((decoded as Map)['data'] as List? ?? []);
+        return raw
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+      throw Exception('Failed to load categories: ${response.statusCode}');
+    } on SocketException {
+      debugPrint("❌ ReportsService.fetchCategories: Server unreachable.");
+      return [];
     }
-
-    throw Exception('Failed to load categories');
   }
 
   // ── Fetch Emergency Types ──────────────────────────────────────────────────
@@ -234,17 +227,23 @@ class ReportsService {
     String lang = 'en',
     String? token,
   }) async {
-    final uri      = Uri.parse('$baseUrl/emergencyType');
-    final response = await http.get(uri, headers: _headers(lang: lang, token: token));
+    try {
+      final uri = Uri.parse('$baseUrl/emergencyType');
+      final response = await http
+          .get(uri, headers: _headers(lang: lang, token: token))
+          .timeout(const Duration(seconds: 30));
 
-    if (response.statusCode == 200) {
-      final decoded = jsonDecode(response.body);
-      if (decoded is List) return List<Map<String, dynamic>>.from(decoded);
-      return List<Map<String, dynamic>>.from(
-          (decoded as Map)['emergencyTypes'] ?? []);
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is List) return List<Map<String, dynamic>>.from(decoded);
+        return List<Map<String, dynamic>>.from(
+            (decoded as Map)['emergencyTypes'] ?? decoded['data'] ?? []);
+      }
+      throw Exception('Failed to load emergency types: ${response.statusCode}');
+    } on SocketException {
+      debugPrint("❌ ReportsService.fetchEmergencyTypes: Server unreachable.");
+      return [];
     }
-
-    throw Exception('Failed to load emergency types');
   }
 
   // ── Update Emergency ───────────────────────────────────────────────────────
@@ -259,7 +258,7 @@ class ReportsService {
     String? token,
     bool isGuest = false,
   }) async {
-    final uri     = Uri.parse('$baseUrl/emergencies/$userOrGuestId/$emergencyId');
+    final uri = Uri.parse('$baseUrl/emergencies/$userOrGuestId/$emergencyId');
     final request = http.MultipartRequest('PUT', uri);
 
     request.headers.addAll(_headers(lang: lang, token: token));
@@ -274,13 +273,14 @@ class ReportsService {
     });
 
     if (kIsWeb && webBytes != null) {
-      request.files.add(http.MultipartFile.fromBytes(
-          'media', webBytes, filename: fileName ?? 'upload.jpg'));
+      request.files.add(http.MultipartFile.fromBytes('media', webBytes,
+          filename: fileName ?? 'upload.jpg'));
     } else if (!kIsWeb && file != null) {
       request.files.add(await http.MultipartFile.fromPath('media', file.path));
     }
 
-    final streamed = await request.send();
+    // 60-second window allocated for concurrent text and file payload streams
+    final streamed = await request.send().timeout(const Duration(seconds: 60));
     final response = await http.Response.fromStream(streamed);
 
     if (response.statusCode == 200) {
@@ -299,12 +299,14 @@ class ReportsService {
     String? token,
     bool isGuest = false,
   }) async {
-    final uri      = Uri.parse('$baseUrl/emergencies/$userOrGuestId/$emergencyId');
-    final response = await http.delete(
-      uri,
-      headers: _headers(lang: lang, token: token),
-      body: isGuest ? jsonEncode({'guestId': userOrGuestId}) : null,
-    );
+    final uri = Uri.parse('$baseUrl/emergencies/$userOrGuestId/$emergencyId');
+    final response = await http
+        .delete(
+          uri,
+          headers: _headers(lang: lang, token: token),
+          body: isGuest ? jsonEncode({'guestId': userOrGuestId}) : null,
+        )
+        .timeout(const Duration(seconds: 30));
 
     if (response.statusCode != 200) {
       throw Exception('Failed to delete emergency: ${response.body}');

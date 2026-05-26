@@ -18,18 +18,18 @@ import 'package:first_app/main.dart';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 class _T {
-  static const primary    = Color(0xFF1A3BAA);
+  static const primary = Color(0xFF1A3BAA);
   static const primaryMid = Color(0xFF2252CC);
-  static const accent     = Color(0xFF4B83F0);
+  static const accent = Color(0xFF4B83F0);
   static const accentSoft = Color(0xFFD6E4FF);
-  static const surface    = Color(0xFFFFFFFF);
-  static const bg         = Color(0xFFF2F6FF);
-  static const textDark   = Color(0xFF0C1A45);
-  static const textMid    = Color(0xFF5569A0);
-  static const divider    = Color(0xFFE5ECFF);
-  static const green      = Color(0xFF0DB87A);
-  static const orange     = Color(0xFFF59E0B);
-  static const red        = Color(0xFFEF4444);
+  static const surface = Color(0xFFFFFFFF);
+  static const bg = Color(0xFFF2F6FF);
+  static const textDark = Color(0xFF0C1A45);
+  static const textMid = Color(0xFF5569A0);
+  static const divider = Color(0xFFE5ECFF);
+  static const green = Color(0xFF0DB87A);
+  static const orange = Color(0xFFF59E0B);
+  static const red = Color(0xFFEF4444);
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -41,7 +41,6 @@ class DashboardContent extends StatefulWidget {
 
 class _DashboardContentState extends State<DashboardContent>
     with TickerProviderStateMixin {
-
   AppLocalizations get l10n => AppLocalizations.of(context)!;
 
   // ── Disposed flag ──────────────────────────────────────────────────────────
@@ -50,13 +49,13 @@ class _DashboardContentState extends State<DashboardContent>
   bool _disposed = false;
 
   // ── State ──────────────────────────────────────────────────────────────────
-  String _fullName        = "User";
-  bool   _isLoading       = true;
-  bool   _isSwitchingLang = false;
+  String _fullName = "User";
+  bool _isLoading = true;
+  bool _isSwitchingLang = false;
 
-  List<dynamic>       _cases          = [];
+  List<dynamic> _cases = [];
   List<EmergencyType> _emergencyTypes = [];
-  List<ServiceType>   _serviceTypes   = [];
+  List<ServiceType> _serviceTypes = [];
 
   /// Single source of truth for the current language.
   String _currentLang = 'en';
@@ -65,16 +64,15 @@ class _DashboardContentState extends State<DashboardContent>
   Timer? _sliderTimer;
   int _currentIdx = 0;
 
-  late final AnimationController _fadeCtrl =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
-  late final AnimationController _pulseCtrl =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))
-        ..repeat(reverse: true);
+  late final AnimationController _fadeCtrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 700));
+  late final AnimationController _pulseCtrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1400))
+    ..repeat(reverse: true);
   late final Animation<double> _fadeAnim =
       CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
-  late final Animation<double> _pulseAnim =
-      Tween<double>(begin: 0.88, end: 1.0).animate(
-          CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+  late final Animation<double> _pulseAnim = Tween<double>(begin: 0.88, end: 1.0)
+      .animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   @override
@@ -189,7 +187,7 @@ class _DashboardContentState extends State<DashboardContent>
 
     // 3. Update state + show loading indicator
     setState(() {
-      _currentLang     = langCode;
+      _currentLang = langCode;
       _isSwitchingLang = true;
     });
 
@@ -240,16 +238,20 @@ class _DashboardContentState extends State<DashboardContent>
           ),
         ),
         child: Stack(children: [
-          Positioned(top: -90,  left: -70,  child: _blob(300, Colors.white, 0.04)),
-          Positioned(bottom: -110, right: -70, child: _blob(340, Colors.white, 0.05)),
-          Positioned(top: 60,  right: -40,  child: _blob(160, Colors.white, 0.06)),
+          Positioned(
+              top: -90, left: -70, child: _blob(300, Colors.white, 0.04)),
+          Positioned(
+              bottom: -110, right: -70, child: _blob(340, Colors.white, 0.05)),
+          Positioned(
+              top: 60, right: -40, child: _blob(160, Colors.white, 0.06)),
           Center(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               ScaleTransition(
                 scale: _pulseAnim,
                 child: Stack(alignment: Alignment.center, children: [
                   Container(
-                    width: 120, height: 120,
+                    width: 120,
+                    height: 120,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
@@ -257,7 +259,8 @@ class _DashboardContentState extends State<DashboardContent>
                     ),
                   ),
                   Container(
-                    width: 96, height: 96,
+                    width: 96,
+                    height: 96,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.white.withOpacity(0.07),
@@ -266,7 +269,8 @@ class _DashboardContentState extends State<DashboardContent>
                     ),
                   ),
                   Container(
-                    width: 72, height: 72,
+                    width: 72,
+                    height: 72,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
@@ -283,8 +287,8 @@ class _DashboardContentState extends State<DashboardContent>
                         child: Image.asset(
                           'assets/images/logo.webp',
                           fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) =>
-                              Icon(Icons.hub_rounded, color: _T.primary, size: 36),
+                          errorBuilder: (_, __, ___) => Icon(Icons.hub_rounded,
+                              color: _T.primary, size: 36),
                         ),
                       ),
                     ),
@@ -324,12 +328,12 @@ class _DashboardContentState extends State<DashboardContent>
           stops: [0.0, 0.5, 1.0],
         ),
         borderRadius: BorderRadius.only(
-            bottomLeft: Radius.circular(30),
-            bottomRight: Radius.circular(30)),
+            bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
       ),
       child: Stack(children: [
-        Positioned(top: -40,  right: -25, child: _blob(140, Colors.white, 0.055)),
-        Positioned(top: 14,  right: 85,   child: _blob(55,  Colors.white, 0.045)),
+        Positioned(
+            top: -40, right: -25, child: _blob(140, Colors.white, 0.055)),
+        Positioned(top: 14, right: 85, child: _blob(55, Colors.white, 0.045)),
         Positioned(bottom: -18, left: -28, child: _blob(105, _T.accent, 0.14)),
         SafeArea(
           bottom: false,
@@ -341,7 +345,8 @@ class _DashboardContentState extends State<DashboardContent>
                 Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
                   // ── Brand chip ──────────────────────────────────────────
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(13),
@@ -350,7 +355,8 @@ class _DashboardContentState extends State<DashboardContent>
                     ),
                     child: Row(children: [
                       SizedBox(
-                        width: 22, height: 22,
+                        width: 22,
+                        height: 22,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(5),
                           child: Image.asset(
@@ -379,7 +385,8 @@ class _DashboardContentState extends State<DashboardContent>
                   // ── Notification bell ───────────────────────────────────
                   Stack(clipBehavior: Clip.none, children: [
                     Container(
-                      width: 38, height: 38,
+                      width: 38,
+                      height: 38,
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.11),
                         borderRadius: BorderRadius.circular(12),
@@ -390,9 +397,11 @@ class _DashboardContentState extends State<DashboardContent>
                           color: Colors.white, size: 19),
                     ),
                     Positioned(
-                      top: 7, right: 7,
+                      top: 7,
+                      right: 7,
                       child: Container(
-                        width: 8, height: 8,
+                        width: 8,
+                        height: 8,
                         decoration: BoxDecoration(
                           color: const Color(0xFFFF4B4B),
                           shape: BoxShape.circle,
@@ -443,8 +452,8 @@ class _DashboardContentState extends State<DashboardContent>
                   ),
                   // ── Location chip ───────────────────────────────────────
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 5),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.11),
                       borderRadius: BorderRadius.circular(20),
@@ -490,10 +499,12 @@ class _DashboardContentState extends State<DashboardContent>
         ),
         child: _isSwitchingLang
             ? const SizedBox(
-                width: 22, height: 14,
+                width: 22,
+                height: 14,
                 child: Center(
                   child: SizedBox(
-                    width: 12, height: 12,
+                    width: 12,
+                    height: 12,
                     child: CircularProgressIndicator(
                         strokeWidth: 1.5,
                         valueColor:
@@ -502,7 +513,7 @@ class _DashboardContentState extends State<DashboardContent>
                 ),
               )
             : Text(
-                isAmharic ? 'EN' : 'አማ',   // shows what you WILL switch TO
+                isAmharic ? 'EN' : 'አማ', // shows what you WILL switch TO
                 style: const TextStyle(
                     color: Colors.white,
                     fontSize: 11,
@@ -535,13 +546,15 @@ class _DashboardContentState extends State<DashboardContent>
         _sectionLabel(l10n.emergencyAssist, Icons.crisis_alert_rounded),
         const SizedBox(height: 12),
         _isSwitchingLang
-            ? _buildGridShimmer(_emergencyTypes.isNotEmpty ? _emergencyTypes.length : 6)
+            ? _buildGridShimmer(
+                _emergencyTypes.isNotEmpty ? _emergencyTypes.length : 6)
             : _buildGrid(_emergencyTypes, true),
         const SizedBox(height: 26),
         _sectionLabel(l10n.publicServices, Icons.account_balance_rounded),
         const SizedBox(height: 12),
         _isSwitchingLang
-            ? _buildGridShimmer(_serviceTypes.isNotEmpty ? _serviceTypes.length : 6)
+            ? _buildGridShimmer(
+                _serviceTypes.isNotEmpty ? _serviceTypes.length : 6)
             : _buildGrid(_serviceTypes, false),
         const SizedBox(height: 100),
       ],
@@ -586,10 +599,10 @@ class _DashboardContentState extends State<DashboardContent>
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(children: [
         Container(
-          width: 32, height: 32,
+          width: 32,
+          height: 32,
           decoration: BoxDecoration(
-              color: _T.accentSoft,
-              borderRadius: BorderRadius.circular(9)),
+              color: _T.accentSoft, borderRadius: BorderRadius.circular(9)),
           child: Icon(icon, color: _T.primary, size: 16),
         ),
         const SizedBox(width: 10),
@@ -609,10 +622,10 @@ class _DashboardContentState extends State<DashboardContent>
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Container(
-                  width: 6, height: 6,
+                  width: 6,
+                  height: 6,
                   decoration: BoxDecoration(
-                      color: badgeColor ?? _T.primary,
-                      shape: BoxShape.circle)),
+                      color: badgeColor ?? _T.primary, shape: BoxShape.circle)),
               const SizedBox(width: 5),
               Text(badge,
                   style: TextStyle(
@@ -624,143 +637,252 @@ class _DashboardContentState extends State<DashboardContent>
         else
           Text(l10n.seeAll,
               style: TextStyle(
-                  color: _T.accent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600)),
+                  color: _T.accent, fontSize: 12, fontWeight: FontWeight.w600)),
       ]),
     );
   }
 
-  // ── Case slider ────────────────────────────────────────────────────────────
   Widget _buildCaseSlider() {
+    const String baseUrl = "https://bahirlink-backend.onrender.com";
+
     return SizedBox(
       height: 200,
       child: PageView.builder(
-        controller: _caseCtrl,
+        controller: _caseCtrl ?? PageController(viewportFraction: 0.9),
         itemCount: _cases.length,
         onPageChanged: (i) => setState(() => _currentIdx = i),
         itemBuilder: (context, index) {
           final c = _cases[index];
+
+          // Resolve Status Styling
           final status = (c['status'] ?? '').toString().toLowerCase();
           final Color sColor;
           final String sLabel;
 
-          if (status == 'pending') {
-            sColor = _T.orange;
-            sLabel = l10n.statusPending;
-          } else if (status == 'in_progress') {
-            sColor = _T.accent;
-            sLabel = l10n.statusInProgress;
-          } else {
-            sColor = _T.green;
-            sLabel = status.toUpperCase();
+          switch (status) {
+            case 'pending':
+              sColor = _T.orange;
+              sLabel = l10n.statusPending;
+              break;
+            case 'in_progress':
+              sColor = _T.accent;
+              sLabel = l10n.statusInProgress;
+              break;
+            default:
+              sColor = _T.green;
+              sLabel = status.toUpperCase();
           }
+
+          final String mediaUrl = c['mediaUrl'] != null
+              ? "$baseUrl${c['mediaUrl']}"
+              : "https://via.placeholder.com/400x200/1A3BAA/FFFFFF?text=Report";
 
           return GestureDetector(
             onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => CaseDetailPage(caseData: c))),
+              context,
+              MaterialPageRoute(builder: (_) => CaseDetailPage(caseData: c)),
+            ),
             child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(22),
                 boxShadow: [
                   BoxShadow(
-                      color: _T.primary.withOpacity(0.18),
-                      blurRadius: 18,
-                      offset: const Offset(0, 6))
+                    color: _T.primary.withOpacity(0.15),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  )
                 ],
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(22),
-                child: Stack(fit: StackFit.expand, children: [
-                  Image.network(
-                    c['mediaUrl'] != null
-                        ? "http://localhost:5000${c['mediaUrl']}"
-                        : "https://via.placeholder.com/400x200/1A3BAA/FFFFFF?text=Report",
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // 1. Base Media Layer
+                    Image.network(
+                      mediaUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
                         color: _T.primary,
-                        child: const Icon(Icons.image_not_supported,
-                            color: Colors.white24, size: 40)),
-                  ),
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withOpacity(0.18),
-                          Colors.black.withOpacity(0.78),
-                        ],
-                        stops: const [0.0, 0.45, 1.0],
+                        child: const Icon(
+                          Icons.image_not_supported_rounded,
+                          color: Colors.white24,
+                          size: 40,
+                        ),
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(children: [
-                          _glassBadge(
-                              c['caseType']?['name'] ?? "Report",
-                              Icons.report_rounded),
+
+                    // 2. High-Contrast Base Gradient Overlay
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withOpacity(0.2),
+                              Colors.black.withOpacity(0.85),
+                            ],
+                            stops: const [0.0, 0.4, 1.0],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // 3. Premium Top-Left Glassmorphic Backdrop Layer (Smaller footprint)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.only(
+                          bottomRight: Radius.circular(24),
+                        ),
+                        child: SizedBox(
+                          width: MediaQuery.of(context).size.width *
+                              0.42, // Restricted smaller width
+                          height: 54,
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: ImageFiltered(
+                                  imageFilter:
+                                      ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                  child: Container(
+                                    color: Colors.black.withOpacity(0.25),
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(
+                                        color: Colors.white.withOpacity(0.12),
+                                        width: 1),
+                                    right: BorderSide(
+                                        color: Colors.white.withOpacity(0.12),
+                                        width: 1),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // 4. Interactive Elements / Typography Layout
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Header Row containing aligned badges
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              // Perfectly matches the width parameters of the underlying blur anchor
+                              SizedBox(
+                                width:
+                                    (MediaQuery.of(context).size.width * 0.42) -
+                                        24,
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.report_rounded,
+                                        color: _T.accent, size: 14),
+                                    const SizedBox(width: 5),
+                                    Expanded(
+                                      child: Text(
+                                        c['caseType']?['name'] ?? "Report",
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: -0.2,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              _colorBadge(sLabel, sColor),
+                            ],
+                          ),
                           const Spacer(),
-                          _colorBadge(sLabel, sColor),
-                        ]),
-                        const Spacer(),
-                        Text(
-                          c['fullName'] ?? l10n.incidentReported,
-                          style: const TextStyle(
+
+                          // Title / Full Name
+                          Text(
+                            c['fullName'] ?? l10n.incidentReported,
+                            style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
-                              fontSize: 15,
-                              letterSpacing: -0.2),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 6),
-                        Row(children: [
-                          const Icon(Icons.location_on_rounded,
-                              color: Colors.white60, size: 11),
-                          const SizedBox(width: 3),
-                          Expanded(
-                            child: Text(
-                              c['location'] ?? l10n.locationCity,
-                              style: const TextStyle(
-                                  color: Colors.white60, fontSize: 10),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                              fontSize: 16,
+                              letterSpacing: -0.3,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 9, vertical: 4),
-                            decoration: BoxDecoration(
-                                color: _T.green,
-                                borderRadius: BorderRadius.circular(8)),
-                            child: Row(children: [
-                              const Icon(Icons.monetization_on_rounded,
-                                  color: Colors.white, size: 11),
-                              const SizedBox(width: 4),
-                              Text(
-                                l10n.rewardLabel(
-                                    c['reward']?.toString() ?? '0'),
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800),
+                          const SizedBox(height: 6),
+
+                          // Footer Metadata
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.location_on_rounded,
+                                color: Colors.white70,
+                                size: 12,
                               ),
-                            ]),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  c['location'] ?? l10n.locationCity,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: _T.green,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.monetization_on_rounded,
+                                      color: Colors.white,
+                                      size: 12,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      l10n.rewardLabel(
+                                          c['reward']?.toString() ?? '0'),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ]),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ]),
+                  ],
+                ),
               ),
             ),
           );
@@ -838,7 +960,8 @@ class _DashboardContentState extends State<DashboardContent>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    width: 48, height: 48,
+                    width: 48,
+                    height: 48,
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.18),
                       shape: BoxShape.circle,
@@ -902,8 +1025,8 @@ class _DashboardContentState extends State<DashboardContent>
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.18),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-                color: Colors.white.withOpacity(0.28), width: 0.5),
+            border:
+                Border.all(color: Colors.white.withOpacity(0.28), width: 0.5),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(icon, color: Colors.white, size: 10),
@@ -925,17 +1048,14 @@ class _DashboardContentState extends State<DashboardContent>
             BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
         child: Text(txt,
             style: const TextStyle(
-                color: Colors.white,
-                fontSize: 9,
-                fontWeight: FontWeight.w800)),
+                color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
       );
 
   Widget _blob(double size, Color color, double opacity) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color.withOpacity(opacity)));
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+          shape: BoxShape.circle, color: color.withOpacity(opacity)));
 }
 
 // ─── Loading Dots ─────────────────────────────────────────────────────────────
@@ -947,8 +1067,8 @@ class _LoadingDots extends StatefulWidget {
 
 class _LoadingDotsState extends State<_LoadingDots>
     with TickerProviderStateMixin {
-  final List<AnimationController> _ctls  = [];
-  final List<Animation<double>>   _anims = [];
+  final List<AnimationController> _ctls = [];
+  final List<Animation<double>> _anims = [];
 
   @override
   void initState() {
@@ -958,8 +1078,8 @@ class _LoadingDotsState extends State<_LoadingDots>
           vsync: this, duration: const Duration(milliseconds: 600))
         ..repeat(reverse: true);
       _ctls.add(ctrl);
-      _anims.add(Tween<double>(begin: 0.25, end: 1.0).animate(
-          CurvedAnimation(parent: ctrl, curve: Curves.easeInOut)));
+      _anims.add(Tween<double>(begin: 0.25, end: 1.0)
+          .animate(CurvedAnimation(parent: ctrl, curve: Curves.easeInOut)));
       Future.delayed(Duration(milliseconds: i * 180), () {
         // Guard: widget may have been disposed before the delay fires.
         if (mounted) ctrl.forward();
@@ -989,7 +1109,8 @@ class _LoadingDotsState extends State<_LoadingDots>
           animation: _anims[i],
           builder: (_, __) => Container(
             margin: const EdgeInsets.symmetric(horizontal: 4),
-            width: 8, height: 8,
+            width: 8,
+            height: 8,
             decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Colors.white.withOpacity(_anims[i].value)),

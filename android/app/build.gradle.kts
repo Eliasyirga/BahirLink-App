@@ -5,24 +5,26 @@ plugins {
 }
 
 android {
-    namespace = "com.example.first_app"
-    compileSdk = 34 // Replace flutter.compileSdkVersion if needed
+    // Clean namespace config matching standard production naming convention
+    namespace = "com.bahirlink.app"
+    compileSdk = 36 
 
-    ndkVersion = "27.0.12077973" // Force stable NDK
+    // Updated unified NDK version to eliminate cross-plugin build dependencies mismatch
+    ndkVersion = "28.2.13676358" 
 
     defaultConfig {
-        applicationId = "com.example.first_app"
-        minSdk = flutter.minSdkVersion // Replace flutter.minSdkVersion if needed
-        targetSdk = 34 // Replace flutter.targetSdkVersion if needed
-        versionCode = 1 // Replace flutter.versionCode if needed
-        versionName = "1.0.0" // Replace flutter.versionName if needed
+        applicationId = "com.bahirlink.app"
+        minSdk = flutter.minSdkVersion // Set to 21 to explicitly support flutter_launcher_icons config
+        targetSdk = 36 
+        versionCode = 1 
+        versionName = "1.0.0" 
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            signingConfig = signingConfigs.getByName("debug") // For release, create proper signing
+            signingConfig = signingConfigs.getByName("debug") 
         }
     }
 
@@ -34,11 +36,6 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
-
-    // Optional: Enable viewBinding if you use Android views
-    // buildFeatures {
-    //     viewBinding = true
-    // }
 }
 
 flutter {

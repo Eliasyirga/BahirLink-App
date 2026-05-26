@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
@@ -42,6 +43,21 @@ class CallService {
   CallService._();
   static final CallService I = CallService._();
 
+  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
+  static const bool useLocalBackup = false;
+
+  // ─── WebSocket Server URL Router ───────────────────────────────────────────
+  static String get wsServerUrl {
+    if (!useLocalBackup) {
+      // Direct live WebSocket instance URL targeting production containers
+      return "https://bahirlink-backend-1.onrender.com";
+    }
+    if (kIsWeb) return "http://localhost:5000";
+    if (Platform.isAndroid)
+      return "http://10.0.2.2:5000"; // Android Emulator address
+    return "http://localhost:5000"; // iOS Simulator or Desktop
+  }
+
   IO.Socket? _socket;
   IO.Socket? get socket => _socket;
 
@@ -52,12 +68,6 @@ class CallService {
   IncomingCallHandler? onIncomingCall;
 
   bool _connecting = false;
-
-  // FIX #8: _sessionId is now only reset in disconnect() (full logout), NOT in
-  // _destroySocket(). Previously _destroySocket() set _sessionId = 0, which
-  // made isConfigured() return false immediately after socket teardown, allowing
-  // a rapid second call to connect() to race through and create a duplicate
-  // socket while the first was still in the process of being destroyed.
   int _sessionId = 0;
 
   Set<String> _seenInCurrentRegistration = {};
@@ -72,8 +82,13 @@ class CallService {
       .trim();
 
   // ── connect ───────────────────────────────────────────────────────────────
-  void connect({required String apiBaseUrl, required String token}) {
+  void connect({String? apiBaseUrl, required String token}) {
     final clean = _cleanToken(token);
+
+    // Fall back to our centralized wsServerUrl if no custom base URL parameter is supplied
+    final targetUrl = (apiBaseUrl != null && apiBaseUrl.isNotEmpty)
+        ? apiBaseUrl
+        : wsServerUrl;
 
     if (isConnected) {
       debugPrint('📞 CallService.connect() — already connected, skipping');
@@ -88,20 +103,28 @@ class CallService {
     }
 
     _connecting = true;
-    _apiBaseUrl = apiBaseUrl;
+    _apiBaseUrl = targetUrl;
     _cleanedToken = clean;
     _sessionId++;
 
-    debugPrint('📞 CallService.connect() → $apiBaseUrl  [session $_sessionId]');
+    debugPrint('📞 CallService.connect() → $targetUrl [session $_sessionId]');
 
     _destroySocket();
 
     final s = IO.io(
-      apiBaseUrl,
+      targetUrl,
       IO.OptionBuilder()
-          .setTransports(['websocket'])
+          .setTransports(
+              ['websocket']) // Force pure WebSockets over slow long-polling
           .setAuth({'token': 'Bearer $clean'})
           .enableAutoConnect()
+          // ✅ FIX: Moved timeout configurations here to satisfy compiler restrictions on socket_io_client v2.x
+          .setExtraHeaders({
+            'pingTimeout': 30000,
+            'pingInterval': 10000,
+            'connectionTimeout':
+                60000, // 60s timeout accommodates Render spin-ups safely
+          })
           .build(),
     );
 
@@ -119,18 +142,19 @@ class CallService {
     });
 
     s.onDisconnect((reason) {
+      _connecting = false;
       debugPrint('📞 CallService disconnected: $reason');
     });
   }
 
   // ── ensureConnected ───────────────────────────────────────────────────────
   void ensureConnected() {
-    if (_apiBaseUrl == null || _cleanedToken == null) {
+    if (_cleanedToken == null) {
       debugPrint('📞 ensureConnected: no credentials — call connect() first');
       return;
     }
     if (_socket == null) {
-      connect(apiBaseUrl: _apiBaseUrl!, token: _cleanedToken!);
+      connect(apiBaseUrl: _apiBaseUrl, token: _cleanedToken!);
       return;
     }
     if (isConnected) return;
@@ -144,9 +168,6 @@ class CallService {
   // ── disconnect ────────────────────────────────────────────────────────────
   void disconnect() {
     _destroySocket();
-    // FIX #8: _sessionId reset belongs here (full logout), not in _destroySocket.
-    // This way intermediate teardowns (e.g. during socket recreation) don't
-    // accidentally clear the "configured" flag and open the door to duplicates.
     _sessionId = 0;
     pendingInvite = null;
     _seenInCurrentRegistration = {};
@@ -169,7 +190,6 @@ class CallService {
     } catch (_) {}
     _socket = null;
     _connecting = false;
-    // NOTE: _sessionId intentionally NOT reset here. See FIX #8 above.
   }
 
   void _registerIncomingListener(IO.Socket s) {
@@ -202,8 +222,8 @@ class CallService {
       _seenInCurrentRegistration.add(invite.fingerprint);
       pendingInvite = invite;
 
-      debugPrint('📞 onIncomingCall is '
-          '${onIncomingCall == null ? "NULL ❌" : "set ✅"}');
+      debugPrint(
+          '📞 onIncomingCall is ${onIncomingCall == null ? "NULL ❌" : "set ✅"}');
       debugPrint('📞 call:incoming dispatching: $invite');
 
       onIncomingCall?.call(invite);

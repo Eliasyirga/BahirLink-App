@@ -1,6 +1,6 @@
-import 'dart:typed_data';
-import 'dart:io' show File, Platform;
 import 'dart:convert';
+import 'dart:io' show File, Platform, SocketException;
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart'; // for Localizations
 import 'package:http/http.dart' as http;
@@ -9,43 +9,42 @@ import 'package:path/path.dart' as path;
 import 'package:mime/mime.dart';
 
 class EmergencyService {
-  // ─── Base URL ──────────────────────────────────────────────────────────────
+  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
+  static const bool useLocalBackup = false;
+
+  // 🌍 Dynamic Origin URL Router
   static String get baseUrl {
-    if (kIsWeb) return "http://localhost:5000/api";
-    if (Platform.isAndroid) return "http://10.0.2.2:5000/api";
-    return "http://localhost:5000/api";
+    if (!useLocalBackup) {
+      return "https://bahirlink-backend-1.onrender.com/api";
+    }
+    if (kIsWeb) {
+      return "http://localhost:5000/api";
+    } else if (Platform.isAndroid) {
+      return "http://10.0.2.2:5000/api"; // Android Emulator address
+    } else {
+      return "http://localhost:5000/api"; // iOS Simulator or Desktop
+    }
   }
 
   static String get _guestEndpoint => "$baseUrl/emergencies/guests";
   static String get _userEndpoint => "$baseUrl/emergencies/user";
 
   // ─── Shared headers ────────────────────────────────────────────────────────
-  /// Pass Accept-Language so the backend's getLang() returns the correct locale
-  /// and autoTranslate / localize work properly.
-  ///
-  /// The backend's autoTranslate() will detect the language of the submitted
-  /// text (Amharic or English) and always persist BOTH { en, am } in the DB.
   static Map<String, String> _headers(String lang) => {
         'Accept': 'application/json',
-        'Accept-Language': lang,
+        'Accept-Language':
+            lang, // Handles Amharic / English auto-translation mappings
       };
 
   // ─── Locale helper ─────────────────────────────────────────────────────────
-  /// Resolves the current app locale to a BCP-47 language tag ('en' or 'am').
-  /// Falls back to 'en' when no BuildContext is available (e.g. background calls).
   static String resolvelang([BuildContext? context]) {
     if (context == null) return 'en';
     final locale = Localizations.localeOf(context);
-    // Amharic locale code is 'am'; everything else defaults to English.
     return locale.languageCode == 'am' ? 'am' : 'en';
   }
 
   // ══════════════════════════════════════════════════════════════════════════
   // CREATE GUEST EMERGENCY
-  //
-  // Pass [lang] as the current app locale ('en' or 'am').
-  // The backend will detect the actual language of [subdivision] / [description]
-  // and store both English and Amharic versions regardless of which was typed.
   // ══════════════════════════════════════════════════════════════════════════
   static Future<Map<String, dynamic>> createGuestEmergency({
     required String contactNo,
@@ -69,9 +68,6 @@ class EmergencyService {
       final request = http.MultipartRequest('POST', uri);
       request.headers.addAll(_headers(lang));
 
-      // Plain string fields are sent as-is.
-      // The backend's autoTranslate() detects whether the text is Amharic or
-      // English, then saves { en: "...", am: "..." } to the JSONB column.
       request.fields.addAll({
         "contactNo": contactNo,
         "kebele": kebele,
@@ -89,6 +85,11 @@ class EmergencyService {
       await _attachMedia(request, mediaBytes, mediaFile, mediaName);
 
       return await _send(request);
+    } on SocketException {
+      return {
+        "success": false,
+        "message": "Server unreachable. Check connection."
+      };
     } catch (e) {
       debugPrint("createGuestEmergency error: $e");
       return {"success": false, "message": "Connection Error"};
@@ -97,9 +98,6 @@ class EmergencyService {
 
   // ══════════════════════════════════════════════════════════════════════════
   // CREATE USER EMERGENCY
-  //
-  // Pass [lang] as the current app locale ('en' or 'am').
-  // Same bidirectional translation logic applies on the backend.
   // ══════════════════════════════════════════════════════════════════════════
   static Future<Map<String, dynamic>> createUserEmergency({
     required String authToken,
@@ -140,6 +138,11 @@ class EmergencyService {
       await _attachMedia(request, mediaBytes, mediaFile, mediaName);
 
       return await _send(request);
+    } on SocketException {
+      return {
+        "success": false,
+        "message": "Server unreachable. Check connection."
+      };
     } catch (e) {
       debugPrint("createUserEmergency error: $e");
       return {"success": false, "message": "Connection Error"};
@@ -158,7 +161,9 @@ class EmergencyService {
       final uri = Uri.parse("$baseUrl/emergencies/$userOrGuestId")
           .replace(queryParameters: {'isGuest': isGuest.toString()});
 
-      final response = await http.get(uri, headers: _headers(lang));
+      final response = await http
+          .get(uri, headers: _headers(lang))
+          .timeout(const Duration(seconds: 30));
       return _parseResponse(response);
     } catch (e) {
       debugPrint("getEmergencies error: $e");
@@ -175,7 +180,9 @@ class EmergencyService {
   }) async {
     try {
       final uri = Uri.parse("$baseUrl/emergencies/$id");
-      final response = await http.get(uri, headers: _headers(lang));
+      final response = await http
+          .get(uri, headers: _headers(lang))
+          .timeout(const Duration(seconds: 30));
       return _parseResponse(response);
     } catch (e) {
       debugPrint("getEmergencyById error: $e");
@@ -192,7 +199,9 @@ class EmergencyService {
   }) async {
     try {
       final uri = Uri.parse("$baseUrl/emergencies/device/$deviceId");
-      final response = await http.get(uri, headers: _headers(lang));
+      final response = await http
+          .get(uri, headers: _headers(lang))
+          .timeout(const Duration(seconds: 30));
       return _parseResponse(response);
     } catch (e) {
       debugPrint("getEmergenciesByDeviceId error: $e");
@@ -212,18 +221,20 @@ class EmergencyService {
   }) async {
     try {
       final uri = Uri.parse("$baseUrl/emergencies/$emergencyId/status");
-      final response = await http.patch(
-        uri,
-        headers: {
-          ..._headers(lang),
-          'Authorization': 'Bearer $authToken',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          "status": status,
-          if (report != null) "report": report,
-        }),
-      );
+      final response = await http
+          .patch(
+            uri,
+            headers: {
+              ..._headers(lang),
+              'Authorization': 'Bearer $authToken',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              "status": status,
+              if (report != null) "report": report,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
       return _parseResponse(response);
     } catch (e) {
       debugPrint("updateEmergencyStatus error: $e");
@@ -251,7 +262,7 @@ class EmergencyService {
       final response = await http.delete(uri, headers: {
         ..._headers(lang),
         'Authorization': 'Bearer $authToken',
-      });
+      }).timeout(const Duration(seconds: 30));
       return _parseResponse(response);
     } catch (e) {
       debugPrint("deleteEmergency error: $e");
@@ -263,7 +274,6 @@ class EmergencyService {
   // PRIVATE HELPERS
   // ══════════════════════════════════════════════════════════════════════════
 
-  /// Attach a media file to a multipart request (web bytes or mobile File).
   static Future<void> _attachMedia(
     http.MultipartRequest request,
     Uint8List? mediaBytes,
@@ -307,16 +317,14 @@ class EmergencyService {
     ));
   }
 
-  /// Send a MultipartRequest and normalise the response into
-  /// { success, data/message }.
   static Future<Map<String, dynamic>> _send(
       http.MultipartRequest request) async {
-    final streamed = await request.send().timeout(const Duration(seconds: 30));
+    // 60 seconds allocated to allow free-tier spin-up alongside media stream processing
+    final streamed = await request.send().timeout(const Duration(seconds: 60));
     final response = await http.Response.fromStream(streamed);
     return _parseResponse(response);
   }
 
-  /// Parse an http.Response into a consistent { success, data/message } map.
   static Map<String, dynamic> _parseResponse(http.Response response) {
     try {
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
@@ -328,8 +336,7 @@ class EmergencyService {
       }
       return {
         "success": false,
-        "message":
-            decoded['message'] ?? "Server error ${response.statusCode}",
+        "message": decoded['message'] ?? "Server error ${response.statusCode}",
       };
     } catch (_) {
       return {
