@@ -7,17 +7,17 @@ import '../../services/case_report_service.dart';
 
 // ─── Design Tokens (mirrored from DashboardContent) ──────────────────────────
 class _T {
-  static const primary    = Color(0xFF1A3BAA);
+  static const primary = Color(0xFF1A3BAA);
   static const primaryMid = Color(0xFF2252CC);
-  static const accent     = Color(0xFF4B83F0);
+  static const accent = Color(0xFF4B83F0);
   static const accentSoft = Color(0xFFD6E4FF);
-  static const surface    = Color(0xFFFFFFFF);
-  static const bg         = Color(0xFFF2F6FF);
-  static const textDark   = Color(0xFF0C1A45);
-  static const textMid    = Color(0xFF5569A0);
-  static const divider    = Color(0xFFE5ECFF);
-  static const green      = Color(0xFF0DB87A);
-  static const red        = Color(0xFFEF4444);
+  static const surface = Color(0xFFFFFFFF);
+  static const bg = Color(0xFFF2F6FF);
+  static const textDark = Color(0xFF0C1A45);
+  static const textMid = Color(0xFF5569A0);
+  static const divider = Color(0xFFE5ECFF);
+  static const green = Color(0xFF0DB87A);
+  static const red = Color(0xFFEF4444);
 }
 
 class CaseReportPage extends StatefulWidget {
@@ -30,8 +30,8 @@ class CaseReportPage extends StatefulWidget {
 
 class _CaseReportPageState extends State<CaseReportPage>
     with TickerProviderStateMixin {
-
   final _descriptionController = TextEditingController();
+  final _phoneController = TextEditingController(); // Added
   final KebeleService _kebeleService = KebeleService();
   final CaseReportService _reportService = CaseReportService();
 
@@ -42,9 +42,9 @@ class _CaseReportPageState extends State<CaseReportPage>
   DateTime? _selectedDateTime;
   int? _selectedKebeleId;
 
-  late final AnimationController _fadeCtrl =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 700))
-        ..forward();
+  late final AnimationController _fadeCtrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 700))
+    ..forward();
   late final Animation<double> _fadeAnim =
       CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
 
@@ -57,6 +57,7 @@ class _CaseReportPageState extends State<CaseReportPage>
   @override
   void dispose() {
     _descriptionController.dispose();
+    _phoneController.dispose(); // Added
     _fadeCtrl.dispose();
     super.dispose();
   }
@@ -65,11 +66,16 @@ class _CaseReportPageState extends State<CaseReportPage>
   Future<void> _loadKebeles() async {
     try {
       final data = await _kebeleService.getAllKebeles();
-      if (mounted) setState(() { _kebeles = data; _isLoadingKebeles = false; });
+      if (mounted)
+        setState(() {
+          _kebeles = data;
+          _isLoadingKebeles = false;
+        });
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingKebeles = false);
-        _notify(AppLocalizations.of(context)!.caseReportFetchLocationError, isError: true);
+        _notify(AppLocalizations.of(context)!.caseReportFetchLocationError,
+            isError: true);
       }
     }
   }
@@ -99,8 +105,8 @@ class _CaseReportPageState extends State<CaseReportPage>
       ),
     );
     if (time == null) return;
-    setState(() => _selectedDateTime = DateTime(
-        date.year, date.month, date.day, time.hour, time.minute));
+    setState(() => _selectedDateTime =
+        DateTime(date.year, date.month, date.day, time.hour, time.minute));
   }
 
   Future<void> _handleSubmission() async {
@@ -117,6 +123,7 @@ class _CaseReportPageState extends State<CaseReportPage>
       "kebeleId": _selectedKebeleId,
       "spottedAt": _selectedDateTime!.toIso8601String(),
       "description": _descriptionController.text,
+      "phoneNumber": _phoneController.text.trim(), // Added
       "reporterId": null,
     };
 
@@ -135,8 +142,8 @@ class _CaseReportPageState extends State<CaseReportPage>
             behavior: SnackBarBehavior.floating,
             backgroundColor: _T.green,
             margin: const EdgeInsets.all(20),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ));
         });
       } else {
@@ -187,7 +194,8 @@ class _CaseReportPageState extends State<CaseReportPage>
                             _sectionLabel(l10n.caseReportSectionLocation,
                                 Icons.share_location_rounded),
                             const SizedBox(height: 10),
-                            _buildCard(child: DropdownButtonFormField<int>(
+                            _buildCard(
+                                child: DropdownButtonFormField<int>(
                               value: _selectedKebeleId,
                               dropdownColor: _T.surface,
                               style: const TextStyle(
@@ -195,7 +203,8 @@ class _CaseReportPageState extends State<CaseReportPage>
                               items: _kebeles
                                   .map((k) => DropdownMenuItem<int>(
                                         value: k['id'],
-                                        child: Text(k['name'] ?? l10n.statusUnknown,
+                                        child: Text(
+                                            k['name'] ?? l10n.statusUnknown,
                                             style: const TextStyle(
                                                 fontSize: 14,
                                                 color: _T.textDark)),
@@ -203,13 +212,12 @@ class _CaseReportPageState extends State<CaseReportPage>
                                   .toList(),
                               onChanged: (val) =>
                                   setState(() => _selectedKebeleId = val),
-                              decoration: _inputDeco(
-                                  l10n.reportSelectKebele,
+                              decoration: _inputDeco(l10n.reportSelectKebele,
                                   Icons.location_on_rounded),
                             )),
                             const SizedBox(height: 20),
-                            _sectionLabel(
-                                l10n.caseReportSectionTime, Icons.timer_outlined),
+                            _sectionLabel(l10n.caseReportSectionTime,
+                                Icons.timer_outlined),
                             const SizedBox(height: 10),
                             _buildCard(
                               child: ListTile(
@@ -217,13 +225,16 @@ class _CaseReportPageState extends State<CaseReportPage>
                                 contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 16, vertical: 4),
                                 leading: Container(
-                                  width: 38, height: 38,
+                                  width: 38,
+                                  height: 38,
                                   decoration: BoxDecoration(
                                     color: _T.accentSoft,
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: const Icon(Icons.calendar_month_rounded,
-                                      color: _T.primary, size: 18),
+                                  child: const Icon(
+                                      Icons.calendar_month_rounded,
+                                      color: _T.primary,
+                                      size: 18),
                                 ),
                                 title: Text(
                                   _selectedDateTime == null
@@ -242,12 +253,31 @@ class _CaseReportPageState extends State<CaseReportPage>
                                 ),
                                 trailing: const Icon(
                                     Icons.chevron_right_rounded,
-                                    color: _T.textMid, size: 20),
+                                    color: _T.textMid,
+                                    size: 20),
                               ),
                             ),
                             const SizedBox(height: 20),
+                            // PHONE FIELD ADDED HERE
                             _sectionLabel(
-                                l10n.caseReportSectionDescription, Icons.visibility_outlined),
+                                "Phone Number", Icons.phone_android_rounded),
+                            const SizedBox(height: 10),
+                            _buildCard(
+                              child: TextField(
+                                controller: _phoneController,
+                                keyboardType: TextInputType.phone,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly
+                                ],
+                                style: const TextStyle(
+                                    fontSize: 14, color: _T.textDark),
+                                decoration: _inputDeco("Enter contact number",
+                                    Icons.phone_rounded),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            _sectionLabel(l10n.caseReportSectionDescription,
+                                Icons.visibility_outlined),
                             const SizedBox(height: 10),
                             _buildCard(
                               child: TextField(
@@ -274,7 +304,7 @@ class _CaseReportPageState extends State<CaseReportPage>
     );
   }
 
-  // ── Custom Header (matches dashboard header style) ─────────────────────────
+  // ── Custom Header ─────────────────────────────────────────────────────────
   Widget _buildHeader(AppLocalizations l10n) {
     return Container(
       decoration: const BoxDecoration(
@@ -297,15 +327,14 @@ class _CaseReportPageState extends State<CaseReportPage>
           child: Padding(
             padding: const EdgeInsets.fromLTRB(8, 10, 20, 22),
             child: Row(children: [
-              // Back button
               IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded,
                     color: Colors.white, size: 18),
                 onPressed: () => Navigator.pop(context),
               ),
-              // Icon + title
               Container(
-                width: 36, height: 36,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(10),
@@ -364,19 +393,21 @@ class _CaseReportPageState extends State<CaseReportPage>
         Positioned(top: -18, right: -18, child: _blob(90, Colors.white, 0.06)),
         Row(children: [
           Container(
-            width: 46, height: 46,
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.15),
               shape: BoxShape.circle,
-              border: Border.all(
-                  color: Colors.white.withOpacity(0.25), width: 1.5),
+              border:
+                  Border.all(color: Colors.white.withOpacity(0.25), width: 1.5),
             ),
             child: const Icon(Icons.person_search_rounded,
                 color: Colors.white, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(l10n.caseReportReportingTarget,
                   style: TextStyle(
                       color: Colors.white.withOpacity(0.55),
@@ -385,7 +416,8 @@ class _CaseReportPageState extends State<CaseReportPage>
                       letterSpacing: 1.0)),
               const SizedBox(height: 4),
               Text(
-                widget.caseData['fullName']?.toString() ?? l10n.caseReportUnknownEntity,
+                widget.caseData['fullName']?.toString() ??
+                    l10n.caseReportUnknownEntity,
                 style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -394,15 +426,13 @@ class _CaseReportPageState extends State<CaseReportPage>
               ),
             ]),
           ),
-          // Status badge reused from dashboard
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.15),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                  color: Colors.white.withOpacity(0.25), width: 1),
+              border:
+                  Border.all(color: Colors.white.withOpacity(0.25), width: 1),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.circle, color: Color(0xFFFFD700), size: 7),
@@ -430,19 +460,21 @@ class _CaseReportPageState extends State<CaseReportPage>
           style: ElevatedButton.styleFrom(
             backgroundColor: _T.primary,
             disabledBackgroundColor: _T.primary.withOpacity(0.5),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             elevation: 0,
           ),
           child: _isSubmitting
               ? const SizedBox(
-                  width: 20, height: 20,
+                  width: 20,
+                  height: 20,
                   child: CircularProgressIndicator(
                       color: Colors.white, strokeWidth: 2))
               : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.send_rounded, color: Colors.white, size: 16),
+                    const Icon(Icons.send_rounded,
+                        color: Colors.white, size: 16),
                     const SizedBox(width: 10),
                     Text(l10n.caseReportSubmitButton,
                         style: const TextStyle(
@@ -456,26 +488,23 @@ class _CaseReportPageState extends State<CaseReportPage>
       ),
       const SizedBox(height: 14),
       Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Icon(Icons.verified_user_outlined,
-            size: 13, color: _T.textMid),
+        const Icon(Icons.verified_user_outlined, size: 13, color: _T.textMid),
         const SizedBox(width: 6),
         Text(l10n.caseReportEncryptedProtocol,
             style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: _T.textMid)),
+                fontSize: 11, fontWeight: FontWeight.w600, color: _T.textMid)),
       ]),
     ]);
   }
 
-  // ── Section Label (matches dashboard _sectionLabel) ───────────────────────
+  // ── Section Label ───────────────────────
   Widget _sectionLabel(String title, IconData icon) {
     return Row(children: [
       Container(
-        width: 30, height: 30,
+        width: 30,
+        height: 30,
         decoration: BoxDecoration(
-            color: _T.accentSoft,
-            borderRadius: BorderRadius.circular(8)),
+            color: _T.accentSoft, borderRadius: BorderRadius.circular(8)),
         child: Icon(icon, color: _T.primary, size: 15),
       ),
       const SizedBox(width: 9),
@@ -507,18 +536,17 @@ class _CaseReportPageState extends State<CaseReportPage>
   // ── Input decoration ───────────────────────────────────────────────────────
   InputDecoration _inputDeco(String hint, IconData icon) => InputDecoration(
         hintText: hint,
-        hintStyle:
-            const TextStyle(color: _T.textMid, fontSize: 13),
+        hintStyle: const TextStyle(color: _T.textMid, fontSize: 13),
         prefixIcon: Icon(icon, color: _T.primary, size: 20),
         border: InputBorder.none,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       );
 
-  // ── Blob (identical to dashboard) ─────────────────────────────────────────
+  // ── Blob ─────────────────────────────────────────────────────────
   Widget _blob(double size, Color color, double opacity) => Container(
-        width: size, height: size,
-        decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color.withOpacity(opacity)));
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+          shape: BoxShape.circle, color: color.withOpacity(opacity)));
 }

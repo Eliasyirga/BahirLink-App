@@ -46,22 +46,19 @@ class CallService {
   // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
   static const bool useLocalBackup = false;
 
-  // ─── WebSocket Server URL Router ───────────────────────────────────────────
   static String get wsServerUrl {
     if (!useLocalBackup) {
-      // Direct live WebSocket instance URL targeting production containers
       return "https://bahirlink-backend-1.onrender.com";
     }
+    // ✅ Platform.isAndroid crashes on Web — always check kIsWeb first
     if (kIsWeb) return "http://localhost:5000";
-    if (Platform.isAndroid)
-      return "http://10.0.2.2:5000"; // Android Emulator address
-    return "http://localhost:5000"; // iOS Simulator or Desktop
+    if (Platform.isAndroid) return "http://10.0.2.2:5000";
+    return "http://localhost:5000";
   }
 
   IO.Socket? _socket;
   IO.Socket? get socket => _socket;
 
-  String? _apiBaseUrl;
   String? _cleanedToken;
 
   CallInvite? pendingInvite;
@@ -72,23 +69,16 @@ class CallService {
 
   Set<String> _seenInCurrentRegistration = {};
 
-  // ── Public getters ────────────────────────────────────────────────────────
   bool get isConnected => _socket?.connected == true;
   bool get isConfigured => _sessionId > 0;
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
   String _cleanToken(String token) => token
       .replaceFirst(RegExp(r'^Bearer\s+', caseSensitive: false), '')
       .trim();
 
-  // ── connect ───────────────────────────────────────────────────────────────
   void connect({String? apiBaseUrl, required String token}) {
     final clean = _cleanToken(token);
-
-    // Fall back to our centralized wsServerUrl if no custom base URL parameter is supplied
-    final targetUrl = (apiBaseUrl != null && apiBaseUrl.isNotEmpty)
-        ? apiBaseUrl
-        : wsServerUrl;
+    final targetUrl = wsServerUrl;
 
     if (isConnected) {
       debugPrint('📞 CallService.connect() — already connected, skipping');
@@ -103,7 +93,6 @@ class CallService {
     }
 
     _connecting = true;
-    _apiBaseUrl = targetUrl;
     _cleanedToken = clean;
     _sessionId++;
 
@@ -114,16 +103,13 @@ class CallService {
     final s = IO.io(
       targetUrl,
       IO.OptionBuilder()
-          .setTransports(
-              ['websocket']) // Force pure WebSockets over slow long-polling
+          .setTransports(['websocket'])
           .setAuth({'token': 'Bearer $clean'})
           .enableAutoConnect()
-          // ✅ FIX: Moved timeout configurations here to satisfy compiler restrictions on socket_io_client v2.x
           .setExtraHeaders({
             'pingTimeout': 30000,
             'pingInterval': 10000,
-            'connectionTimeout':
-                60000, // 60s timeout accommodates Render spin-ups safely
+            'connectionTimeout': 60000,
           })
           .build(),
     );
@@ -147,14 +133,13 @@ class CallService {
     });
   }
 
-  // ── ensureConnected ───────────────────────────────────────────────────────
   void ensureConnected() {
     if (_cleanedToken == null) {
       debugPrint('📞 ensureConnected: no credentials — call connect() first');
       return;
     }
     if (_socket == null) {
-      connect(apiBaseUrl: _apiBaseUrl, token: _cleanedToken!);
+      connect(token: _cleanedToken!);
       return;
     }
     if (isConnected) return;
@@ -165,7 +150,6 @@ class CallService {
     }
   }
 
-  // ── disconnect ────────────────────────────────────────────────────────────
   void disconnect() {
     _destroySocket();
     _sessionId = 0;
@@ -174,14 +158,12 @@ class CallService {
     debugPrint('📞 CallService disconnected (logout)');
   }
 
-  // ── clearCall ─────────────────────────────────────────────────────────────
   void clearCall(int emergencyId) {
     _seenInCurrentRegistration
         .removeWhere((fp) => fp.startsWith('$emergencyId|'));
     pendingInvite = null;
   }
 
-  // ── Private ───────────────────────────────────────────────────────────────
   void _destroySocket() {
     try {
       _socket?.off('call:incoming');
@@ -230,7 +212,6 @@ class CallService {
     });
   }
 
-  // ── Signalling ────────────────────────────────────────────────────────────
   void joinCallRoom(int emergencyId) {
     debugPrint(
         '📞 joinCallRoom($emergencyId) — connected: ${_socket?.connected}');
