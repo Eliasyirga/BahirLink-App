@@ -29,7 +29,7 @@ include(":app")
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    // Upgraded AGP to 8.6.0 to support modern plugin architectures and eliminate warnings
-    id("com.android.application") version "8.6.0" apply false
+    // AGP 8.13.1 with Gradle 9.1.0
+    id("com.android.application") version "8.13.1" apply false
     id("org.jetbrains.kotlin.android") version "2.2.0" apply false
 }
