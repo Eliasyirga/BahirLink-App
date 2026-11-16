@@ -443,6 +443,7 @@ class _ReportsPageState extends State<ReportsPage>
               ),
             ),
           );
+          if (!mounted) return;
           if (result is String) {
             setState(() => _emergencies.removeWhere(
                 (item) => (item['id'] ?? item['_id']).toString() == result));

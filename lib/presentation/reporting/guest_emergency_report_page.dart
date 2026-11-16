@@ -133,7 +133,7 @@ class _GuestEmergencyReportPageState extends State<GuestEmergencyReportPage> {
       context: context,
       initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(() {
         _selectedTime = DateTime(
             now.year, now.month, now.day, picked.hour, picked.minute);
@@ -364,7 +364,7 @@ class _GuestEmergencyReportPageState extends State<GuestEmergencyReportPage> {
               context,
               MaterialPageRoute(builder: (_) => const MapPickerPage()),
             );
-            if (picked != null) {
+            if (picked != null && mounted) {
               setState(() {
                 _latitude  = picked.latitude;
                 _longitude = picked.longitude;

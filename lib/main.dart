@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'presentation/home/home_page.dart';
 import 'presentation/call/call_page.dart';
 import 'services/call_services.dart';
+import 'services/token_store.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> appMessengerKey =
@@ -48,8 +49,7 @@ class _MyAppState extends State<MyApp> {
   Future<void> _coldStartConnect() async {
     await Future<void>.delayed(const Duration(milliseconds: 100));
     if (CallService.I.isConnected || CallService.I.isConfigured) return;
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('accessToken') ?? prefs.getString('token');
+    final token = await TokenStore.readAccessToken();
     if (token != null && token.isNotEmpty) {
       // CallService.wsServerUrl handles local vs production internally
       CallService.I.connect(token: token);

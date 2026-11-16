@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/api_config.dart';
 
 class AppConfigService {
   static const String _backendBaseUrlKey = 'backendBaseUrl';
@@ -7,19 +8,37 @@ class AppConfigService {
   static const String _defaultSourceLangKey = 'defaultSourceLanguage';
   static const String _defaultTargetLangKey = 'defaultTargetLanguage';
 
-  static const String defaultBackendBaseUrl = 'http://localhost:5000';
+  static const String defaultBackendBaseUrl = ApiConfig.baseUrl;
   static const String defaultTranslationPath = '/api/translation/gemini';
-  static const String defaultGeminiModel = 'gemini-1.5-flash';
+
+  /// Empty = let the backend pick its configured Gemini model.
+  static const String defaultGeminiModel = '';
   static const String defaultSourceLanguage = 'auto';
   static const String defaultTargetLanguage = 'en';
 
+  /// `ApiConfig.baseUrl + '/api/translation/gemini'` unless overridden.
+  static String get defaultTranslationEndpoint =>
+      '$defaultBackendBaseUrl$defaultTranslationPath';
+
   static Future<AppConfig> load() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // Older builds defaulted to (and could persist) a localhost:5000 URL,
+    // which never works on a device. Drop such stale overrides so the
+    // compile-time ApiConfig.baseUrl wins.
+    var backendBaseUrl = prefs.getString(_backendBaseUrlKey)?.trim();
+    if (backendBaseUrl != null &&
+        (backendBaseUrl.isEmpty || _isStaleLocalOverride(backendBaseUrl))) {
+      await prefs.remove(_backendBaseUrlKey);
+      backendBaseUrl = null;
+    }
+
+    final path = prefs.getString(_translationPathKey)?.trim();
+
     return AppConfig(
-      backendBaseUrl:
-          prefs.getString(_backendBaseUrlKey) ?? defaultBackendBaseUrl,
+      backendBaseUrl: backendBaseUrl ?? defaultBackendBaseUrl,
       geminiTranslationPath:
-          prefs.getString(_translationPathKey) ?? defaultTranslationPath,
+          (path == null || path.isEmpty) ? defaultTranslationPath : path,
       geminiModel: prefs.getString(_geminiModelKey) ?? defaultGeminiModel,
       defaultSourceLanguage:
           prefs.getString(_defaultSourceLangKey) ?? defaultSourceLanguage,
@@ -35,6 +54,22 @@ class AppConfigService {
     await prefs.setString(_geminiModelKey, config.geminiModel);
     await prefs.setString(_defaultSourceLangKey, config.defaultSourceLanguage);
     await prefs.setString(_defaultTargetLangKey, config.defaultTargetLanguage);
+  }
+
+  /// True for a loopback / emulator-host URL when the build itself is not
+  /// pointed at one (i.e. a leftover from an older install, not a deliberate
+  /// local-dev `--dart-define=API_BASE_URL=...`).
+  static bool _isStaleLocalOverride(String url) {
+    if (_isLocalHost(defaultBackendBaseUrl)) return false;
+    return _isLocalHost(url);
+  }
+
+  static bool _isLocalHost(String url) {
+    final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+    return host == 'localhost' ||
+        host == '127.0.0.1' ||
+        host == '10.0.2.2' ||
+        host == '0.0.0.0';
   }
 }
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:first_app/l10n/app_localizations.dart';
 import '../../core/widgets/bottom_navbar.dart';
 import '../../services/call_services.dart';
@@ -8,8 +7,8 @@ import '../reports/service_report_page.dart';
 import '../profile/profile_page.dart';
 import '../reports/reports_page.dart';
 import '../settings/settings_page.dart';
-
-const _kApiBaseUrl = 'http://localhost:5000';
+import '../../config/api_config.dart';
+import '../../services/token_store.dart';
 
 class DashboardPage extends StatefulWidget {
   final String userId;
@@ -32,7 +31,7 @@ class _DashboardPageState extends State<DashboardPage> {
   void initState() {
     super.initState();
     // FIX #9: _ensureCallServiceConnected is called synchronously from
-    // initState. The method itself is async only for the SharedPreferences
+    // initState. The method itself is async only for the TokenStore
     // fallback path (cold start). The two fast paths — isConnected and
     // widget.token — are synchronous and complete before the first frame,
     // so onIncomingCall (wired by _MyAppState) is guaranteed to be set
@@ -44,7 +43,7 @@ class _DashboardPageState extends State<DashboardPage> {
     // during the async gap, the call would be silently dropped.
     //
     // Nothing here needs to await the fallback path either — if we reach
-    // SharedPreferences it means no token is in memory, so no call can
+    // TokenStore it means no token is in memory, so no call can
     // arrive before the socket finishes connecting anyway.
     _ensureCallServiceConnected();
   }
@@ -75,7 +74,7 @@ class _DashboardPageState extends State<DashboardPage> {
     // as a constructor argument. Use it directly.
     if (widget.token.isNotEmpty) {
       CallService.I.connect(
-        apiBaseUrl: _kApiBaseUrl,
+        apiBaseUrl: ApiConfig.baseUrl,
         token: widget.token,
       );
       return;
@@ -84,12 +83,10 @@ class _DashboardPageState extends State<DashboardPage> {
     // Fallback — cold start / deep-link: read persisted credentials.
     // By this point onIncomingCall is already set by _MyAppState, so the
     // async gap here is safe.
-    final prefs = await SharedPreferences.getInstance();
-    final storedToken =
-        prefs.getString('accessToken') ?? prefs.getString('token');
+    final storedToken = await TokenStore.readAccessToken();
     if (storedToken != null && storedToken.isNotEmpty) {
       CallService.I.connect(
-        apiBaseUrl: _kApiBaseUrl,
+        apiBaseUrl: ApiConfig.baseUrl,
         token: storedToken,
       );
     }

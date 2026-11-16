@@ -93,6 +93,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     final updatedUser = await UserService.updateProfile(updates);
 
+    if (!mounted) return;
     setState(() => _isSaving = false);
 
     if (updatedUser != null) {

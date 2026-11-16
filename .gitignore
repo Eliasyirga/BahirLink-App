@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Gradle build outputs (should never be committed)
+/android/app/build/
+/android/build/
+
+# Local editor / OS artifacts
+*.code-workspace
+*.lnk

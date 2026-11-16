@@ -1,26 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
 class CaseReportService {
-  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
-  static const bool useLocalBackup = false;
-
   // 🌍 Dynamic URL Routing
-  String get baseUrl {
-    if (!useLocalBackup) {
-      return "https://bahirlink-backend-1.onrender.com/api/caseReports";
-    }
-
-    if (kIsWeb) {
-      return "http://localhost:5000/api/caseReports";
-    } else if (Platform.isAndroid) {
-      return "http://10.0.2.2:5000/api/caseReports";
-    } else {
-      return "http://localhost:5000/api/caseReports";
-    }
-  }
+  String get baseUrl => "${ApiConfig.baseUrl}/api/caseReports";
 
   // -------------------- CREATE REPORT --------------------
   Future<bool> createReport(Map<String, dynamic> reportData) async {

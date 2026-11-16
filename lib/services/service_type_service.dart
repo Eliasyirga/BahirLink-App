@@ -3,24 +3,11 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../model/service_type.dart';
+import '../config/api_config.dart';
 
 class ServiceTypeService {
-  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
-  static const bool useLocalBackup = false;
-
   // 🌍 Dynamic Origin URL Router
-  static String get baseUrl {
-    if (!useLocalBackup) {
-      return "https://bahirlink-backend-1.onrender.com/api/serviceType";
-    }
-    if (kIsWeb) {
-      return "http://localhost:5000/api/serviceType";
-    } else if (Platform.isAndroid) {
-      return "http://10.0.2.2:5000/api/serviceType"; // Android Emulator address
-    } else {
-      return "http://localhost:5000/api/serviceType"; // iOS Simulator or Desktop
-    }
-  }
+  static String get baseUrl => "${ApiConfig.baseUrl}/api/serviceType";
 
   // ── FETCH ALL SERVICE TYPES ────────────────────────────────────────────────
   static Future<List<ServiceType>> getAllServiceTypes(

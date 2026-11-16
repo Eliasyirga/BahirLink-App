@@ -15,6 +15,7 @@ import 'package:first_app/presentation/categories/user_category_selection_page.d
 import 'package:first_app/presentation/categories/user_service_category_selection_page.dart';
 import 'package:first_app/presentation/cases/case_detail_page.dart';
 import 'package:first_app/main.dart';
+import '../../config/api_config.dart';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 class _T {
@@ -643,8 +644,6 @@ class _DashboardContentState extends State<DashboardContent>
   }
 
   Widget _buildCaseSlider() {
-    const String baseUrl = "https://bahirlink-backend.onrender.com";
-
     return SizedBox(
       height: 200,
       child: PageView.builder(
@@ -674,7 +673,7 @@ class _DashboardContentState extends State<DashboardContent>
           }
 
           final String mediaUrl = c['mediaUrl'] != null
-              ? "$baseUrl${c['mediaUrl']}"
+              ? ApiConfig.resolveMediaUrl(c['mediaUrl'].toString())
               : "https://via.placeholder.com/400x200/1A3BAA/FFFFFF?text=Report";
 
           return GestureDetector(

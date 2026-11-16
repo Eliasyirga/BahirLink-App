@@ -14,6 +14,7 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../../services/call_services.dart';
 import '../call/call_page.dart';
 import '../../main.dart' show appMessengerKey;
+import '../../config/api_config.dart';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 class _T {
@@ -52,7 +53,7 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
-  static const String _serverUrl = 'http://localhost:5000';
+  static const String _serverUrl = ApiConfig.baseUrl;
 
   bool _disposed = false;
 

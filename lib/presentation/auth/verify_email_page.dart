@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:first_app/services/auth_service.dart';
 import 'login_page.dart';
+
+/// Email verification codes are 6 digits (backend contract).
+const int _kCodeLength = 6;
 
 class VerifyEmailPage extends StatefulWidget {
   final String email;
@@ -50,8 +54,8 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
 
   Future<void> _verifyCode() async {
     final code = _codeController.text.trim();
-    if (code.length != 4) {
-      _showSnackBar('Enter a 4-digit code', Colors.orange);
+    if (code.length != _kCodeLength || int.tryParse(code) == null) {
+      _showSnackBar('Enter the $_kCodeLength-digit code', Colors.orange);
       return;
     }
 
@@ -114,7 +118,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
         ),
         const SizedBox(height: 12),
         Text(
-          "A 4-digit code was sent to\n${widget.email}",
+          "A $_kCodeLength-digit code was sent to\n${widget.email}",
           textAlign: TextAlign.center,
           style: const TextStyle(color: Colors.grey, fontSize: 14),
         ),
@@ -222,7 +226,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
 
   Widget _buildCodeField() {
     return Container(
-      width: 200,
+      width: 280,
       decoration: BoxDecoration(
         color: const Color(0xFFF1F7FF),
         borderRadius: BorderRadius.circular(20),
@@ -230,17 +234,18 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
       child: TextField(
         controller: _codeController,
         keyboardType: TextInputType.number,
-        maxLength: 4,
+        maxLength: _kCodeLength,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         textAlign: TextAlign.center,
         style: const TextStyle(
           fontSize: 28,
           fontWeight: FontWeight.bold,
-          letterSpacing: 15,
+          letterSpacing: 10,
           color: Color(0xFF4A90E2),
         ),
         decoration: const InputDecoration(
-          hintText: "0000",
-          hintStyle: TextStyle(color: Colors.black12, letterSpacing: 15),
+          hintText: "000000",
+          hintStyle: TextStyle(color: Colors.black12, letterSpacing: 10),
           counterText: "",
           border: InputBorder.none,
           contentPadding: EdgeInsets.symmetric(vertical: 16),

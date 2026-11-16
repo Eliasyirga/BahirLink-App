@@ -8,21 +8,12 @@ import 'package:mime/mime.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../model/service_report_model.dart';
+import '../config/api_config.dart';
+import 'token_store.dart';
 
 class UserServiceService {
-  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
-  static const bool useLocalBackup = false;
-
   // ─── Base URL ──────────────────────────────────────────────────────────────
-  static String get baseUrl {
-    if (!useLocalBackup) {
-      return "https://bahirlink-backend-1.onrender.com/api";
-    }
-    if (kIsWeb) return "http://localhost:5000/api";
-    if (Platform.isAndroid)
-      return "http://10.0.2.2:5000/api"; // Android Emulator address
-    return "http://localhost:5000/api"; // iOS Simulator or Desktop
-  }
+  static String get baseUrl => "${ApiConfig.baseUrl}/api";
 
   // ─── Shared headers ────────────────────────────────────────────────────────
   static Map<String, String> _headers(String lang) => {
@@ -51,8 +42,7 @@ class UserServiceService {
     String lang = 'en',
   }) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString("accessToken");
+      final token = await TokenStore.readAccessToken();
 
       if (token == null) {
         debugPrint("❌ UserService Error: Access token missing");

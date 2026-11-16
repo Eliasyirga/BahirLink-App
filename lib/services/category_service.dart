@@ -2,23 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
 class CategoryService {
-  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
-  static const bool useLocalBackup = false;
-
-  static String get baseUrl {
-    if (!useLocalBackup) {
-      return "https://bahirlink-backend-1.onrender.com/api/categories";
-    }
-    if (kIsWeb) {
-      return "http://localhost:5000/api/categories";
-    } else if (Platform.isAndroid) {
-      return "http://10.0.2.2:5000/api/categories";
-    } else {
-      return "http://localhost:5000/api/categories";
-    }
-  }
+  static String get baseUrl => "${ApiConfig.baseUrl}/api/categories";
 
   // ── Name extraction helper ──────────────────────────────────────────────────
   // The backend returns name as { "en": "...", "am": "..." } (parsed object) or

@@ -145,7 +145,7 @@ class _UserServiceReportPageState extends State<UserServiceReportPage> {
       context: context,
       initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(() {
         _selectedTime = DateTime(
             now.year, now.month, now.day, picked.hour, picked.minute);
@@ -371,7 +371,7 @@ class _UserServiceReportPageState extends State<UserServiceReportPage> {
               context,
               MaterialPageRoute(builder: (_) => const MapPickerPage()),
             );
-            if (loc != null) {
+            if (loc != null && mounted) {
               setState(() {
                 _latitude  = loc.latitude;
                 _longitude = loc.longitude;

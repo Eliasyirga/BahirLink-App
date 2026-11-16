@@ -9,6 +9,8 @@ import '../call/call_page.dart';
 import 'forgot_password_page.dart';
 import 'package:first_app/l10n/app_localizations.dart';
 import 'package:first_app/main.dart';
+import '../../config/api_config.dart';
+import '../../services/token_store.dart';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 class _T {
@@ -18,9 +20,6 @@ class _T {
   static const accentSoft = Color(0xFFD6E4FF);
   static const textMid = Color(0xFF5569A0);
 }
-
-// ─── Server base URL ──────────────────────────────────────────────────────────
-const _kApiBaseUrl = 'http://localhost:5000';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -201,17 +200,23 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         _wireIncomingCallHandler();
 
         CallService.I.connect(
-          apiBaseUrl: _kApiBaseUrl,
+          apiBaseUrl: ApiConfig.baseUrl,
           token: token,
         );
 
         // Persist for cold-start reconnect.
+        await TokenStore.saveTokens(accessToken: token);
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('accessToken', token);
-        await prefs.setString('token', token);
         await prefs.setString('userId', userIdRaw);
 
         if (!mounted) return;
+
+        // Signed in with the emailed temporary password → ask the user to
+        // pick a new one before continuing (they may postpone).
+        if (result['mustChangePassword'] == true) {
+          await _promptPasswordChange(_passwordController.text.trim());
+          if (!mounted) return;
+        }
 
         Navigator.pushReplacement(
           context,
@@ -227,6 +232,112 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  // ── Temporary-password flow ─────────────────────────────────────────────────
+  // There is no dedicated change-password screen in the app, so this dialog
+  // calls AuthService.changePassword directly (the temp password is the
+  // current password).
+  Future<void> _promptPasswordChange(String currentPassword) async {
+    final newC = TextEditingController();
+    final confirmC = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool saving = false;
+    String? error;
+
+    final changed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Change your password'),
+          content: Form(
+            key: formKey,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text(
+                'You signed in with a temporary password. Please choose a '
+                'new password now.',
+                style: TextStyle(color: _T.textMid, fontSize: 13),
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: newC,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password'),
+                validator: (v) => (v == null || v.length < 6)
+                    ? 'At least 6 characters'
+                    : null,
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: confirmC,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'Confirm new password'),
+                validator: (v) =>
+                    v != newC.text ? 'Passwords do not match' : null,
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 10),
+                Text(error!,
+                    style:
+                        const TextStyle(color: Color(0xFFEF4444), fontSize: 12)),
+              ],
+            ]),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(ctx, false),
+              child: const Text('Later'),
+            ),
+            TextButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      setDialogState(() {
+                        saving = true;
+                        error = null;
+                      });
+                      final res = await AuthService.changePassword(
+                        currentPassword: currentPassword,
+                        newPassword: newC.text,
+                      );
+                      if (!ctx.mounted) return;
+                      if (res['success'] == true) {
+                        Navigator.pop(ctx, true);
+                      } else {
+                        setDialogState(() {
+                          saving = false;
+                          error = (res['error'] ??
+                                  res['message'] ??
+                                  'Could not change password')
+                              .toString();
+                        });
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Change'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(changed == true
+          ? 'Password changed successfully.'
+          : 'You are using a temporary password. You will be asked to '
+              'change it the next time you sign in with it.'),
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
   void _showError(String message) {

@@ -12,6 +12,7 @@ import '../categories/category_selection_page.dart';
 import '../cases/case_detail_page.dart';
 import 'package:first_app/presentation/auth/signup_page.dart';
 import 'package:first_app/main.dart';
+import '../../config/api_config.dart';
 
 // ─── Design Tokens (identical to user dashboard) ──────────────────────────────
 class _C {
@@ -457,7 +458,7 @@ class _GuestDashboardContentState extends State<GuestDashboardContent>
                 child: Stack(fit: StackFit.expand, children: [
                   Image.network(
                     c['mediaUrl'] != null
-                        ? "http://localhost:5000${c['mediaUrl']}"
+                        ? ApiConfig.resolveMediaUrl(c['mediaUrl'].toString())
                         : "https://via.placeholder.com/400x200/1A3BAA/FFFFFF?text=Report",
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Container(

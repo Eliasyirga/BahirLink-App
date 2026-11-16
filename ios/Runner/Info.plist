@@ -8,9 +8,11 @@
     <string>We need your location to report emergencies accurately</string>
 
     <key>NSCameraUsageDescription</key>
-    <string>Camera is used for emergency video calls with responders.</string>
+    <string>Camera is used to capture photos and videos for emergency reports and identity verification, and for video calls with responders.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Microphone is used for emergency audio/video calls.</string>
+    <string>Microphone is used for emergency audio/video calls and voice/video recordings attached to reports.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Photo library access lets you attach photos to your emergency reports and identity verification.</string>
 
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>

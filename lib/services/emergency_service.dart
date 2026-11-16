@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io' show File, Platform, SocketException;
+import 'dart:io' show File, SocketException;
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart'; // for Localizations
@@ -7,24 +7,11 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:path/path.dart' as path;
 import 'package:mime/mime.dart';
+import '../config/api_config.dart';
 
 class EmergencyService {
-  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
-  static const bool useLocalBackup = false;
-
   // 🌍 Dynamic Origin URL Router
-  static String get baseUrl {
-    if (!useLocalBackup) {
-      return "https://bahirlink-backend-1.onrender.com/api";
-    }
-    if (kIsWeb) {
-      return "http://localhost:5000/api";
-    } else if (Platform.isAndroid) {
-      return "http://10.0.2.2:5000/api"; // Android Emulator address
-    } else {
-      return "http://localhost:5000/api"; // iOS Simulator or Desktop
-    }
-  }
+  static String get baseUrl => "${ApiConfig.baseUrl}/api";
 
   static String get _guestEndpoint => "$baseUrl/emergencies/guests";
   static String get _userEndpoint => "$baseUrl/emergencies/user";

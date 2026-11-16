@@ -166,7 +166,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
       context: context,
       initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(() {
         _selectedTime = DateTime(
             now.year, now.month, now.day, picked.hour, picked.minute);
@@ -437,7 +437,7 @@ class _UserEmergencyReportPageState extends State<UserEmergencyReportPage> {
             );
             // MapPickerPage must return an object with .latitude / .longitude.
             // We store both in state; they travel to the service as named params.
-            if (pickedLocation != null) {
+            if (pickedLocation != null && mounted) {
               setState(() {
                 _latitude  = pickedLocation.latitude;
                 _longitude = pickedLocation.longitude;

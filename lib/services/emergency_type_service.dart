@@ -3,24 +3,11 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../model/emergency_type.dart';
+import '../config/api_config.dart';
 
 class EmergencyTypeService {
-  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
-  static const bool useLocalBackup = false;
-
   // 🌍 Dynamic Origin URL Router
-  static String get baseUrl {
-    if (!useLocalBackup) {
-      return "https://bahirlink-backend-1.onrender.com/api/emergencyType";
-    }
-    if (kIsWeb) {
-      return "http://localhost:5000/api/emergencyType";
-    } else if (Platform.isAndroid) {
-      return "http://10.0.2.2:5000/api/emergencyType"; // Android Emulator address
-    } else {
-      return "http://localhost:5000/api/emergencyType"; // iOS Simulator or Desktop
-    }
-  }
+  static String get baseUrl => "${ApiConfig.baseUrl}/api/emergencyType";
 
   // ── FETCH EMERGENCY TYPES ──────────────────────────────────────────────────
   static Future<List<EmergencyType>> fetchEmergencyTypes(

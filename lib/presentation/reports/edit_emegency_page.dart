@@ -3,16 +3,22 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../config/api_config.dart';
 import '../../services/reports_service.dart';
+import '../../services/token_store.dart';
 
 class EditEmergencyPage extends StatefulWidget {
   final Map<String, dynamic> emergency;
   final String userId;
 
+  /// Access token; falls back to the persisted `accessToken` when null.
+  final String? token;
+
   const EditEmergencyPage({
     super.key,
     required this.emergency,
     required this.userId,
+    this.token,
   });
 
   @override
@@ -75,6 +81,7 @@ class _EditEmergencyPageState extends State<EditEmergencyPage> {
       } else {
         _mediaFile = File(picked.path);
       }
+      if (!mounted) return;
       setState(() {});
     }
   }
@@ -97,21 +104,28 @@ class _EditEmergencyPageState extends State<EditEmergencyPage> {
 
     setState(() => _isSaving = true);
 
-    final updatedData = {
-      "typeName": _typeController.text.trim(),
-      "categoryName": _categoryController.text.trim(),
+    // Only real Emergency model attributes are sent. Type / category / kebele
+    // are foreign keys (emergencyTypeId / categoryId / kebeleId) and are shown
+    // read-only here, so they are not part of this payload.
+    final updatedData = <String, dynamic>{
       "description": _descriptionController.text.trim(),
-      "kebele": _kebeleController.text.trim(),
       "subdivision": _subdivisionController.text.trim(),
       "street": _streetController.text.trim(),
     };
 
     try {
+      String token = widget.token ?? '';
+      if (token.isEmpty) {
+        token = await TokenStore.readAccessToken() ?? '';
+      }
+
       await ReportsService.updateEmergency(
         widget.userId,
-        widget.emergency['id'],
+        widget.emergency['id'].toString(),
         updatedData,
+        token: token,
         file: _mediaFile,
+        webBytes: _webMediaBytes,
       );
 
       if (!mounted) return;
@@ -122,9 +136,12 @@ class _EditEmergencyPageState extends State<EditEmergencyPage> {
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
+      final msg = e is SessionExpiredException
+          ? e.toString()
+          : "Error: ${e.toString().replaceFirst('Exception: ', '')}";
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      ).showSnackBar(SnackBar(content: Text(msg)));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -168,8 +185,10 @@ class _EditEmergencyPageState extends State<EditEmergencyPage> {
               _buildSectionCard(
                 child: Column(
                   children: [
-                    _buildField(_typeController, "Emergency Type"),
-                    _buildField(_categoryController, "Category"),
+                    _buildField(_typeController, "Emergency Type",
+                        readOnly: true),
+                    _buildField(_categoryController, "Category",
+                        readOnly: true),
                     _buildField(
                       _descriptionController,
                       "Description",
@@ -185,7 +204,7 @@ class _EditEmergencyPageState extends State<EditEmergencyPage> {
                 title: "Location",
                 child: Column(
                   children: [
-                    _buildField(_kebeleController, "Kebele"),
+                    _buildField(_kebeleController, "Kebele", readOnly: true),
                     _buildField(_subdivisionController, "Subdivision"),
                     _buildField(_streetController, "Street"),
                   ],
@@ -307,15 +326,18 @@ class _EditEmergencyPageState extends State<EditEmergencyPage> {
     TextEditingController controller,
     String label, {
     int maxLines = 1,
+    bool readOnly = false,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: TextFormField(
         controller: controller,
         maxLines: maxLines,
-        validator: (value) => (value == null || value.trim().isEmpty)
-            ? "$label is required"
-            : null,
+        readOnly: readOnly,
+        validator: (value) =>
+            (!readOnly && (value == null || value.trim().isEmpty))
+                ? "$label is required"
+                : null,
         decoration: InputDecoration(
           labelText: label,
           filled: true,

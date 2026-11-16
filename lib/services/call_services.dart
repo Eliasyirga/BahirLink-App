@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+import '../config/api_config.dart';
 
 class CallInvite {
   final int emergencyId;
@@ -43,18 +43,7 @@ class CallService {
   CallService._();
   static final CallService I = CallService._();
 
-  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
-  static const bool useLocalBackup = false;
-
-  static String get wsServerUrl {
-    if (!useLocalBackup) {
-      return "https://bahirlink-backend-1.onrender.com";
-    }
-    // ✅ Platform.isAndroid crashes on Web — always check kIsWeb first
-    if (kIsWeb) return "http://localhost:5000";
-    if (Platform.isAndroid) return "http://10.0.2.2:5000";
-    return "http://localhost:5000";
-  }
+  static String get wsServerUrl => ApiConfig.baseUrl;
 
   IO.Socket? _socket;
   IO.Socket? get socket => _socket;
@@ -79,6 +68,14 @@ class CallService {
   void connect({String? apiBaseUrl, required String token}) {
     final clean = _cleanToken(token);
     final targetUrl = wsServerUrl;
+
+    // A different token means a different user/session (e.g. logout →
+    // login as someone else without disconnect()). Tear the old socket down
+    // so the new user gets a fresh, correctly-authenticated connection.
+    if (_cleanedToken != null && _cleanedToken != clean) {
+      debugPrint('📞 CallService.connect() — token changed, resetting session');
+      disconnect();
+    }
 
     if (isConnected) {
       debugPrint('📞 CallService.connect() — already connected, skipping');
@@ -153,6 +150,7 @@ class CallService {
   void disconnect() {
     _destroySocket();
     _sessionId = 0;
+    _cleanedToken = null;
     pendingInvite = null;
     _seenInCurrentRegistration = {};
     debugPrint('📞 CallService disconnected (logout)');

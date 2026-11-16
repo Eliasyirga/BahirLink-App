@@ -1,29 +1,13 @@
 import 'dart:convert';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/api_config.dart';
+import 'call_services.dart';
+import 'token_store.dart';
 
 class AuthService {
-  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
-  static const bool useLocalBackup = false;
-
   // 🌍 Automatically switches between Live Render Server and Local Backups
-  static String get baseUrl {
-    if (!useLocalBackup) {
-      // Your live production backend on Render
-      return "https://bahirlink-backend-1.onrender.com";
-    }
-
-    // 🔄 Local backups if Render is down or if you're developing locally
-    if (kIsWeb) {
-      return "http://localhost:5000";
-    } else if (Platform.isAndroid) {
-      return "http://10.0.2.2:5000"; // Android Emulator local address
-    } else {
-      return "http://localhost:5000"; // iOS Simulator or Desktop
-    }
-  }
+  static String get baseUrl => ApiConfig.baseUrl;
 
   // -------------------- REGISTER --------------------
   static Future<Map<String, dynamic>> register({
@@ -108,17 +92,16 @@ class AuthService {
 
       final data = jsonDecode(response.body);
 
-      // ✅ Save tokens if login successful and not temporary password
-      if (data['success'] == true &&
-          data['accessToken'] != null &&
-          data['mustChangePassword'] != true) {
+      // ✅ Save tokens if login successful. This includes temporary-password
+      // logins (mustChangePassword == true): the token is needed to call
+      // change-password right after signing in.
+      if (data['success'] == true && data['accessToken'] != null) {
+        await TokenStore.saveTokens(
+          accessToken: data['accessToken'].toString(),
+          refreshToken: data['refreshToken']?.toString(),
+        );
+
         final prefs = await SharedPreferences.getInstance();
-
-        await prefs.setString("accessToken", data['accessToken']);
-
-        if (data['refreshToken'] != null) {
-          await prefs.setString("refreshToken", data['refreshToken']);
-        }
 
         // 🔥 Save userId if backend sends it
         if (data['user'] != null && data['user']['id'] != null) {
@@ -137,8 +120,7 @@ class AuthService {
   // -------------------- GET PROFILE --------------------
   static Future<Map<String, dynamic>> getProfile() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString("accessToken") ?? "";
+      final token = await TokenStore.readAccessToken() ?? "";
 
       if (token.isEmpty) {
         return {"success": false, "error": "No access token found"};
@@ -161,12 +143,25 @@ class AuthService {
   }
 
   // -------------------- LOGOUT --------------------
-  static Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
+  /// Per-user (non-secret) SharedPreferences keys. Tokens live in
+  /// [TokenStore]. Device-level settings (language, translation toggle, app
+  /// config) are intentionally kept.
+  static const List<String> _sessionKeys = [
+    "userId",
+  ];
 
-    await prefs.remove("accessToken");
-    await prefs.remove("refreshToken");
-    await prefs.remove("userId");
+  /// The single logout path: clears every per-user credential and tears down
+  /// the global call socket so the next user gets a fresh connection.
+  /// (Chat sockets are owned by ChatPage and closed when that page disposes.)
+  static Future<void> logout() async {
+    CallService.I.disconnect();
+
+    await TokenStore.clear();
+
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in _sessionKeys) {
+      await prefs.remove(key);
+    }
   }
 
   // -------------------- FORGOT PASSWORD --------------------
@@ -196,8 +191,7 @@ class AuthService {
     required String newPassword,
   }) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString("accessToken") ?? "";
+      final token = await TokenStore.readAccessToken() ?? "";
 
       if (token.isEmpty) {
         return {"success": false, "error": "No access token found"};

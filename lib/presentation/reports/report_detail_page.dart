@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:first_app/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../config/api_config.dart';
+import '../../services/kebele_service.dart';
 import '../../services/reports_service.dart';
 import '../chat/chat_page.dart';
 
@@ -584,73 +586,153 @@ class _ReportDetailsPageState extends State<ReportDetailsPage>
     );
   }
 
-  void _showEditDialog(String id) {
+  /// Current kebele id of this report (backend attribute `kebeleId`).
+  String? get _kebeleId {
+    final direct = widget.emergency['kebeleId'];
+    if (direct != null) return direct.toString();
+    final k = widget.emergency['kebele'] ?? widget.emergency['Kebele'];
+    if (k is Map && k['id'] != null) return k['id'].toString();
+    return null;
+  }
+
+  Future<void> _showEditDialog(String id) async {
     final descC =
         TextEditingController(text: _description == 'N/A' ? '' : _description);
-    final kebeleC =
-        TextEditingController(text: _kebeleName == 'N/A' ? '' : _kebeleName);
 
-    showDialog(
+    // Kebele is a foreign key (kebeleId) on the backend, so offer a picker
+    // instead of free text.
+    List<Map<String, dynamic>> kebeles = const [];
+    try {
+      kebeles = await KebeleService().getAllKebeles();
+    } catch (_) {}
+    if (!mounted) return;
+
+    String? selectedKebeleId = _kebeleId;
+    if (selectedKebeleId != null &&
+        !kebeles.any((k) => k['id']?.toString() == selectedKebeleId)) {
+      selectedKebeleId = null;
+    }
+    bool saving = false;
+
+    await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: _T.surface,
-        // ✅ was: "Update Report"
-        title: Text(
-          l10n.rdUpdateReport,
-          style: const TextStyle(
-              fontWeight: FontWeight.w800, color: _T.textDark, fontSize: 17),
-        ),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          // ✅ was: "Kebele" / "Description" (hardcoded field labels)
-          _field(l10n.rdFieldKebele, kebeleC),
-          _field(l10n.rdFieldDescription, descC, maxLines: 4),
-        ]),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            // ✅ was: "Discard"
-            child: Text(
-              l10n.rdDiscard,
-              style: const TextStyle(
-                  color: _T.textMid, fontWeight: FontWeight.w600),
-            ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          backgroundColor: _T.surface,
+          // ✅ was: "Update Report"
+          title: Text(
+            l10n.rdUpdateReport,
+            style: const TextStyle(
+                fontWeight: FontWeight.w800, color: _T.textDark, fontSize: 17),
           ),
-          GestureDetector(
-            onTap: () async {
-              final data = {
-                'description': descC.text,
-                'kebele': kebeleC.text,
-              };
-              await ReportsService.updateEmergency(
-                widget.userId,
-                id,
-                data,
-                lang: _currentLang,
-              );
-              if (mounted) {
-                Navigator.pop(ctx);
-                Navigator.pop(context, true);
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              decoration: BoxDecoration(
-                gradient:
-                    const LinearGradient(colors: [_T.primary, _T.primaryMid]),
-                borderRadius: BorderRadius.circular(12),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (kebeles.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: DropdownButtonFormField<String>(
+                  initialValue: selectedKebeleId,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: l10n.rdFieldKebele,
+                    labelStyle:
+                        const TextStyle(color: _T.textMid, fontSize: 13),
+                    filled: true,
+                    fillColor: _T.bg,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none),
+                  ),
+                  items: kebeles
+                      .where((k) => k['id'] != null)
+                      .map((k) => DropdownMenuItem<String>(
+                            value: k['id'].toString(),
+                            child: Text(loc(k['name']),
+                                overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  onChanged: (v) =>
+                      setDialogState(() => selectedKebeleId = v),
+                ),
               ),
-              // ✅ was: "Save Changes"
+            _field(l10n.rdFieldDescription, descC, maxLines: 4),
+          ]),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(ctx),
+              // ✅ was: "Discard"
               child: Text(
-                l10n.rdSaveChanges,
+                l10n.rdDiscard,
                 style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13),
+                    color: _T.textMid, fontWeight: FontWeight.w600),
               ),
             ),
-          ),
-        ],
+            GestureDetector(
+              onTap: saving
+                  ? null
+                  : () async {
+                      // Only real Emergency model attributes are sent.
+                      final data = <String, dynamic>{
+                        'description': descC.text.trim(),
+                        if (selectedKebeleId != null)
+                          'kebeleId': selectedKebeleId,
+                      };
+                      setDialogState(() => saving = true);
+                      try {
+                        await ReportsService.updateEmergency(
+                          widget.userId,
+                          id,
+                          data,
+                          token: widget.token,
+                          lang: _currentLang,
+                        );
+                        if (!mounted) return;
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        Navigator.pop(context, true);
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          setDialogState(() => saving = false);
+                        }
+                        if (!mounted) return;
+                        final msg = e is SessionExpiredException
+                            ? e.toString()
+                            : 'Could not update report: '
+                                '${e.toString().replaceFirst('Exception: ', '')}';
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(msg),
+                          backgroundColor: _T.red,
+                          behavior: SnackBarBehavior.floating,
+                        ));
+                      }
+                    },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                decoration: BoxDecoration(
+                  gradient:
+                      const LinearGradient(colors: [_T.primary, _T.primaryMid]),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                // ✅ was: "Save Changes"
+                child: saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : Text(
+                        l10n.rdSaveChanges,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13),
+                      ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

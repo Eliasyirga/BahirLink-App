@@ -2,24 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
 class KebeleService {
-  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
-  static const bool useLocalBackup = false;
-
   // 🌍 Dynamic Origin URL Router
-  String get _baseUrl {
-    if (!useLocalBackup) {
-      return "https://bahirlink-backend-1.onrender.com/api/kebele";
-    }
-    if (kIsWeb) {
-      return "http://localhost:5000/api/kebele";
-    } else if (Platform.isAndroid) {
-      return "http://10.0.2.2:5000/api/kebele"; // Android Emulator address
-    } else {
-      return "http://localhost:5000/api/kebele"; // iOS Simulator or Desktop
-    }
-  }
+  String get _baseUrl => "${ApiConfig.baseUrl}/api/kebele";
 
   // ── GET ALL KEBELES ────────────────────────────────────────────────────────
   Future<List<Map<String, dynamic>>> getAllKebeles() async {

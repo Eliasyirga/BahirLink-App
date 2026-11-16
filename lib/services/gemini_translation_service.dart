@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -16,8 +17,65 @@ class GeminiTranslationResult {
   });
 }
 
+/// Thrown for any failed translation. [statusCode] is null for network /
+/// timeout / parse failures. Backend codes: 400 bad input, 429 rate-limited,
+/// 502 upstream (Gemini) error, 503 translation not configured.
+class TranslationException implements Exception {
+  final int? statusCode;
+  final String message;
+
+  const TranslationException(this.message, {this.statusCode});
+
+  @override
+  String toString() => 'TranslationException($statusCode): $message';
+}
+
+/// Client for `POST /api/translation/gemini`
+/// (`{text, sourceLanguage?, targetLanguage?, model?}` →
+/// `{en, am, originalLanguage}`).
 class GeminiTranslationService {
+  static const Duration _timeout = Duration(seconds: 15);
+  static const int _maxCacheEntries = 200;
+
+  /// In-memory cache keyed by the (trimmed) source text. Stores the Future so
+  /// concurrent requests for the same text share one network call. Failed
+  /// lookups are evicted so they can be retried later.
+  static final Map<String, Future<GeminiTranslationResult>> _cache =
+      <String, Future<GeminiTranslationResult>>{};
+
   Future<GeminiTranslationResult> translate({
+    required String text,
+    String? sourceLanguage,
+    String? targetLanguage,
+  }) {
+    final key = text.trim();
+    if (key.isEmpty) {
+      return Future.error(
+          const TranslationException('Empty text', statusCode: 400));
+    }
+
+    final cached = _cache[key];
+    if (cached != null) return cached;
+
+    if (_cache.length >= _maxCacheEntries) {
+      _cache.remove(_cache.keys.first); // insertion order → oldest first
+    }
+
+    final future = _request(
+      text: key,
+      sourceLanguage: sourceLanguage,
+      targetLanguage: targetLanguage,
+    );
+    _cache[key] = future;
+    // Evict on failure (this listener also marks the error as handled; the
+    // caller still receives it through the returned future).
+    future.then<void>((_) {}, onError: (Object _) {
+      if (identical(_cache[key], future)) _cache.remove(key);
+    });
+    return future;
+  }
+
+  Future<GeminiTranslationResult> _request({
     required String text,
     String? sourceLanguage,
     String? targetLanguage,
@@ -28,38 +86,57 @@ class GeminiTranslationService {
       path: config.geminiTranslationPath,
     );
 
-    final response = await http.post(
-      Uri.parse(endpoint),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'text': text,
-        // Backend handles language detection, but we keep optional fields
-        // for compatibility if backend still accepts/uses them.
-        'sourceLanguage': sourceLanguage ?? config.defaultSourceLanguage,
-        'targetLanguage': targetLanguage ?? config.defaultTargetLanguage,
-        'model': config.geminiModel,
-      }),
-    );
+    final source = sourceLanguage ?? config.defaultSourceLanguage;
+    final target = targetLanguage ?? config.defaultTargetLanguage;
+
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse(endpoint),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'text': text,
+              // Backend auto-detects when sourceLanguage is omitted.
+              if (source.isNotEmpty && source != 'auto')
+                'sourceLanguage': source,
+              if (target.isNotEmpty) 'targetLanguage': target,
+              if (config.geminiModel.isNotEmpty) 'model': config.geminiModel,
+            }),
+          )
+          .timeout(_timeout);
+    } on TimeoutException {
+      throw const TranslationException('Translation request timed out');
+    } catch (e) {
+      throw TranslationException('Network error: $e');
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Translation request failed: ${response.statusCode}');
+      throw TranslationException(
+        'Translation request failed',
+        statusCode: response.statusCode,
+      );
     }
 
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    final directParsed = _parseBilingualShape(json);
-    if (directParsed != null) {
-      return directParsed;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } catch (_) {
+      throw const TranslationException('Invalid translation response');
     }
+    if (decoded is Map<String, dynamic>) {
+      final directParsed = _parseBilingualShape(decoded);
+      if (directParsed != null) return directParsed;
 
-    final data = json['data'];
-    if (data is Map<String, dynamic>) {
-      final nestedParsed = _parseBilingualShape(data);
-      if (nestedParsed != null) {
-        return nestedParsed;
+      final data = decoded['data'];
+      if (data is Map<String, dynamic>) {
+        final nestedParsed = _parseBilingualShape(data);
+        if (nestedParsed != null) return nestedParsed;
       }
     }
 
-    throw Exception('Translation response missing en/am/originalLanguage');
+    throw const TranslationException(
+        'Translation response missing en/am/originalLanguage');
   }
 
   String _buildEndpoint({required String baseUrl, required String path}) {

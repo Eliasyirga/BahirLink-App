@@ -3,21 +3,11 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
 class ReportsService {
-  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
-  static const bool useLocalBackup = false;
-
   // ── Base URL ───────────────────────────────────────────────────────────────
-  static String get serverUrl {
-    if (!useLocalBackup) {
-      return "https://bahirlink-backend-1.onrender.com";
-    }
-    if (kIsWeb) return "http://localhost:5000";
-    if (Platform.isAndroid)
-      return "http://10.0.2.2:5000"; // Android Emulator address
-    return "http://localhost:5000"; // iOS Simulator or Desktop
-  }
+  static String get serverUrl => ApiConfig.baseUrl;
 
   static String get baseUrl => "$serverUrl/api";
 
@@ -247,29 +237,54 @@ class ReportsService {
   }
 
   // ── Update Emergency ───────────────────────────────────────────────────────
+  /// Emergency columns a reporter may edit. Must match the backend Sequelize
+  /// model attribute names (BahirLink-Backend/models/Emergency.js) exactly;
+  /// anything else is dropped before sending.
+  static const Set<String> editableEmergencyFields = {
+    'description',
+    'subdivision',
+    'kebeleId',
+    'street',
+    'location',
+    'emergencyTypeId',
+    'categoryId',
+  };
+
+  /// PUT /api/emergencies/:userOrGuestId/:id (multipart, optional `media`).
+  /// Requires the access token (sent as `Authorization: Bearer`).
   static Future<Map<String, dynamic>> updateEmergency(
     String userOrGuestId,
     String emergencyId,
     Map<String, dynamic> updatedData, {
+    required String token,
     File? file,
     Uint8List? webBytes,
     String? fileName,
     String lang = 'en',
-    String? token,
     bool isGuest = false,
   }) async {
-    final uri = Uri.parse('$baseUrl/emergencies/$userOrGuestId/$emergencyId');
+    final cleanToken = token.trim().replaceFirst(RegExp(r'^Bearer\s+'), '');
+    if (cleanToken.isEmpty) {
+      throw const SessionExpiredException();
+    }
+
+    final uri = Uri.parse('$baseUrl/emergencies/$userOrGuestId/$emergencyId')
+        .replace(
+            queryParameters:
+                isGuest ? {'isGuest': 'true', 'guestId': userOrGuestId} : null);
     final request = http.MultipartRequest('PUT', uri);
 
-    request.headers.addAll(_headers(lang: lang, token: token));
-    if (isGuest) request.fields['guestId'] = userOrGuestId;
+    // No JSON Content-Type here: MultipartRequest sets its own boundary header.
+    request.headers.addAll({
+      'Accept': 'application/json',
+      'Accept-Language': lang,
+      'Authorization': 'Bearer $cleanToken',
+    });
 
     updatedData.forEach((key, value) {
-      if (value != null) {
-        request.fields[key] = (value is Map || value is List)
-            ? jsonEncode(value)
-            : value.toString();
-      }
+      if (value == null || !editableEmergencyFields.contains(key)) return;
+      request.fields[key] =
+          (value is Map || value is List) ? jsonEncode(value) : value.toString();
     });
 
     if (kIsWeb && webBytes != null) {
@@ -287,8 +302,18 @@ class ReportsService {
       final decoded = jsonDecode(response.body);
       return Map<String, dynamic>.from((decoded as Map)['data'] ?? decoded);
     }
+    if (response.statusCode == 401) {
+      throw const SessionExpiredException();
+    }
 
-    throw Exception('Update failed: ${response.body}');
+    String message = 'Update failed (${response.statusCode})';
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map) {
+        message = (decoded['message'] ?? decoded['error'] ?? message).toString();
+      }
+    } catch (_) {}
+    throw Exception(message);
   }
 
   // ── Delete Emergency ───────────────────────────────────────────────────────

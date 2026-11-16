@@ -93,7 +93,7 @@ class _CaseReportPageState extends State<CaseReportPage>
         child: child!,
       ),
     );
-    if (date == null) return;
+    if (date == null || !mounted) return;
     final TimeOfDay? time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
@@ -104,7 +104,7 @@ class _CaseReportPageState extends State<CaseReportPage>
         child: child!,
       ),
     );
-    if (time == null) return;
+    if (time == null || !mounted) return;
     setState(() => _selectedDateTime =
         DateTime(date.year, date.month, date.day, time.hour, time.minute));
   }

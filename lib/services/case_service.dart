@@ -2,24 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
 class CaseService {
-  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
-  static const bool useLocalBackup = false;
-
   // 🌍 Dynamic Origin URL Router
-  static String get _host {
-    if (!useLocalBackup) {
-      return "https://bahirlink-backend-1.onrender.com";
-    }
-    if (kIsWeb) {
-      return "http://localhost:5000";
-    } else if (Platform.isAndroid) {
-      return "http://10.0.2.2:5000"; // Android Emulator address
-    } else {
-      return "http://localhost:5000"; // iOS Simulator or Desktop
-    }
-  }
+  static String get _host => ApiConfig.baseUrl;
 
   static String get _baseUrl => "$_host/api/cases";
 

@@ -2,34 +2,21 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import '../config/api_config.dart';
+import 'auth_service.dart';
+import 'token_store.dart';
 
 class UserService {
-  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
-  static const bool useLocalBackup = false;
-
   // ─── Base URL Getter ───────────────────────────────────────────────────────
-  static String get baseUrl {
-    if (!useLocalBackup) {
-      return "https://bahirlink-backend-1.onrender.com";
-    }
-    if (kIsWeb) {
-      return "http://localhost:5000";
-    } else if (Platform.isAndroid) {
-      return "http://10.0.2.2:5000"; // Android Emulator address
-    } else {
-      return "http://localhost:5000"; // iOS Simulator or Desktop
-    }
-  }
+  static String get baseUrl => ApiConfig.baseUrl;
 
   // ─── Get User Profile ──────────────────────────────────────────────────────
   static Future<Map<String, dynamic>?> getProfile() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString("accessToken");
+      final token = await TokenStore.readAccessToken();
 
       if (token == null || token.isEmpty) {
-        debugPrint("❌ No token found in SharedPreferences");
+        debugPrint("❌ No access token stored");
         return null;
       }
 
@@ -64,11 +51,10 @@ class UserService {
     Map<String, dynamic> updates,
   ) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString("accessToken");
+      final token = await TokenStore.readAccessToken();
 
       if (token == null || token.isEmpty) {
-        debugPrint("❌ No token found in SharedPreferences");
+        debugPrint("❌ No access token stored");
         return null;
       }
 
@@ -99,10 +85,10 @@ class UserService {
   }
 
   // ─── Logout ────────────────────────────────────────────────────────────────
+  /// Delegates to [AuthService.logout] so there is exactly one logout path.
   static Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove("accessToken");
-    debugPrint("🔒 Token removed. Logout processed successfully.");
+    await AuthService.logout();
+    debugPrint("🔒 Session cleared. Logout processed successfully.");
   }
 
   // ─── Data Normalization ─────────────────────────────────────────────────────

@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -67,12 +66,12 @@ class _VerifyScreenState extends State<VerifyScreen> {
 
   Future<void> pickIdImage() async {
     final file = await _pickFromCamera(camera: CameraDevice.rear);
-    if (file != null) setState(() => idImage = file);
+    if (file != null && mounted) setState(() => idImage = file);
   }
 
   Future<void> pickSelfie() async {
     final file = await _pickFromCamera(camera: CameraDevice.front);
-    if (file != null) setState(() => selfie = file);
+    if (file != null && mounted) setState(() => selfie = file);
   }
 
   Future<void> submitVerification() async {
@@ -103,7 +102,10 @@ class _VerifyScreenState extends State<VerifyScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => result = {'success': false, 'error': e.toString()});
+        setState(() => result = {
+              'success': false,
+              'error': 'Something went wrong. Please try again.',
+            });
       }
     } finally {
       if (mounted) {
@@ -209,8 +211,11 @@ class _VerifyScreenState extends State<VerifyScreen> {
           if (!success) ...[
             const SizedBox(height: 10),
             Text(
-              const JsonEncoder.withIndent('  ').convert(result),
-              style: const TextStyle(fontSize: 12, color: Colors.black54),
+              (result!['error'] ?? result!['message'] ??
+                      'Verification failed. Please try again.')
+                  .toString(),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: Colors.black54),
             ),
           ],
         ],

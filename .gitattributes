@@ -1,0 +1,31 @@
+# Normalize line endings in the repo (LF) and let Git convert on checkout.
+* text=auto
+
+# Scripts that must keep their native endings
+*.sh text eol=lf
+gradlew text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files — never touch line endings or diff as text
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.jar binary
+*.jks binary
+*.keystore binary
+*.so binary
+*.zip binary
+*.pdf binary
+*.lnk binary

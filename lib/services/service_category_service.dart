@@ -2,21 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
 class ServiceCategoryService {
-  // 🔥 SET TO 'true' to develop locally. SET TO 'false' to use live Render server.
-  static const bool useLocalBackup = false;
-
   // ── Base URL ───────────────────────────────────────────────────────────────
-  static String get serverUrl {
-    if (!useLocalBackup) {
-      return "https://bahirlink-backend-1.onrender.com";
-    }
-    if (kIsWeb) return "http://localhost:5000";
-    if (Platform.isAndroid)
-      return "http://10.0.2.2:5000"; // Android Emulator address
-    return "http://localhost:5000"; // iOS Simulator or Desktop
-  }
+  static String get serverUrl => ApiConfig.baseUrl;
 
   static String get baseUrl => "$serverUrl/api/serviceCategory";
 

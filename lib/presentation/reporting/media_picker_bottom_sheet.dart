@@ -66,6 +66,7 @@ class MediaPickerBottomSheet extends StatelessWidget {
                     } else {
                       onFileSelectedMobile?.call(File(photo.path));
                     }
+                    if (!context.mounted) return;
                     Navigator.pop(context);
                   }
                 },
@@ -85,6 +86,7 @@ class MediaPickerBottomSheet extends StatelessWidget {
                     } else {
                       onFileSelectedMobile?.call(File(video.path));
                     }
+                    if (!context.mounted) return;
                     Navigator.pop(context);
                   }
                 },
@@ -104,6 +106,7 @@ class MediaPickerBottomSheet extends StatelessWidget {
                     } else {
                       onFileSelectedMobile?.call(File(file.path));
                     }
+                    if (!context.mounted) return;
                     Navigator.pop(context);
                   }
                 },
